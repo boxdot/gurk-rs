@@ -1,0 +1,13 @@
+[package]
+name = "gurk"
+description = "Signal messenger client for terminal"
+version = "0.1.0"
+authors = ["boxdot <d@zerovolt.org>"]
+edition = "2018"
+
+[dependencies]
+anyhow = "1.0.31"
+chrono = "0.4.13"
+crossterm = "0.17"
+tui = { version = "0.10", default-features = false, features = ['crossterm'] }
+unicode-width = "0.1.8"
