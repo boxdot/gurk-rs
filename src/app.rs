@@ -3,12 +3,16 @@ use crate::util::StatefulList;
 use chrono::{DateTime, Utc};
 use crossterm::event::KeyCode;
 
+use std::fs::File;
+use std::io::Write;
+
 pub struct App {
     pub username: String,
     pub channels: StatefulList<Channel>,
     pub current_chat: Chat,
     pub input: String,
     pub should_quit: bool,
+    pub log_file: File,
 }
 
 #[derive(Debug)]
@@ -109,6 +113,7 @@ impl App {
             current_chat: sample_chat,
             input: String::new(),
             should_quit: false,
+            log_file: File::create("gurk.log").unwrap(),
         }
     }
 
@@ -151,4 +156,8 @@ impl App {
     }
 
     pub fn on_tick(&mut self) {}
+
+    pub fn log(&mut self, msg: impl AsRef<str>) {
+        writeln!(&mut self.log_file, "{}", msg.as_ref()).unwrap();
+    }
 }
