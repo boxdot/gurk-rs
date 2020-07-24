@@ -1,6 +1,6 @@
 mod app;
 mod config;
-mod model;
+mod signal;
 mod ui;
 mod util;
 
@@ -117,7 +117,7 @@ fn test_model(path: impl AsRef<Path>) -> anyhow::Result<()> {
         if json_line.trim().is_empty() {
             continue;
         }
-        let msg: model::Message = serde_json::from_str(&json_line).context(format!(
+        let msg: signal::Message = serde_json::from_str(&json_line).context(format!(
             "failed to parse line {}: '{}'",
             line_number + 1,
             json_line

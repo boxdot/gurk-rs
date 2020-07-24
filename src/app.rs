@@ -1,4 +1,5 @@
 use crate::config::{self, Config};
+use crate::signal;
 use crate::util::StatefulList;
 
 use anyhow::Context;
@@ -55,6 +56,9 @@ impl App {
         let config_path = config::installed_config().expect("missing default location for config");
         let config = config::load_from(&config_path)
             .with_context(|| format!("failed to read config from: {}", config_path.display()))?;
+
+        let client = signal::SignalClient::from_config(config.clone());
+        println!("{:?}", client.get_groups());
 
         let now = Utc::now();
         let sample_chat = Chat {

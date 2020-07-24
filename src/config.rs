@@ -2,17 +2,33 @@ use serde::Deserialize;
 
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     pub user: User,
+    #[serde(default)]
+    pub signal_cli: SignalCli,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct User {
     /// Name to be shown in the application
     pub name: String,
     /// Phone number used in Signal
     pub phone_number: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SignalCli {
+    /// Path to the signal-cli executable.
+    pub path: PathBuf,
+}
+
+impl Default for SignalCli {
+    fn default() -> Self {
+        Self {
+            path: PathBuf::from("signal-cli"),
+        }
+    }
 }
 
 pub fn load_from(path: impl AsRef<Path>) -> anyhow::Result<Config> {
