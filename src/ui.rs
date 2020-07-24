@@ -2,7 +2,7 @@ use crate::App;
 
 use chrono::Timelike;
 use tui::backend::Backend;
-use tui::layout::{Constraint, Direction, Layout, Rect};
+use tui::layout::{Constraint, Corner, Direction, Layout, Rect};
 use tui::style::{Color, Style};
 use tui::text::Text;
 use tui::text::{Span, Spans};
@@ -59,36 +59,62 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         .map(|msg| msg.from.width())
         .max()
         .unwrap_or(0);
-    let prefix_width = max_username_width + 8;
 
     let width = area.right() - area.left() - 2; // without borders
 
-    let messages: Vec<_> = app
+    let time_style = Style::default().fg(Color::Yellow);
+    let from_style = Style::default().fg(Color::Green);
+    let messages: Vec<Vec<Spans>> = app
         .current_chat
         .msgs
         .items
         .iter()
+        .rev()
         .map(|msg| {
-            let prefix = format!(
-                "{}:{} {}{}: ",
-                msg.arrived_at.hour(),
-                msg.arrived_at.minute(),
-                " ".repeat(max_username_width - msg.from.width()),
-                msg.from
+            let time = Span::styled(
+                format!("{}:{} ", msg.arrived_at.hour(), msg.arrived_at.minute()),
+                time_style,
             );
+            let from = Span::styled(
+                textwrap::indent(
+                    &msg.from,
+                    &" ".repeat(max_username_width - msg.from.width()),
+                ),
+                from_style,
+            );
+            let delimeter = Span::from(": ");
 
-            let wrapped_msg = textwrap::fill(msg.text.as_str(), width as usize - prefix_width);
-            let wrapped_msg = textwrap::indent(&wrapped_msg, &" ".repeat(prefix_width));
-            format!("{}{}", prefix, &wrapped_msg[prefix_width..])
+            let prefix_width = (time.width() + from.width() + delimeter.width()) as u16;
+            let indent = " ".repeat(prefix_width.into());
+            let lines =
+                textwrap::wrap_iter(msg.text.as_str(), width.saturating_sub(prefix_width).into());
+
+            lines
+                .enumerate()
+                .map(|(idx, line)| {
+                    let res = if idx == 0 {
+                        vec![
+                            time.clone(),
+                            from.clone(),
+                            delimeter.clone(),
+                            Span::from(line.to_string()),
+                        ]
+                    } else {
+                        vec![Span::from(format!("{}{}", indent, line))]
+                    };
+                    Spans::from(res)
+                })
+                .collect()
         })
         .collect();
 
     let items: Vec<_> = messages
-        .iter()
-        .map(|s| ListItem::new(Text::from(s.as_ref())))
+        .into_iter()
+        .map(|s| ListItem::new(Text::from(s)))
         .collect();
     let list = List::new(items)
         .block(Block::default().title("Messages").borders(Borders::ALL))
-        .style(Style::default().fg(Color::White));
+        .style(Style::default().fg(Color::White))
+        .start_corner(Corner::BottomLeft);
     f.render_widget(list, area);
 }

@@ -157,6 +157,7 @@ impl App {
 
     pub fn on_tick(&mut self) {}
 
+    #[allow(dead_code)]
     pub fn log(&mut self, msg: impl AsRef<str>) {
         writeln!(&mut self.log_file, "{}", msg.as_ref()).unwrap();
     }
