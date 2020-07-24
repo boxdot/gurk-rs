@@ -1,5 +1,7 @@
+use crate::config::{self, Config};
 use crate::util::StatefulList;
 
+use anyhow::Context;
 use chrono::{DateTime, Utc};
 use crossterm::event::KeyCode;
 
@@ -7,7 +9,7 @@ use std::fs::File;
 use std::io::Write;
 
 pub struct App {
-    pub username: String,
+    pub config: Config,
     pub channels: StatefulList<Channel>,
     pub current_chat: Chat,
     pub input: String,
@@ -49,7 +51,11 @@ pub enum Event<I> {
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn try_new() -> anyhow::Result<Self> {
+        let config_path = config::installed_config().expect("missing default location for config");
+        let config = config::load_from(&config_path)
+            .with_context(|| format!("failed to read config from: {}", config_path.display()))?;
+
         let now = Utc::now();
         let sample_chat = Chat {
             msgs: StatefulList::with_items(vec![
@@ -107,14 +113,14 @@ impl App {
         ]);
         channels.state.select(Some(0));
 
-        Self {
-            username: "boxdot".to_string(),
+        Ok(Self {
+            config,
             channels,
             current_chat: sample_chat,
             input: String::new(),
             should_quit: false,
             log_file: File::create("gurk.log").unwrap(),
-        }
+        })
     }
 
     pub fn on_key(&mut self, k: KeyCode) {
@@ -127,7 +133,7 @@ impl App {
             }
             KeyCode::Enter if !self.input.is_empty() => {
                 self.current_chat.msgs.items.push(Message {
-                    from: self.username.clone(),
+                    from: self.config.user.name.clone(),
                     text: self.input.drain(..).collect(),
                     arrived_at: Utc::now(),
                 });

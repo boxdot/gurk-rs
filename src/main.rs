@@ -1,4 +1,5 @@
 mod app;
+mod config;
 mod model;
 mod ui;
 mod util;
@@ -44,6 +45,8 @@ fn main() -> anyhow::Result<()> {
         return test_model(path);
     }
 
+    let mut app = App::try_new()?;
+
     enable_raw_mode()?;
 
     let mut stdout = std::io::stdout();
@@ -72,8 +75,6 @@ fn main() -> anyhow::Result<()> {
             }
         }
     });
-
-    let mut app = App::new();
 
     terminal.clear()?;
 
