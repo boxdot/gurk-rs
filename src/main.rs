@@ -1,9 +1,11 @@
 mod app;
+mod model;
 mod ui;
 mod util;
 
 use app::{App, Event};
 
+use anyhow::Context;
 use crossterm::{
     event::{
         self, DisableMouseCapture, EnableMouseCapture, Event as CEvent, KeyCode, KeyModifiers,
@@ -11,14 +13,37 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use structopt::StructOpt;
 use tui::{backend::CrosstermBackend, Terminal};
 
-use std::io::Write;
+use std::fs::File;
+use std::io::{self, BufRead, Write};
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+#[derive(Debug, StructOpt)]
+struct Args {
+    #[structopt(subcommand)]
+    cmd: Option<Command>,
+}
+
+#[derive(Debug, StructOpt)]
+enum Command {
+    TestModel {
+        #[structopt(short, long)]
+        path: PathBuf,
+    },
+}
+
 fn main() -> anyhow::Result<()> {
+    let args = Args::from_args();
+    if let Some(Command::TestModel { path }) = args.cmd {
+        // do model testing
+        return test_model(path);
+    }
+
     enable_raw_mode()?;
 
     let mut stdout = std::io::stdout();
@@ -81,5 +106,22 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
+    Ok(())
+}
+
+fn test_model(path: impl AsRef<Path>) -> anyhow::Result<()> {
+    let f = File::open(path)?;
+    for (line_number, json_line) in io::BufReader::new(f).lines().enumerate() {
+        let json_line = json_line?;
+        if json_line.trim().is_empty() {
+            continue;
+        }
+        let msg: model::Message = serde_json::from_str(&json_line).context(format!(
+            "failed to parse line {}: '{}'",
+            line_number + 1,
+            json_line
+        ))?;
+        println!("{:?}", msg);
+    }
     Ok(())
 }
