@@ -18,6 +18,12 @@ pub struct App {
     pub data: AppData,
 }
 
+impl App {
+    fn save(&self) -> anyhow::Result<()> {
+        self.data.save(&self.config.data_path)
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct AppData {
     pub channels: StatefulList<Channel>,
@@ -122,7 +128,8 @@ impl App {
                         from: self.config.user.name.clone(),
                         text: self.data.input.drain(..).collect(),
                         arrived_at: Utc::now(),
-                    })
+                    });
+                    let _ = self.save();
                 }
             }
             KeyCode::Backspace => {
