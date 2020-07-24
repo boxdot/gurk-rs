@@ -51,10 +51,14 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 }
 
 fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
-    let max_username_width = app
-        .current_chat
-        .msgs
-        .items
+    let messages = app
+        .channels
+        .state
+        .selected()
+        .map(|idx| &app.channels.items[idx].messages[..])
+        .unwrap_or(&[]);
+
+    let max_username_width = messages
         .iter()
         .map(|msg| msg.from.width())
         .max()
@@ -64,10 +68,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
     let time_style = Style::default().fg(Color::Yellow);
     let from_style = Style::default().fg(Color::Green);
-    let messages: Vec<Vec<Spans>> = app
-        .current_chat
-        .msgs
-        .items
+    let messages: Vec<Vec<Spans>> = messages
         .iter()
         .rev()
         .map(|msg| {
@@ -116,5 +117,5 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         .block(Block::default().title("Messages").borders(Borders::ALL))
         .style(Style::default().fg(Color::White))
         .start_corner(Corner::BottomLeft);
-    f.render_widget(list, area);
+    f.render_stateful_widget(list, area, &mut app.channels.state);
 }

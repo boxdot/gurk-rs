@@ -12,7 +12,6 @@ use std::io::Write;
 pub struct App {
     pub config: Config,
     pub channels: StatefulList<Channel>,
-    pub current_chat: Chat,
     pub input: String,
     pub should_quit: bool,
     pub log_file: File,
@@ -21,18 +20,8 @@ pub struct App {
 #[derive(Debug)]
 pub struct Channel {
     pub name: String,
-    pub is_group: bool,
-    pub last_msg: Option<String>,
-}
-
-impl Channel {
-    fn new(name: impl Into<String>, is_group: bool) -> Self {
-        Self {
-            name: name.into(),
-            is_group,
-            last_msg: None,
-        }
-    }
+    pub group_info: Option<signal::GroupInfo>,
+    pub messages: Vec<Message>,
 }
 
 pub struct Chat {
@@ -58,69 +47,30 @@ impl App {
             .with_context(|| format!("failed to read config from: {}", config_path.display()))?;
 
         let client = signal::SignalClient::from_config(config.clone());
-        println!("{:?}", client.get_groups());
+        let groups = client
+            .get_groups()
+            .context("failed to get groups from signal")?;
+        let channels = groups.into_iter().map(|group_info| {
+            let name = group_info
+                .name
+                .as_ref()
+                .unwrap_or_else(|| &group_info.group_id)
+                .to_string();
+            Channel {
+                name,
+                group_info: Some(group_info),
+                messages: Vec::new(),
+            }
+        });
 
-        let now = Utc::now();
-        let sample_chat = Chat {
-            msgs: StatefulList::with_items(vec![
-                Message {
-                    from: "Bob".to_string(),
-                    text: "Lorem ipsum dolor sit amet,  consectetur adipisicing elit, sed  do"
-                        .to_string(),
-                    arrived_at: now,
-                },
-                Message {
-                    from: "Bob".to_string(),
-                    text: "eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad"
-                        .to_string(),
-                    arrived_at: now,
-                },
-                Message {
-                    from: "Bob".to_string(),
-                    text: "minim veniam, quis nostrud exercitation ullamco laboris nisi ut"
-                        .to_string(),
-                    arrived_at: now,
-                },
-                Message {
-                    from: "Bob".to_string(),
-                    text: "aliquip ex ea commodo consequat. Duis aute irure dolor in".to_string(),
-                    arrived_at: now,
-                },
-                Message {
-                    from: "Bob".to_string(),
-                    text: "reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla"
-                        .to_string(),
-                    arrived_at: now,
-                },
-                Message {
-                    from: "Bob".to_string(),
-                    text: "pariatur. Excepteur sint occaecat cupidatat non proident, sunt in"
-                        .to_string(),
-                    arrived_at: now,
-                },
-                Message {
-                    from: "Bob".to_string(),
-                    text: "culpa qui officia deserunt mollit anim id est laborum.".to_string(),
-                    arrived_at: now,
-                },
-            ]),
-        };
-
-        let mut channels = StatefulList::with_items(vec![
-            Channel::new("Basic people", true),
-            Channel::new("Flat earth society", true),
-            Channel::new("Don't burn", true),
-            Channel::new("Small 🦙", true),
-            Channel::new("Alice", false),
-            Channel::new("Bob", false),
-            Channel::new("Note to Self", false),
-        ]);
-        channels.state.select(Some(0));
+        let mut channels = StatefulList::with_items(channels.collect());
+        if !channels.items.is_empty() {
+            channels.state.select(Some(0));
+        }
 
         Ok(Self {
             config,
             channels,
-            current_chat: sample_chat,
             input: String::new(),
             should_quit: false,
             log_file: File::create("gurk.log").unwrap(),
@@ -136,11 +86,14 @@ impl App {
                 self.input.push(c);
             }
             KeyCode::Enter if !self.input.is_empty() => {
-                self.current_chat.msgs.items.push(Message {
-                    from: self.config.user.name.clone(),
-                    text: self.input.drain(..).collect(),
-                    arrived_at: Utc::now(),
-                });
+                if let Some(idx) = self.channels.state.selected() {
+                    let channel = &mut self.channels.items[idx];
+                    channel.messages.push(Message {
+                        from: self.config.user.name.clone(),
+                        text: self.input.drain(..).collect(),
+                        arrived_at: Utc::now(),
+                    })
+                }
             }
             KeyCode::Backspace => {
                 self.input.pop();
