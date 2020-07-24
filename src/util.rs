@@ -1,6 +1,9 @@
+use serde::{Deserialize, Serialize};
 use tui::widgets::ListState;
 
+#[derive(Serialize, Deserialize)]
 pub struct StatefulList<T> {
+    #[serde(skip)]
     pub state: ListState,
     pub items: Vec<T>,
 }

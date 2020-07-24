@@ -7,6 +7,8 @@ pub struct Config {
     pub user: User,
     #[serde(default)]
     pub signal_cli: SignalCli,
+    #[serde(default = "default_data_path")]
+    pub data_path: PathBuf,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -39,4 +41,10 @@ pub fn load_from(path: impl AsRef<Path>) -> anyhow::Result<Config> {
 
 pub fn installed_config() -> Option<PathBuf> {
     dirs::home_dir().map(|home| home.join(".gurk.toml"))
+}
+
+fn default_data_path() -> PathBuf {
+    dirs::home_dir()
+        .map(|home| home.join(".gurk.data.json"))
+        .expect("could not find home directory")
 }

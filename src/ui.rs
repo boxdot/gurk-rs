@@ -18,6 +18,7 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
         .split(f.size());
 
     let channels: Vec<ListItem> = app
+        .data
         .channels
         .items
         .iter()
@@ -26,7 +27,7 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     let channels = List::new(channels)
         .block(Block::default().borders(Borders::ALL).title("Channels"))
         .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray));
-    f.render_stateful_widget(channels, chunks[0], &mut app.channels.state);
+    f.render_stateful_widget(channels, chunks[0], &mut app.data.channels.state);
 
     draw_chat(f, app, chunks[1]);
 }
@@ -39,12 +40,12 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
     draw_messages(f, app, chunks[0]);
 
-    let input = Paragraph::new(app.input.as_ref())
+    let input = Paragraph::new(app.data.input.as_ref())
         .block(Block::default().borders(Borders::ALL).title("Input"));
     f.render_widget(input, chunks[1]);
     f.set_cursor(
         // Put cursor past the end of the input text
-        chunks[1].x + app.input.width() as u16 + 1,
+        chunks[1].x + app.data.input.width() as u16 + 1,
         // Move one line down, from the border to the input line
         chunks[1].y + 1,
     );
@@ -52,10 +53,11 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
 fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let messages = app
+        .data
         .channels
         .state
         .selected()
-        .map(|idx| &app.channels.items[idx].messages[..])
+        .map(|idx| &app.data.channels.items[idx].messages[..])
         .unwrap_or(&[]);
 
     let max_username_width = messages
@@ -117,5 +119,5 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         .block(Block::default().title("Messages").borders(Borders::ALL))
         .style(Style::default().fg(Color::White))
         .start_corner(Corner::BottomLeft);
-    f.render_stateful_widget(list, area, &mut app.channels.state);
+    f.render_stateful_widget(list, area, &mut app.data.channels.state);
 }

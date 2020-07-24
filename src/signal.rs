@@ -1,5 +1,5 @@
 use crate::config::Config;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::io::BufRead;
 use std::process::Command;
 use std::str::FromStr;
@@ -67,7 +67,7 @@ pub struct DataMessage {
     pub group_info: Option<GroupInfo>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GroupInfo {
     pub group_id: String,
