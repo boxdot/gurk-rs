@@ -1,3 +1,4 @@
+use crate::app::Event;
 use crate::config::Config;
 use serde::{Deserialize, Serialize};
 use std::io::BufRead;
@@ -31,6 +32,39 @@ impl SignalClient {
             })
             .collect();
         res
+    }
+
+    pub async fn stream_messages<T: std::fmt::Debug>(
+        self,
+        mut tx: tokio::sync::mpsc::Sender<crate::app::Event<T>>,
+    ) -> Result<(), std::io::Error> {
+        use std::process::Stdio;
+        use tokio::io::{AsyncBufReadExt, BufReader};
+
+        let mut cmd = tokio::process::Command::new(self.config.signal_cli.path);
+        cmd.arg("-u")
+            .arg(self.config.user.phone_number)
+            .arg("daemon")
+            .arg("--json")
+            .stdout(Stdio::piped());
+        let mut child = cmd.spawn().expect("failed to spawn command");
+        let stdout = child
+            .stdout
+            .take()
+            .expect("child did not have a handle to stdout");
+
+        let mut reader = BufReader::new(stdout).lines();
+        tokio::spawn(async { child.await.expect("child process encountered an error") });
+
+        while let Some(line) = reader.next_line().await? {
+            let msg: Message = match serde_json::from_str(&line) {
+                Ok(msg) => msg,
+                Err(_) => continue,
+            };
+            tx.send(Event::Message(msg)).await.unwrap();
+        }
+
+        Ok(())
     }
 }
 

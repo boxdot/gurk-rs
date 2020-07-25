@@ -84,9 +84,10 @@ pub struct Message {
     pub arrived_at: DateTime<Utc>,
 }
 
+#[derive(Debug)]
 pub enum Event<I> {
     Input(I),
-    Tick,
+    Message(signal::Message),
 }
 
 impl App {
@@ -154,8 +155,6 @@ impl App {
     pub fn on_left(&mut self) {
         // self.tabs.previous();
     }
-
-    pub fn on_tick(&mut self) {}
 
     #[allow(dead_code)]
     pub fn log(&mut self, msg: impl AsRef<str>) {
