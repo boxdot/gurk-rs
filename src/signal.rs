@@ -46,23 +46,29 @@ impl SignalClient {
             .arg(self.config.user.phone_number)
             .arg("daemon")
             .arg("--json")
-            .stdout(Stdio::piped());
-        let mut child = cmd.spawn().expect("failed to spawn command");
+            .stdout(Stdio::piped())
+            .kill_on_drop(true);
+        let mut child = cmd.spawn()?;
         let stdout = child
             .stdout
             .take()
             .expect("child did not have a handle to stdout");
 
         let mut reader = BufReader::new(stdout).lines();
-        tokio::spawn(async { child.await.expect("child process encountered an error") });
+        let cmd_handle = tokio::spawn(async { child.await });
 
         while let Some(line) = reader.next_line().await? {
             let msg: Message = match serde_json::from_str(&line) {
                 Ok(msg) => msg,
                 Err(_) => continue,
             };
-            tx.send(Event::Message(msg)).await.unwrap();
+            if tx.send(Event::Message(msg)).await.is_err() {
+                break; // receiver closed
+            }
         }
+
+        // wait until child process stops
+        cmd_handle.await??;
 
         Ok(())
     }
