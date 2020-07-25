@@ -75,7 +75,11 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         .rev()
         .map(|msg| {
             let time = Span::styled(
-                format!("{}:{} ", msg.arrived_at.hour(), msg.arrived_at.minute()),
+                format!(
+                    "{:02}:{:02} ",
+                    msg.arrived_at.hour(),
+                    msg.arrived_at.minute()
+                ),
                 time_style,
             );
             let from = Span::styled(

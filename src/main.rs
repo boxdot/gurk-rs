@@ -94,8 +94,8 @@ async fn main() -> anyhow::Result<()> {
                 KeyCode::Down => app.on_down(),
                 code => app.on_key(code),
             },
-            Some(Event::Message(msg)) => {
-                app.log(format!("incoming message: {:?}", msg));
+            Some(Event::Message { payload, message }) => {
+                app.on_message(message, payload);
             }
             None => {
                 break;

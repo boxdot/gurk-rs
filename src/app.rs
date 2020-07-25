@@ -3,7 +3,7 @@ use crate::signal;
 use crate::util::StatefulList;
 
 use anyhow::Context;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use crossterm::event::KeyCode;
 use serde::{Deserialize, Serialize};
 
@@ -54,8 +54,9 @@ impl AppData {
                 .unwrap_or_else(|| &group_info.group_id)
                 .to_string();
             Channel {
+                id: group_info.group_id,
                 name,
-                group_info: Some(group_info),
+                is_group: true,
                 messages: Vec::new(),
             }
         });
@@ -72,8 +73,10 @@ impl AppData {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Channel {
+    /// Either phone number or group id
+    pub id: String,
     pub name: String,
-    pub group_info: Option<signal::GroupInfo>,
+    pub is_group: bool,
     pub messages: Vec<Message>,
 }
 
@@ -84,10 +87,14 @@ pub struct Message {
     pub arrived_at: DateTime<Utc>,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum Event<I> {
     Input(I),
-    Message(signal::Message),
+    Message {
+        payload: String,
+        message: Option<signal::Message>,
+    },
 }
 
 impl App {
@@ -159,5 +166,57 @@ impl App {
     #[allow(dead_code)]
     pub fn log(&mut self, msg: impl AsRef<str>) {
         writeln!(&mut self.log_file, "{}", msg.as_ref()).unwrap();
+    }
+
+    pub fn on_message(&mut self, message: Option<signal::Message>, payload: String) -> Option<()> {
+        self.log(format!("incoming: {} -> {:?}", payload, message));
+        let mut message = message?;
+
+        let msg: signal::InnerMessage = message
+            .envelope
+            .sync_message
+            .take()
+            .map(|m| m.sent_message)
+            .or_else(|| message.envelope.data_message.take())?;
+
+        let channel_id = msg
+            .group_info
+            .as_ref()
+            .map(|g| g.group_id.as_str())
+            .unwrap_or(&message.envelope.source)
+            .to_string();
+        let is_group = msg.group_info.is_some();
+
+        let arrived_at = NaiveDateTime::from_timestamp(
+            message.envelope.timestamp as i64 / 1000,
+            (message.envelope.timestamp % 1000) as u32,
+        );
+        let arrived_at = Utc.from_utc_datetime(&arrived_at);
+
+        let channel = if let Some(channel) = self
+            .data
+            .channels
+            .items
+            .iter_mut()
+            .find(|channel| channel.id == channel_id && channel.is_group == is_group)
+        {
+            channel
+        } else {
+            self.data.channels.items.push(Channel {
+                id: channel_id.clone(),
+                name: channel_id.clone(),
+                is_group,
+                messages: Vec::new(),
+            });
+            self.data.channels.items.last_mut().unwrap()
+        };
+
+        channel.messages.push(Message {
+            from: message.envelope.source,
+            text: msg.message,
+            arrived_at,
+        });
+
+        Some(())
     }
 }

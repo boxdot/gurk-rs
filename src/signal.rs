@@ -57,12 +57,9 @@ impl SignalClient {
         let mut reader = BufReader::new(stdout).lines();
         let cmd_handle = tokio::spawn(async { child.await });
 
-        while let Some(line) = reader.next_line().await? {
-            let msg: Message = match serde_json::from_str(&line) {
-                Ok(msg) => msg,
-                Err(_) => continue,
-            };
-            if tx.send(Event::Message(msg)).await.is_err() {
+        while let Some(payload) = reader.next_line().await? {
+            let message = serde_json::from_str(&payload).ok();
+            if tx.send(Event::Message { payload, message }).await.is_err() {
                 break; // receiver closed
             }
         }
@@ -91,20 +88,27 @@ pub struct Envelope {
     pub is_receipt: bool,
     pub is_read: Option<bool>,
     pub is_delivery: Option<bool>,
-    pub data_message: Option<DataMessage>,
-    // sync_message
+    pub data_message: Option<InnerMessage>,
+    pub sync_message: Option<SyncMessage>,
     // call_message
     // receipt_message
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DataMessage {
+pub struct InnerMessage {
     pub timestamp: u64,
     pub message: String,
     pub expires_in_seconds: u64,
     // attachments,
     pub group_info: Option<GroupInfo>,
+    pub destination: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncMessage {
+    pub sent_message: InnerMessage,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
