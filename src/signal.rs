@@ -1,6 +1,7 @@
 use crate::app::Event;
 use crate::config::Config;
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 use std::io::BufRead;
 use std::process::Command;
 use std::str::FromStr;
@@ -68,6 +69,49 @@ impl SignalClient {
         cmd_handle.await??;
 
         Ok(())
+    }
+
+    pub fn send_message(message: impl Display, receipient: impl Display) {
+        let child = tokio::process::Command::new("dbus-send")
+            .args(&[
+                "--session",
+                "--type=method_call",
+                "--dest=org.asamk.Signal",
+                "/org/asamk/Signal",
+                "org.asamk.Signal.sendMessage",
+            ])
+            .arg(format!("string:{}", message))
+            .arg("array:string:")
+            .arg(format!("string:{}", receipient))
+            .spawn()
+            .unwrap();
+
+        tokio::spawn(child);
+    }
+
+    pub fn send_group_message(message: impl Display, group_id: &[u8]) {
+        use std::fmt::Write;
+        let mut bytes_list = String::new();
+        write!(&mut bytes_list, "{}", group_id[0]).unwrap();
+        for byte in &group_id[1..] {
+            write!(&mut bytes_list, ",{}", byte).unwrap();
+        }
+
+        let child = tokio::process::Command::new("dbus-send")
+            .args(&[
+                "--session",
+                "--type=method_call",
+                "--dest=org.asamk.Signal",
+                "/org/asamk/Signal",
+                "org.asamk.Signal.sendGroupMessage",
+            ])
+            .arg(format!("string:{}", message))
+            .arg("array:string:")
+            .arg(format!("array:byte:{}", bytes_list))
+            .spawn()
+            .unwrap();
+
+        tokio::spawn(child);
     }
 }
 

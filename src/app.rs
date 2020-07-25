@@ -15,6 +15,7 @@ pub struct App {
     pub config: Config,
     pub should_quit: bool,
     pub log_file: File,
+    pub signal_client: signal::SignalClient,
     pub data: AppData,
 }
 
@@ -113,10 +114,13 @@ impl App {
             }
         };
 
+        let signal_client = signal::SignalClient::from_config(config.clone());
+
         Ok(Self {
             config,
             data,
             should_quit: false,
+            signal_client,
             log_file: File::create("gurk.log").unwrap(),
         })
     }
@@ -132,11 +136,21 @@ impl App {
             KeyCode::Enter if !self.data.input.is_empty() => {
                 if let Some(idx) = self.data.channels.state.selected() {
                     let channel = &mut self.data.channels.items[idx];
+
+                    let text = self.data.input.drain(..).collect();
+                    if !channel.is_group {
+                        signal::SignalClient::send_message(&text, &channel.id);
+                    } else {
+                        let id = base64::decode(&channel.id).unwrap();
+                        signal::SignalClient::send_group_message(&text, &id);
+                    }
+
                     channel.messages.push(Message {
                         from: self.config.user.name.clone(),
-                        text: self.data.input.drain(..).collect(),
+                        text,
                         arrived_at: Utc::now(),
                     });
+
                     let _ = self.save();
                 }
             }
