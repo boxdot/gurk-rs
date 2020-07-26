@@ -79,13 +79,6 @@ async fn main() -> anyhow::Result<()> {
         match rx.recv().await {
             Some(Event::Input(event)) => match event.code {
                 KeyCode::Char('c') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                    disable_raw_mode()?;
-                    execute!(
-                        terminal.backend_mut(),
-                        LeaveAlternateScreen,
-                        DisableMouseCapture
-                    )?;
-                    terminal.show_cursor()?;
                     break;
                 }
                 KeyCode::Left => app.on_left(),
@@ -105,6 +98,14 @@ async fn main() -> anyhow::Result<()> {
             break;
         }
     }
+
+    disable_raw_mode()?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
+    terminal.show_cursor()?;
 
     Ok(())
 }

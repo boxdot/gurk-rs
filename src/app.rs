@@ -104,7 +104,9 @@ impl App {
         let config = config::load_from(&config_path)
             .with_context(|| format!("failed to read config from: {}", config_path.display()))?;
 
-        let data = match AppData::load(&config.data_path) {
+        let log_file = File::create("gurk.log").unwrap();
+
+        let mut data = match AppData::load(&config.data_path) {
             Ok(data) => data,
             Err(_) => {
                 let client = signal::SignalClient::from_config(config.clone());
@@ -113,6 +115,10 @@ impl App {
                 data
             }
         };
+        if data.channels.state.selected().is_none() {
+            data.channels.state.select(Some(0));
+            data.save(&config.data_path)?;
+        }
 
         let signal_client = signal::SignalClient::from_config(config.clone());
 
@@ -121,15 +127,12 @@ impl App {
             data,
             should_quit: false,
             signal_client,
-            log_file: File::create("gurk.log").unwrap(),
+            log_file,
         })
     }
 
     pub fn on_key(&mut self, k: KeyCode) {
         match k {
-            KeyCode::Char('q') => {
-                self.should_quit = true;
-            }
             KeyCode::Char(c) => {
                 self.data.input.push(c);
             }
@@ -163,10 +166,12 @@ impl App {
 
     pub fn on_up(&mut self) {
         self.data.channels.previous();
+        self.save().unwrap();
     }
 
     pub fn on_down(&mut self) {
         self.data.channels.next();
+        self.save().unwrap();
     }
 
     pub fn on_right(&mut self) {
@@ -230,6 +235,8 @@ impl App {
             text: msg.message,
             arrived_at,
         });
+
+        self.save().unwrap();
 
         Some(())
     }
