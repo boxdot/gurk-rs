@@ -88,7 +88,7 @@ async fn main() -> anyhow::Result<()> {
                 code => app.on_key(code),
             },
             Some(Event::Message { payload, message }) => {
-                app.on_message(message, payload);
+                app.on_message(message, payload).await;
             }
             None => {
                 break;

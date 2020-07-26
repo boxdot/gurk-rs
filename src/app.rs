@@ -187,7 +187,11 @@ impl App {
         writeln!(&mut self.log_file, "{}", msg.as_ref()).unwrap();
     }
 
-    pub fn on_message(&mut self, message: Option<signal::Message>, payload: String) -> Option<()> {
+    pub async fn on_message(
+        &mut self,
+        message: Option<signal::Message>,
+        payload: String,
+    ) -> Option<()> {
         self.log(format!("incoming: {} -> {:?}", payload, message));
         let mut message = message?;
 
@@ -212,6 +216,10 @@ impl App {
         );
         let arrived_at = Utc.from_utc_datetime(&arrived_at);
 
+        let name = self
+            .resolve_contact_name(message.envelope.source.clone())
+            .await;
+
         let channel = if let Some(channel) = self
             .data
             .channels
@@ -221,9 +229,16 @@ impl App {
         {
             channel
         } else {
+            let channel_name = if is_group {
+                let group_name = signal::SignalClient::get_group_name(channel_id.clone()).await;
+                self.log(format!("{:?} <- {}", group_name, channel_id));
+                group_name.unwrap_or_else(|| channel_id.clone())
+            } else {
+                name.clone()
+            };
             self.data.channels.items.push(Channel {
                 id: channel_id.clone(),
-                name: channel_id.clone(),
+                name: channel_name,
                 is_group,
                 messages: Vec::new(),
             });
@@ -231,7 +246,7 @@ impl App {
         };
 
         channel.messages.push(Message {
-            from: message.envelope.source,
+            from: name,
             text: msg.message,
             arrived_at,
         });
@@ -239,5 +254,56 @@ impl App {
         self.save().unwrap();
 
         Some(())
+    }
+
+    async fn resolve_contact_name(&mut self, phone_number: String) -> String {
+        let contact_channel = self
+            .data
+            .channels
+            .items
+            .iter()
+            .find(|channel| channel.id == phone_number && !channel.is_group);
+        let contact_channel_exists = contact_channel.is_some();
+        let name = match contact_channel {
+            _ if phone_number == self.config.user.phone_number => {
+                Some(self.config.user.name.clone())
+            }
+            Some(channel) if channel.id == channel.name => {
+                signal::SignalClient::get_contact_name(phone_number.clone()).await
+            }
+            None => signal::SignalClient::get_contact_name(phone_number.clone()).await,
+            Some(channel) => Some(channel.name.clone()),
+        };
+
+        self.log(format!(
+            "name: {:?} <- {}, channel exists: {}",
+            name, phone_number, contact_channel_exists
+        ));
+
+        if let Some(name) = name.as_ref() {
+            for channel in self.data.channels.items.iter_mut() {
+                for message in channel.messages.iter_mut() {
+                    if message.from == phone_number {
+                        message.from = name.clone();
+                    }
+                }
+                if channel.id == phone_number {
+                    channel.name = name.clone();
+                }
+            }
+        }
+
+        let name = name.unwrap_or_else(|| phone_number.clone());
+
+        if !contact_channel_exists {
+            self.data.channels.items.push(Channel {
+                id: phone_number,
+                name: name.clone(),
+                is_group: false,
+                messages: Vec::new(),
+            })
+        }
+
+        name
     }
 }

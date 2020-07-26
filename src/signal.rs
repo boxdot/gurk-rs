@@ -71,7 +71,7 @@ impl SignalClient {
         Ok(())
     }
 
-    pub fn send_message(message: impl Display, receipient: impl Display) {
+    pub fn send_message(message: impl Display, phone_number: &str) {
         let child = tokio::process::Command::new("dbus-send")
             .args(&[
                 "--session",
@@ -82,7 +82,7 @@ impl SignalClient {
             ])
             .arg(format!("string:{}", message))
             .arg("array:string:")
-            .arg(format!("string:{}", receipient))
+            .arg(format!("string:{}", phone_number))
             .spawn()
             .unwrap();
 
@@ -90,13 +90,6 @@ impl SignalClient {
     }
 
     pub fn send_group_message(message: impl Display, group_id: &[u8]) {
-        use std::fmt::Write;
-        let mut bytes_list = String::new();
-        write!(&mut bytes_list, "{}", group_id[0]).unwrap();
-        for byte in &group_id[1..] {
-            write!(&mut bytes_list, ",{}", byte).unwrap();
-        }
-
         let child = tokio::process::Command::new("dbus-send")
             .args(&[
                 "--session",
@@ -107,12 +100,68 @@ impl SignalClient {
             ])
             .arg(format!("string:{}", message))
             .arg("array:string:")
-            .arg(format!("array:byte:{}", bytes_list))
+            .arg(format!("array:byte:{}", bytes_to_decimal_list(group_id)))
             .spawn()
             .unwrap();
 
         tokio::spawn(child);
     }
+
+    pub async fn get_contact_name(phone_number: String) -> Option<String> {
+        let output = tokio::process::Command::new("dbus-send")
+            .args(&[
+                "--session",
+                "--print-reply",
+                "--type=method_call",
+                "--dest=org.asamk.Signal",
+                "/org/asamk/Signal",
+                "org.asamk.Signal.getContactName",
+            ])
+            .arg(format!("string:{}", phone_number))
+            .output();
+
+        let output = output.await.ok()?;
+        extract_dbus_string_response(&output.stdout).filter(|s| !String::is_empty(s))
+    }
+
+    pub async fn get_group_name(group_id: String) -> Option<String> {
+        let output = tokio::process::Command::new("dbus-send")
+            .args(&[
+                "--session",
+                "--print-reply",
+                "--type=method_call",
+                "--dest=org.asamk.Signal",
+                "/org/asamk/Signal",
+                "org.asamk.Signal.getGroupName",
+            ])
+            .arg(format!(
+                "array:byte:{}",
+                bytes_to_decimal_list(&base64::decode(group_id.as_bytes()).ok()?)
+            ))
+            .output();
+
+        let output = output.await.ok()?;
+        extract_dbus_string_response(&output.stdout).filter(|s| !String::is_empty(s))
+    }
+}
+
+fn bytes_to_decimal_list(bytes: &[u8]) -> String {
+    use std::fmt::Write;
+    let mut bytes_list = String::new();
+    write!(&mut bytes_list, "{}", bytes[0]).unwrap();
+    for byte in &bytes[1..] {
+        write!(&mut bytes_list, ",{}", byte).unwrap();
+    }
+    bytes_list
+}
+
+fn extract_dbus_string_response(s: &[u8]) -> Option<String> {
+    // TODO: super ugly code to get a value from second line between quotes!
+    let line = s.lines().nth(1)?.ok()?;
+    let start = line.find('"')?;
+    let end = start + 1 + line[start + 1..].find('"')?;
+    let response = line[start + 1..end].trim();
+    Some(response.to_string())
 }
 
 #[derive(Debug, Clone, Deserialize)]
