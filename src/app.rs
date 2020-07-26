@@ -138,23 +138,7 @@ impl App {
             }
             KeyCode::Enter if !self.data.input.is_empty() => {
                 if let Some(idx) = self.data.channels.state.selected() {
-                    let channel = &mut self.data.channels.items[idx];
-
-                    let text = self.data.input.drain(..).collect();
-                    if !channel.is_group {
-                        signal::SignalClient::send_message(&text, &channel.id);
-                    } else {
-                        let id = base64::decode(&channel.id).unwrap();
-                        signal::SignalClient::send_group_message(&text, &id);
-                    }
-
-                    channel.messages.push(Message {
-                        from: self.config.user.name.clone(),
-                        text,
-                        arrived_at: Utc::now(),
-                    });
-
-                    let _ = self.save();
+                    self.send_input(idx)
                 }
             }
             KeyCode::Backspace => {
@@ -162,6 +146,26 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    fn send_input(&mut self, channel_idx: usize) {
+        let channel = &mut self.data.channels.items[channel_idx];
+
+        let text = self.data.input.drain(..).collect();
+        if !channel.is_group {
+            signal::SignalClient::send_message(&text, &channel.id);
+        } else {
+            signal::SignalClient::send_group_message(&text, &channel.id);
+        }
+
+        channel.messages.push(Message {
+            from: self.config.user.name.clone(),
+            text,
+            arrived_at: Utc::now(),
+        });
+
+        self.bubble_up_channel(channel_idx);
+        self.save().unwrap();
     }
 
     pub fn on_up(&mut self) {
@@ -220,18 +224,17 @@ impl App {
             .resolve_contact_name(message.envelope.source.clone())
             .await;
 
-        let channel = if let Some(channel) = self
+        let channel_idx = if let Some(channel_idx) = self
             .data
             .channels
             .items
             .iter_mut()
-            .find(|channel| channel.id == channel_id && channel.is_group == is_group)
+            .position(|channel| channel.id == channel_id && channel.is_group == is_group)
         {
-            channel
+            channel_idx
         } else {
             let channel_name = if is_group {
-                let group_name = signal::SignalClient::get_group_name(channel_id.clone()).await;
-                self.log(format!("{:?} <- {}", group_name, channel_id));
+                let group_name = signal::SignalClient::get_group_name(&channel_id).await;
                 group_name.unwrap_or_else(|| channel_id.clone())
             } else {
                 name.clone()
@@ -242,15 +245,17 @@ impl App {
                 is_group,
                 messages: Vec::new(),
             });
-            self.data.channels.items.last_mut().unwrap()
+            self.data.channels.items.len() - 1
         };
 
-        channel.messages.push(Message {
-            from: name,
-            text: msg.message,
-            arrived_at,
-        });
-
+        self.data.channels.items[channel_idx]
+            .messages
+            .push(Message {
+                from: name,
+                text: msg.message,
+                arrived_at,
+            });
+        self.bubble_up_channel(channel_idx);
         self.save().unwrap();
 
         Some(())
@@ -269,16 +274,11 @@ impl App {
                 Some(self.config.user.name.clone())
             }
             Some(channel) if channel.id == channel.name => {
-                signal::SignalClient::get_contact_name(phone_number.clone()).await
+                signal::SignalClient::get_contact_name(&phone_number).await
             }
-            None => signal::SignalClient::get_contact_name(phone_number.clone()).await,
+            None => signal::SignalClient::get_contact_name(&phone_number).await,
             Some(channel) => Some(channel.name.clone()),
         };
-
-        self.log(format!(
-            "name: {:?} <- {}, channel exists: {}",
-            name, phone_number, contact_channel_exists
-        ));
 
         if let Some(name) = name.as_ref() {
             for channel in self.data.channels.items.iter_mut() {
@@ -305,5 +305,20 @@ impl App {
         }
 
         name
+    }
+
+    fn bubble_up_channel(&mut self, channel_idx: usize) {
+        // bubble up channel to the beginning of the list
+        let channels = &mut self.data.channels;
+        for (prev, next) in (0..channel_idx).zip(1..channel_idx + 1).rev() {
+            channels.items.swap(prev, next);
+        }
+        match channels.state.selected() {
+            Some(selected_idx) if selected_idx == channel_idx => channels.state.select(Some(0)),
+            Some(selected_idx) if selected_idx < channel_idx => {
+                channels.state.select(Some(selected_idx + 1));
+            }
+            _ => {}
+        };
     }
 }

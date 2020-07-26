@@ -89,7 +89,7 @@ impl SignalClient {
         tokio::spawn(child);
     }
 
-    pub fn send_group_message(message: impl Display, group_id: &[u8]) {
+    pub fn send_group_message(message: impl Display, group_id: &str) {
         let child = tokio::process::Command::new("dbus-send")
             .args(&[
                 "--session",
@@ -100,14 +100,17 @@ impl SignalClient {
             ])
             .arg(format!("string:{}", message))
             .arg("array:string:")
-            .arg(format!("array:byte:{}", bytes_to_decimal_list(group_id)))
+            .arg(format!(
+                "array:byte:{}",
+                bytes_to_decimal_list(&base64::decode(&group_id).unwrap())
+            ))
             .spawn()
             .unwrap();
 
         tokio::spawn(child);
     }
 
-    pub async fn get_contact_name(phone_number: String) -> Option<String> {
+    pub async fn get_contact_name(phone_number: &str) -> Option<String> {
         let output = tokio::process::Command::new("dbus-send")
             .args(&[
                 "--session",
@@ -124,7 +127,7 @@ impl SignalClient {
         extract_dbus_string_response(&output.stdout).filter(|s| !String::is_empty(s))
     }
 
-    pub async fn get_group_name(group_id: String) -> Option<String> {
+    pub async fn get_group_name(group_id: &str) -> Option<String> {
         let output = tokio::process::Command::new("dbus-send")
             .args(&[
                 "--session",
