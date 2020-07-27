@@ -17,12 +17,33 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
         .direction(Direction::Horizontal)
         .split(f.size());
 
+    if let Some(selected_idx) = app.data.channels.state.selected() {
+        app.data.channels.items[selected_idx].unread_messages = 0;
+    }
+
+    let channel_list_width = chunks[0].width.saturating_sub(2) as usize;
     let channels: Vec<ListItem> = app
         .data
         .channels
         .items
         .iter()
-        .map(|channel| ListItem::new(vec![Spans::from(Span::raw(&channel.name))]))
+        .map(|channel| {
+            let unread_messages_label = if channel.unread_messages != 0 {
+                format!(" ({})", channel.unread_messages)
+            } else {
+                String::new()
+            };
+            let label = format!("{}{}", channel.name, unread_messages_label);
+            let label_width = label.width();
+            let label = if label.width() <= channel_list_width || unread_messages_label.is_empty() {
+                label
+            } else {
+                let diff = label_width - channel_list_width;
+                let end = channel.name.width().saturating_sub(diff);
+                format!("{}{}", &channel.name[0..end], unread_messages_label)
+            };
+            ListItem::new(vec![Spans::from(Span::raw(label))])
+        })
         .collect();
     let channels = List::new(channels)
         .block(Block::default().borders(Borders::ALL).title("Channels"))

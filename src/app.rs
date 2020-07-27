@@ -59,6 +59,7 @@ impl AppData {
                 name,
                 is_group: true,
                 messages: Vec::new(),
+                unread_messages: 0,
             }
         });
         let mut channels = StatefulList::with_items(channels.collect());
@@ -79,6 +80,8 @@ pub struct Channel {
     pub name: String,
     pub is_group: bool,
     pub messages: Vec<Message>,
+    #[serde(default)]
+    pub unread_messages: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -245,6 +248,7 @@ impl App {
                 name: channel_name,
                 is_group,
                 messages: Vec::new(),
+                unread_messages: 0,
             });
             self.data.channels.items.len() - 1
         };
@@ -256,6 +260,10 @@ impl App {
                 text: msg.message,
                 arrived_at,
             });
+        if self.data.channels.state.selected() != Some(channel_idx) {
+            self.data.channels.items[channel_idx].unread_messages += 1;
+        }
+
         self.bubble_up_channel(channel_idx);
         self.save().unwrap();
 
@@ -302,6 +310,7 @@ impl App {
                 name: name.clone(),
                 is_group: false,
                 messages: Vec::new(),
+                unread_messages: 0,
             })
         }
 
