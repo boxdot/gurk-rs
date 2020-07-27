@@ -62,14 +62,13 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
     let max_username_width = messages
         .iter()
-        .map(|msg| msg.from.width())
+        .map(|msg| displayed_name(&msg.from, app.config.first_name_only).width())
         .max()
         .unwrap_or(0);
 
     let width = area.right() - area.left() - 2; // without borders
 
     let time_style = Style::default().fg(Color::Yellow);
-    let from_style = Style::default().fg(Color::Green);
     let messages: Vec<Vec<Spans>> = messages
         .iter()
         .rev()
@@ -80,12 +79,10 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
                 format!("{:02}:{:02} ", arrived_at.hour(), arrived_at.minute()),
                 time_style,
             );
+            let from = displayed_name(&msg.from, app.config.first_name_only);
             let from = Span::styled(
-                textwrap::indent(
-                    &msg.from,
-                    &" ".repeat(max_username_width - msg.from.width()),
-                ),
-                from_style,
+                textwrap::indent(&from, &" ".repeat(max_username_width - from.width())),
+                Style::default().fg(user_color(&msg.from)),
             );
             let delimeter = Span::from(": ");
 
@@ -122,4 +119,25 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         .style(Style::default().fg(Color::White))
         .start_corner(Corner::BottomLeft);
     f.render_stateful_widget(list, area, &mut app.data.channels.state);
+}
+
+// Randomly but deterministically choose a color for a username
+fn user_color(username: &str) -> Color {
+    use Color::*;
+    const COLORS: &[Color] = &[Red, Green, Yellow, Blue, Magenta, Cyan, Gray];
+    let idx = username
+        .bytes()
+        .map(|b| usize::from(b) % COLORS.len())
+        .sum::<usize>()
+        % COLORS.len();
+    COLORS[idx]
+}
+
+fn displayed_name(name: &str, first_name_only: bool) -> &str {
+    if first_name_only {
+        let space_pos = name.find(' ').unwrap_or_else(|| name.len());
+        &name[0..space_pos]
+    } else {
+        &name
+    }
 }

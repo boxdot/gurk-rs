@@ -9,6 +9,9 @@ pub struct Config {
     pub signal_cli: SignalCli,
     #[serde(default = "default_data_path")]
     pub data_path: PathBuf,
+    /// Whether only to show the first name of a contact
+    #[serde(default)]
+    pub first_name_only: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
