@@ -5,7 +5,6 @@ mod ui;
 mod util;
 
 use app::{App, Event};
-use tokio::stream::StreamExt;
 
 use anyhow::Context;
 use crossterm::{
@@ -17,6 +16,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use structopt::StructOpt;
+use tokio::stream::StreamExt;
 use tui::{backend::CrosstermBackend, Terminal};
 
 use std::fs::File;
@@ -58,8 +58,10 @@ async fn main() -> anyhow::Result<()> {
         async move {
             let mut reader = EventStream::new().fuse();
             while let Some(event) = reader.next().await {
-                if let Ok(CEvent::Key(key)) = event {
-                    tx.send(Event::Input(key)).await.unwrap();
+                match event {
+                    Ok(CEvent::Key(key)) => tx.send(Event::Input(key)).await.unwrap(),
+                    Ok(CEvent::Resize(_, _)) => tx.send(Event::Resize).await.unwrap(),
+                    _ => (),
                 }
             }
         }
@@ -89,6 +91,9 @@ async fn main() -> anyhow::Result<()> {
             },
             Some(Event::Message { payload, message }) => {
                 app.on_message(message, payload).await;
+            }
+            Some(Event::Resize) => {
+                // will just redraw the app
             }
             None => {
                 break;

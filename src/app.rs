@@ -96,6 +96,7 @@ pub enum Event<I> {
         payload: String,
         message: Option<signal::Message>,
     },
+    Resize,
 }
 
 impl App {
