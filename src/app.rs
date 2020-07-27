@@ -214,7 +214,13 @@ impl App {
             .group_info
             .as_ref()
             .map(|g| g.group_id.as_str())
-            .unwrap_or(&message.envelope.source)
+            .or_else(|| {
+                if message.envelope.source == self.config.user.phone_number {
+                    msg.destination.as_deref()
+                } else {
+                    Some(message.envelope.source.as_str())
+                }
+            })?
             .to_string();
         let is_group = msg.group_info.is_some();
 
