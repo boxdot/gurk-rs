@@ -8,7 +8,6 @@ use tui::text::Text;
 use tui::text::{Span, Spans};
 use tui::widgets::{Block, Borders, List, ListItem, Paragraph};
 use tui::Frame;
-
 use unicode_width::UnicodeWidthStr;
 
 pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
@@ -66,7 +65,7 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     f.render_widget(input, chunks[1]);
     f.set_cursor(
         // Put cursor past the end of the input text
-        chunks[1].x + app.data.input.width() as u16 + 1,
+        chunks[1].x + app.data.input_cursor as u16 + 1,
         // Move one line down, from the border to the input line
         chunks[1].y + 1,
     );

@@ -29,6 +29,8 @@ impl App {
 pub struct AppData {
     pub channels: StatefulList<Channel>,
     pub input: String,
+    #[serde(skip)]
+    pub input_cursor: usize,
 }
 
 impl AppData {
@@ -40,7 +42,8 @@ impl AppData {
 
     fn load(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let f = File::open(path)?;
-        let data = serde_json::from_reader(f)?;
+        let mut data: Self = serde_json::from_reader(f)?;
+        data.input_cursor = data.input.len();
         Ok(data)
     }
 
@@ -69,6 +72,7 @@ impl AppData {
         Ok(AppData {
             channels,
             input: String::new(),
+            input_cursor: 0,
         })
     }
 }
@@ -96,7 +100,9 @@ pub struct Message {
 pub enum Event<I> {
     Input(I),
     Message {
+        /// used for debugging
         payload: String,
+        /// some message if deserialized successfully
         message: Option<signal::Message>,
     },
     Resize,
@@ -135,10 +141,11 @@ impl App {
         })
     }
 
-    pub fn on_key(&mut self, k: KeyCode) {
-        match k {
+    pub fn on_key(&mut self, key: KeyCode) {
+        match key {
             KeyCode::Char(c) => {
-                self.data.input.push(c);
+                self.data.input.insert(self.data.input_cursor, c);
+                self.data.input_cursor += 1;
             }
             KeyCode::Enter if !self.data.input.is_empty() => {
                 if let Some(idx) = self.data.channels.state.selected() {
@@ -146,7 +153,11 @@ impl App {
                 }
             }
             KeyCode::Backspace => {
-                self.data.input.pop();
+                if self.data.input_cursor > 0 && self.data.input_cursor < self.data.input.len() + 1
+                {
+                    self.data.input.remove(self.data.input_cursor - 1);
+                    self.data.input_cursor = self.data.input_cursor.saturating_sub(1);
+                }
             }
             _ => {}
         }
@@ -156,6 +167,7 @@ impl App {
         let channel = &mut self.data.channels.items[channel_idx];
 
         let text = self.data.input.drain(..).collect();
+        self.data.input_cursor = 0;
         if !channel.is_group {
             signal::SignalClient::send_message(&text, &channel.id);
         } else {
@@ -182,12 +194,14 @@ impl App {
         self.save().unwrap();
     }
 
-    pub fn on_right(&mut self) {
-        // self.tabs.next();
+    pub fn on_left(&mut self) {
+        self.data.input_cursor = self.data.input_cursor.saturating_sub(1);
     }
 
-    pub fn on_left(&mut self) {
-        // self.tabs.previous();
+    pub fn on_right(&mut self) {
+        if self.data.input_cursor < self.data.input.len() {
+            self.data.input_cursor += 1;
+        }
     }
 
     #[allow(dead_code)]
