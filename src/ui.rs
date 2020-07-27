@@ -4,8 +4,7 @@ use chrono::Timelike;
 use tui::backend::Backend;
 use tui::layout::{Constraint, Corner, Direction, Layout, Rect};
 use tui::style::{Color, Style};
-use tui::text::Text;
-use tui::text::{Span, Spans};
+use tui::text::{Span, Spans, Text};
 use tui::widgets::{Block, Borders, List, ListItem, Paragraph};
 use tui::Frame;
 use unicode_width::UnicodeWidthStr;
@@ -53,21 +52,46 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
 }
 
 fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
+    let text_width = area.width.saturating_sub(2) as usize;
+    let lines = app
+        .data
+        .input
+        .chars()
+        .enumerate()
+        .fold(Vec::new(), |mut lines, (idx, c)| {
+            if idx % text_width == 0 {
+                lines.push(String::new())
+            }
+            lines.last_mut().unwrap().push(c);
+            lines
+        });
+    let num_input_lines = lines.len().max(1);
+    let input: Vec<Spans> = lines.into_iter().map(Spans::from).collect();
+    let extra_cursor_line = if app.data.input_cursor > 0 && app.data.input_cursor % text_width == 0
+    {
+        1
+    } else {
+        0
+    };
+
     let chunks = Layout::default()
-        .constraints([Constraint::Min(0), Constraint::Length(3)])
+        .constraints([
+            Constraint::Min(0),
+            Constraint::Length(num_input_lines as u16 + 2 + extra_cursor_line),
+        ])
         .direction(Direction::Vertical)
         .split(area);
 
     draw_messages(f, app, chunks[0]);
 
-    let input = Paragraph::new(app.data.input.as_ref())
+    let input = Paragraph::new(Text::from(input))
         .block(Block::default().borders(Borders::ALL).title("Input"));
     f.render_widget(input, chunks[1]);
     f.set_cursor(
         // Put cursor past the end of the input text
-        chunks[1].x + app.data.input_cursor as u16 + 1,
+        chunks[1].x + ((app.data.input_cursor as u16) % text_width as u16) + 1,
         // Move one line down, from the border to the input line
-        chunks[1].y + 1,
+        chunks[1].y + (app.data.input_cursor as u16 / (text_width as u16)) + 1,
     );
 }
 
@@ -86,12 +110,15 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         .max()
         .unwrap_or(0);
 
-    let width = area.right() - area.left() - 2; // without borders
+    let width = area.width - 2; // without borders
+    let max_lines = area.height;
 
     let time_style = Style::default().fg(Color::Yellow);
     let messages: Vec<Vec<Spans>> = messages
         .iter()
         .rev()
+        // we can't show more messages atm and don't have messages navigation
+        .take(max_lines as usize)
         .map(|msg| {
             let arrived_at = msg.arrived_at.with_timezone(&chrono::Local);
 
