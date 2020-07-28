@@ -190,13 +190,27 @@ impl App {
     }
 
     pub fn on_up(&mut self) {
+        if self.reset_unread_messages() {
+            self.save().unwrap();
+        }
         self.data.channels.previous();
-        // self.save().unwrap();
     }
 
     pub fn on_down(&mut self) {
+        if self.reset_unread_messages() {
+            self.save().unwrap();
+        }
         self.data.channels.next();
-        // self.save().unwrap();
+    }
+
+    fn reset_unread_messages(&mut self) -> bool {
+        if let Some(selected_idx) = self.data.channels.state.selected() {
+            if self.data.channels.items[selected_idx].unread_messages > 0 {
+                self.data.channels.items[selected_idx].unread_messages = 0;
+                return true;
+            }
+        }
+        false
     }
 
     pub fn on_left(&mut self) {
@@ -295,6 +309,8 @@ impl App {
             });
         if self.data.channels.state.selected() != Some(channel_idx) {
             self.data.channels.items[channel_idx].unread_messages += 1;
+        } else {
+            self.reset_unread_messages();
         }
 
         self.bubble_up_channel(channel_idx);

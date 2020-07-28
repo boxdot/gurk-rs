@@ -19,9 +19,9 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
         .direction(Direction::Horizontal)
         .split(f.size());
 
-    if let Some(selected_idx) = app.data.channels.state.selected() {
-        app.data.channels.items[selected_idx].unread_messages = 0;
-    }
+    // if let Some(selected_idx) = app.data.channels.state.selected() {
+    //     app.data.channels.items[selected_idx].unread_messages = 0;
+    // }
 
     let channel_list_width = chunks[0].width.saturating_sub(2) as usize;
     let channels: Vec<ListItem> = app
@@ -99,7 +99,7 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     );
 }
 
-fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
+fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &App, area: Rect) {
     let messages = app
         .data
         .channels
@@ -118,7 +118,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let max_lines = area.height;
 
     let time_style = Style::default().fg(Color::Yellow);
-    let messages: Vec<Vec<Spans>> = messages
+    let messages = messages
         .iter()
         .rev()
         // we can't show more messages atm and don't have messages navigation
@@ -146,7 +146,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
                 width.saturating_sub(prefix_width).into(),
             );
 
-            lines
+            let spans: Vec<Spans> = lines
                 .enumerate()
                 .map(|(idx, line)| {
                     let res = if idx == 0 {
@@ -161,19 +161,29 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
                     };
                     Spans::from(res)
                 })
-                .collect()
-        })
-        .collect();
+                .collect();
+            spans
+        });
 
-    let items: Vec<_> = messages
-        .into_iter()
-        .map(|s| ListItem::new(Text::from(s)))
-        .collect();
+    let mut items: Vec<_> = messages.map(|s| ListItem::new(Text::from(s))).collect();
+
+    if let Some(selected_idx) = app.data.channels.state.selected() {
+        let unread_messages = app.data.channels.items[selected_idx].unread_messages;
+        if unread_messages > 0 {
+            let prefix_width = max_username_width + 8;
+            let new_message_line = "-".repeat(prefix_width)
+                + "new messages"
+                + &"-".repeat((width as usize).saturating_sub(prefix_width));
+
+            items.insert(1, ListItem::new(Span::from(new_message_line)));
+        }
+    }
+
     let list = List::new(items)
         .block(Block::default().title("Messages").borders(Borders::ALL))
         .style(Style::default().fg(Color::White))
         .start_corner(Corner::BottomLeft);
-    f.render_stateful_widget(list, area, &mut app.data.channels.state);
+    f.render_widget(list, area);
 }
 
 // Randomly but deterministically choose a color for a username
