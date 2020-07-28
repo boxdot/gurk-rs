@@ -14,7 +14,7 @@ use std::path::Path;
 pub struct App {
     pub config: Config,
     pub should_quit: bool,
-    pub log_file: File,
+    pub log_file: Option<File>,
     pub signal_client: signal::SignalClient,
     pub data: AppData,
 }
@@ -112,12 +112,16 @@ pub enum Event<I> {
 }
 
 impl App {
-    pub fn try_new() -> anyhow::Result<Self> {
+    pub fn try_new(verbose: bool) -> anyhow::Result<Self> {
         let config_path = config::installed_config().expect("missing default location for config");
         let config = config::load_from(&config_path)
             .with_context(|| format!("failed to read config from: {}", config_path.display()))?;
 
-        let log_file = File::create("gurk.log").unwrap();
+        let log_file = if verbose {
+            Some(File::create("gurk.log").unwrap())
+        } else {
+            None
+        };
 
         let mut data = match AppData::load(&config.data_path) {
             Ok(data) => data,
@@ -225,7 +229,9 @@ impl App {
 
     #[allow(dead_code)]
     pub fn log(&mut self, msg: impl AsRef<str>) {
-        writeln!(&mut self.log_file, "{}", msg.as_ref()).unwrap();
+        if let Some(log_file) = &mut self.log_file {
+            writeln!(log_file, "{}", msg.as_ref()).unwrap();
+        }
     }
 
     pub async fn on_message(

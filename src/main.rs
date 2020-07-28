@@ -27,6 +27,9 @@ use std::path::{Path, PathBuf};
 struct Args {
     #[structopt(subcommand)]
     cmd: Option<Command>,
+    /// Enable logging to `gurg.log` in the current working directory.
+    #[structopt(short, long)]
+    verbose: bool,
 }
 
 #[derive(Debug, StructOpt)]
@@ -45,7 +48,7 @@ async fn main() -> anyhow::Result<()> {
         return test_model(path);
     }
 
-    let mut app = App::try_new()?;
+    let mut app = App::try_new(args.verbose)?;
 
     enable_raw_mode()?;
 
