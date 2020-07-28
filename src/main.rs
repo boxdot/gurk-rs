@@ -6,7 +6,6 @@ mod util;
 
 use app::{App, Event};
 
-use anyhow::Context;
 use crossterm::{
     event::{
         DisableMouseCapture, EnableMouseCapture, Event as CEvent, EventStream, KeyCode,
@@ -19,34 +18,18 @@ use structopt::StructOpt;
 use tokio::stream::StreamExt;
 use tui::{backend::CrosstermBackend, Terminal};
 
-use std::fs::File;
-use std::io::{self, BufRead, Write};
-use std::path::{Path, PathBuf};
+use std::io::Write;
 
 #[derive(Debug, StructOpt)]
 struct Args {
-    #[structopt(subcommand)]
-    cmd: Option<Command>,
     /// Enable logging to `gurg.log` in the current working directory.
     #[structopt(short, long)]
     verbose: bool,
 }
 
-#[derive(Debug, StructOpt)]
-enum Command {
-    TestModel {
-        #[structopt(short, long)]
-        path: PathBuf,
-    },
-}
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::from_args();
-    if let Some(Command::TestModel { path }) = args.cmd {
-        // do model testing
-        return test_model(path);
-    }
 
     let mut app = App::try_new(args.verbose)?;
 
@@ -115,22 +98,5 @@ async fn main() -> anyhow::Result<()> {
     )?;
     terminal.show_cursor()?;
 
-    Ok(())
-}
-
-fn test_model(path: impl AsRef<Path>) -> anyhow::Result<()> {
-    let f = File::open(path)?;
-    for (line_number, json_line) in io::BufReader::new(f).lines().enumerate() {
-        let json_line = json_line?;
-        if json_line.trim().is_empty() {
-            continue;
-        }
-        let msg: signal::Message = serde_json::from_str(&json_line).context(format!(
-            "failed to parse line {}: '{}'",
-            line_number + 1,
-            json_line
-        ))?;
-        println!("{:?}", msg);
-    }
     Ok(())
 }
