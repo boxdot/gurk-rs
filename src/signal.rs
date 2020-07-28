@@ -1,11 +1,13 @@
 use crate::app::Event;
 use crate::config::Config;
+
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
+use thiserror::Error;
+
 use std::io::BufRead;
+use std::path::PathBuf;
 use std::process::Command;
 use std::str::FromStr;
-use thiserror::Error;
 
 pub struct SignalClient {
     config: Config,
@@ -71,7 +73,7 @@ impl SignalClient {
         Ok(())
     }
 
-    pub fn send_message(message: impl Display, phone_number: &str) {
+    pub fn send_message(message: &str, phone_number: &str) {
         let child = tokio::process::Command::new("dbus-send")
             .args(&[
                 "--session",
@@ -89,7 +91,7 @@ impl SignalClient {
         tokio::spawn(child);
     }
 
-    pub fn send_group_message(message: impl Display, group_id: &str) {
+    pub fn send_group_message(message: &str, group_id: &str) {
         let child = tokio::process::Command::new("dbus-send")
             .args(&[
                 "--session",
@@ -194,9 +196,9 @@ pub struct Envelope {
 #[serde(rename_all = "camelCase")]
 pub struct InnerMessage {
     pub timestamp: u64,
-    pub message: String,
+    pub message: Option<String>,
     pub expires_in_seconds: u64,
-    // attachments,
+    pub attachments: Option<Vec<Attachment>>,
     pub group_info: Option<GroupInfo>,
     pub destination: Option<String>,
 }
@@ -214,6 +216,15 @@ pub struct GroupInfo {
     // members
     pub name: Option<String>,
     pub members: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Attachment {
+    pub id: String,
+    pub content_type: String,
+    pub filename: PathBuf,
+    pub size: u64,
 }
 
 impl FromStr for GroupInfo {

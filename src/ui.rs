@@ -1,5 +1,7 @@
-use crate::App;
+use crate::signal;
+use crate::{app, App};
 
+use anyhow::Context;
 use chrono::Timelike;
 use tui::backend::Backend;
 use tui::layout::{Constraint, Corner, Direction, Layout, Rect};
@@ -8,6 +10,8 @@ use tui::text::{Span, Spans, Text};
 use tui::widgets::{Block, Borders, List, ListItem, Paragraph};
 use tui::Frame;
 use unicode_width::UnicodeWidthStr;
+
+use std::path::PathBuf;
 
 pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     let chunks = Layout::default()
@@ -133,10 +137,14 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
             );
             let delimeter = Span::from(": ");
 
+            let displayed_message = displayed_message(&msg);
+
             let prefix_width = (time.width() + from.width() + delimeter.width()) as u16;
             let indent = " ".repeat(prefix_width.into());
-            let lines =
-                textwrap::wrap_iter(msg.text.as_str(), width.saturating_sub(prefix_width).into());
+            let lines = textwrap::wrap_iter(
+                displayed_message.as_str(),
+                width.saturating_sub(prefix_width).into(),
+            );
 
             lines
                 .enumerate()
@@ -187,4 +195,80 @@ fn displayed_name(name: &str, first_name_only: bool) -> &str {
     } else {
         &name
     }
+}
+
+fn displayed_message(msg: &app::Message) -> String {
+    let symlinks = symlink_attachments(&msg.attachments).unwrap();
+    let displayed_attachments = symlinks
+        .into_iter()
+        .map(|path| format!("[file://{}]", path.display()));
+    let message = msg.message.as_deref().unwrap_or_default();
+    if !message.is_empty() {
+        itertools::join(
+            std::iter::once(message.to_string()).chain(displayed_attachments),
+            "\n",
+        )
+    } else {
+        itertools::join(displayed_attachments, "\n")
+    }
+}
+
+/// Creates symlinks to attachments in default tmp dir with short random file names.
+fn symlink_attachments(attachments: &[signal::Attachment]) -> anyhow::Result<Vec<PathBuf>> {
+    let signal_cli_data_dir = std::env::var("XDG_DATA_HOME")
+        .map(|s| PathBuf::from(s).join("signal-cli"))
+        .or_else(|_| {
+            std::env::var("HOME").map(|s| PathBuf::from(s).join(".local/share/signal-cli"))
+        })
+        .context("could not find signal-cli data path")?;
+
+    let tmp_attachments_dir = std::env::temp_dir().join("gurk");
+    std::fs::create_dir_all(&tmp_attachments_dir)
+        .with_context(|| format!("failed to create {}", tmp_attachments_dir.display()))?;
+
+    let tmp_attachments_symlinks: anyhow::Result<Vec<_>> = attachments
+        .iter()
+        .map(|attachment| {
+            let source = signal_cli_data_dir.join("attachments").join(&attachment.id);
+
+            let mut filename = id_to_short_random_filename(&attachment.id);
+            if let Some(ext) = attachment.filename.extension() {
+                filename += ".";
+                filename += &ext.to_string_lossy();
+            };
+            let dest = tmp_attachments_dir.join(filename);
+
+            let _ = std::fs::remove_file(&dest);
+            std::os::unix::fs::symlink(&source, &dest).with_context(|| {
+                format!(
+                    "failed to create symlink: {} -> {}",
+                    source.display(),
+                    dest.display(),
+                )
+            })?;
+            Ok(dest)
+        })
+        .collect();
+    Ok(tmp_attachments_symlinks?)
+}
+
+fn xorshift32(mut x: u32) -> u32 {
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    x
+}
+
+fn id_to_short_random_filename(id: &str) -> String {
+    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let mut seed = id
+        .chars()
+        .fold(0u32, |acc, c| acc.wrapping_add(c as u32))
+        .max(1); // must be != 0
+    (0..6)
+        .map(move |_| {
+            seed = xorshift32(seed);
+            CHARSET[seed as usize % CHARSET.len()] as char
+        })
+        .collect()
 }

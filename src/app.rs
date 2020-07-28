@@ -91,7 +91,10 @@ pub struct Channel {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Message {
     pub from: String,
-    pub text: String,
+    #[serde(alias = "text")] // remove
+    pub message: Option<String>,
+    #[serde(default)]
+    pub attachments: Vec<signal::Attachment>,
     pub arrived_at: DateTime<Utc>,
 }
 
@@ -166,17 +169,19 @@ impl App {
     fn send_input(&mut self, channel_idx: usize) {
         let channel = &mut self.data.channels.items[channel_idx];
 
-        let text = self.data.input.drain(..).collect();
+        let message: String = self.data.input.drain(..).collect();
         self.data.input_cursor = 0;
+
         if !channel.is_group {
-            signal::SignalClient::send_message(&text, &channel.id);
+            signal::SignalClient::send_message(&message, &channel.id);
         } else {
-            signal::SignalClient::send_group_message(&text, &channel.id);
+            signal::SignalClient::send_group_message(&message, &channel.id);
         }
 
         channel.messages.push(Message {
             from: self.config.user.name.clone(),
-            text,
+            message: Some(message),
+            attachments: Vec::new(),
             arrived_at: Utc::now(),
         });
 
@@ -186,12 +191,12 @@ impl App {
 
     pub fn on_up(&mut self) {
         self.data.channels.previous();
-        self.save().unwrap();
+        // self.save().unwrap();
     }
 
     pub fn on_down(&mut self) {
         self.data.channels.next();
-        self.save().unwrap();
+        // self.save().unwrap();
     }
 
     pub fn on_left(&mut self) {
@@ -217,12 +222,19 @@ impl App {
         self.log(format!("incoming: {} -> {:?}", payload, message));
         let mut message = message?;
 
-        let msg: signal::InnerMessage = message
+        let mut msg: signal::InnerMessage = message
             .envelope
             .sync_message
             .take()
             .map(|m| m.sent_message)
             .or_else(|| message.envelope.data_message.take())?;
+
+        // message text + attachments paths
+        let text = msg.message.take();
+        let attachments = msg.attachments.take().unwrap_or_default();
+        if text.is_none() && attachments.is_empty() {
+            return None;
+        }
 
         let channel_id = msg
             .group_info
@@ -277,7 +289,8 @@ impl App {
             .messages
             .push(Message {
                 from: name,
-                text: msg.message,
+                message: text,
+                attachments,
                 arrived_at,
             });
         if self.data.channels.state.selected() != Some(channel_idx) {

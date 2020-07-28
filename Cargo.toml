@@ -20,3 +20,4 @@ dirs = "3.0.1"
 thiserror = "1.0.20"
 tokio = { version = "0.2.22", features = ["full"] }
 base64 = "0.12.3"
+itertools = "0.9.0"
