@@ -189,6 +189,7 @@ impl App {
             arrived_at: Utc::now(),
         });
 
+        self.reset_unread_messages();
         self.bubble_up_channel(channel_idx);
         self.save().unwrap();
     }
