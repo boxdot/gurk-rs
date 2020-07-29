@@ -19,10 +19,6 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
         .direction(Direction::Horizontal)
         .split(f.size());
 
-    // if let Some(selected_idx) = app.data.channels.state.selected() {
-    //     app.data.channels.items[selected_idx].unread_messages = 0;
-    // }
-
     let channel_list_width = chunks[0].width.saturating_sub(2) as usize;
     let channels: Vec<ListItem> = app
         .data
@@ -41,7 +37,10 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
                 label
             } else {
                 let diff = label_width - channel_list_width;
-                let end = channel.name.width().saturating_sub(diff);
+                let mut end = channel.name.width().saturating_sub(diff);
+                while !channel.name.is_char_boundary(end) {
+                    end += 1;
+                }
                 format!("{}{}", &channel.name[0..end], unread_messages_label)
             };
             ListItem::new(vec![Spans::from(Span::raw(label))])

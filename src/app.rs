@@ -6,6 +6,7 @@ use anyhow::Context;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use crossterm::event::KeyCode;
 use serde::{Deserialize, Serialize};
+use unicode_width::UnicodeWidthStr;
 
 use std::fs::File;
 use std::io::Write;
@@ -43,7 +44,7 @@ impl AppData {
     fn load(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let f = File::open(path)?;
         let mut data: Self = serde_json::from_reader(f)?;
-        data.input_cursor = data.input.len();
+        data.input_cursor = data.input.width();
         Ok(data)
     }
 
@@ -151,7 +152,11 @@ impl App {
     pub fn on_key(&mut self, key: KeyCode) {
         match key {
             KeyCode::Char(c) => {
-                self.data.input.insert(self.data.input_cursor, c);
+                let mut idx = self.data.input_cursor;
+                while !self.data.input.is_char_boundary(idx) {
+                    idx += 1;
+                }
+                self.data.input.insert(idx, c);
                 self.data.input_cursor += 1;
             }
             KeyCode::Enter if !self.data.input.is_empty() => {
@@ -160,10 +165,18 @@ impl App {
                 }
             }
             KeyCode::Backspace => {
-                if self.data.input_cursor > 0 && self.data.input_cursor < self.data.input.len() + 1
+                if self.data.input_cursor > 0
+                    && self.data.input_cursor < self.data.input.width() + 1
                 {
-                    self.data.input.remove(self.data.input_cursor - 1);
                     self.data.input_cursor = self.data.input_cursor.saturating_sub(1);
+                    let idx = self
+                        .data
+                        .input
+                        .chars()
+                        .take(self.data.input_cursor)
+                        .map(|c| c.len_utf8())
+                        .sum();
+                    self.data.input.remove(idx);
                 }
             }
             _ => {}
@@ -223,7 +236,7 @@ impl App {
     }
 
     pub fn on_right(&mut self) {
-        if self.data.input_cursor < self.data.input.len() {
+        if self.data.input_cursor < self.data.input.width() {
             self.data.input_cursor += 1;
         }
     }
