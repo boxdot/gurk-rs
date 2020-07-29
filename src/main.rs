@@ -34,6 +34,9 @@ async fn main() -> anyhow::Result<()> {
     let mut app = App::try_new(args.verbose)?;
 
     enable_raw_mode()?;
+    let _raw_mode_guard = scopeguard::guard((), |_| {
+        disable_raw_mode().unwrap();
+    });
 
     let mut stdout = std::io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
@@ -90,13 +93,13 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    disable_raw_mode()?;
     execute!(
         terminal.backend_mut(),
         LeaveAlternateScreen,
         DisableMouseCapture
-    )?;
-    terminal.show_cursor()?;
+    )
+    .unwrap();
+    terminal.show_cursor().unwrap();
 
     Ok(())
 }
