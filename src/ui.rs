@@ -168,13 +168,13 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &App, area: Rect) {
 
     if let Some(selected_idx) = app.data.channels.state.selected() {
         let unread_messages = app.data.channels.items[selected_idx].unread_messages;
-        if unread_messages > 0 {
+        if unread_messages > 0 && unread_messages < items.len() {
             let prefix_width = max_username_width + 8;
             let new_message_line = "-".repeat(prefix_width)
                 + "new messages"
                 + &"-".repeat((width as usize).saturating_sub(prefix_width));
 
-            items.insert(1, ListItem::new(Span::from(new_message_line)));
+            items.insert(unread_messages, ListItem::new(Span::from(new_message_line)));
         }
     }
 
