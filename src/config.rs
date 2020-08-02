@@ -1,5 +1,5 @@
 use serde::Deserialize;
-
+use std::fs;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Deserialize)]
@@ -43,11 +43,18 @@ pub fn load_from(path: impl AsRef<Path>) -> anyhow::Result<Config> {
 }
 
 pub fn installed_config() -> Option<PathBuf> {
-    dirs::home_dir().map(|home| home.join(".gurk.toml"))
+    let config_dir = dirs::config_dir()?.join("gurk");
+    fs::create_dir_all(&config_dir)
+        .unwrap_or_else(|_| panic!("{:?} did not exist and could not be created", &config_dir));
+    Some(config_dir.join("gurk.toml"))
 }
 
 fn default_data_path() -> PathBuf {
-    dirs::home_dir()
-        .map(|home| home.join(".gurk.data.json"))
-        .expect("could not find home directory")
+    let data_dir = match dirs::data_dir() {
+        Some(dir) => dir.join("gurk"),
+        None => panic!("default data directory not found, $XDG_DATA_HOME and $HOME are unset"),
+    };
+    fs::create_dir_all(&data_dir)
+        .unwrap_or_else(|_| panic!("{:?} did not exist and could not be created", &data_dir));
+    data_dir.join("gurk.data.json")
 }
