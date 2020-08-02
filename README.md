@@ -3,7 +3,7 @@
 
 [Signal Messenger] client for terminal.
 
-TODO: add screenshot or gif
+![screenshot](screenshot.png)
 
 ## Usage
 
