@@ -1,3 +1,4 @@
+mod storage;
 mod app;
 mod config;
 mod signal;

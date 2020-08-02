@@ -1,5 +1,6 @@
 use crate::config::{self, Config};
 use crate::signal;
+use crate::storage::{Json, Storage};
 use crate::util::StatefulList;
 
 use anyhow::Context;
@@ -10,7 +11,6 @@ use unicode_width::UnicodeWidthStr;
 
 use std::fs::File;
 use std::io::Write;
-use std::path::Path;
 
 pub struct App {
     pub config: Config,
@@ -22,7 +22,7 @@ pub struct App {
 
 impl App {
     fn save(&self) -> anyhow::Result<()> {
-        self.data.save(&self.config.data_path)
+        Json::save(&self.data, &self.config.data_path)
     }
 }
 
@@ -35,18 +35,6 @@ pub struct AppData {
 }
 
 impl AppData {
-    fn save(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
-        let f = File::create(path)?;
-        serde_json::to_writer(f, self)?;
-        Ok(())
-    }
-
-    fn load(path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        let f = File::open(path)?;
-        let mut data: Self = serde_json::from_reader(f)?;
-        data.input_cursor = data.input.width();
-        Ok(data)
-    }
 
     fn init_from_signal(client: &signal::SignalClient) -> anyhow::Result<Self> {
         let groups = client
@@ -124,18 +112,18 @@ impl App {
             None
         };
 
-        let mut data = match AppData::load(&config.data_path) {
+        let mut data = match Json::load(&config.data_path) {
             Ok(data) => data,
             Err(_) => {
                 let client = signal::SignalClient::from_config(config.clone());
                 let data = AppData::init_from_signal(&client)?;
-                data.save(&config.data_path)?;
+                Json::save(&data, &config.data_path)?;
                 data
             }
         };
         if data.channels.state.selected().is_none() {
             data.channels.state.select(Some(0));
-            data.save(&config.data_path)?;
+            Json::save(&data, &config.data_path)?;
         }
 
         let signal_client = signal::SignalClient::from_config(config.clone());
