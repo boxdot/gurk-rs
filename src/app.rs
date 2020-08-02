@@ -51,8 +51,8 @@ impl AppData {
     fn init_from_signal(client: &signal::SignalClient) -> anyhow::Result<Self> {
         let groups = client
             .get_groups()
-            .context("failed to get groups from signal")?;
-        let channels = groups.into_iter().map(|group_info| {
+            .context("failed to fetch groups from signal")?;
+        let group_channels = groups.into_iter().map(|group_info| {
             let name = group_info
                 .name
                 .as_ref()
@@ -66,10 +66,26 @@ impl AppData {
                 unread_messages: 0,
             }
         });
-        let mut channels = StatefulList::with_items(channels.collect());
+
+        let contacts = client
+            .get_contacts()
+            .context("failed to fetch contact from signal")?;
+        let contact_channels = contacts.into_iter().map(|contact_info| Channel {
+            id: contact_info.phone_number,
+            name: contact_info.name,
+            is_group: false,
+            messages: Vec::new(),
+            unread_messages: 0,
+        });
+
+        let mut channels: Vec<_> = group_channels.chain(contact_channels).collect();
+        channels.sort_unstable_by(|a, b| a.name.cmp(&b.name));
+
+        let mut channels = StatefulList::with_items(channels);
         if !channels.items.is_empty() {
             channels.state.select(Some(0));
         }
+
         Ok(AppData {
             channels,
             input: String::new(),

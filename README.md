@@ -34,6 +34,7 @@ At the first run, `gurk` will sync groups and contacts.
 * It is not possible to send multiline messages, since the `Enter` key sends the messages. Add a
   shortcut or a mode for typing multiline messages.
 * Add sending of attachments.
+* Add support for blocked contacts/groups.
 
 The communication with the Signal backend is implemented via [`signal-cli`]. It provides some
 funtionality like lookup of group/contact name only over the dbus interface. Therefore, `gurk` only

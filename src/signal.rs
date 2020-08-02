@@ -25,12 +25,31 @@ impl SignalClient {
             .arg("listGroups")
             .output()?;
 
-        let res: Result<Vec<GroupInfo>, anyhow::Error> = output
+        let res: Result<Vec<_>, anyhow::Error> = output
             .stdout
             .lines()
             .map(|s| {
                 let s = s?;
                 let info = GroupInfo::from_str(&s)?;
+                Ok(info)
+            })
+            .collect();
+        res
+    }
+
+    pub fn get_contacts(&self) -> anyhow::Result<Vec<ContactInfo>> {
+        let output = Command::new(self.config.signal_cli.path.as_os_str())
+            .arg("--username")
+            .arg(&self.config.user.phone_number)
+            .arg("listContacts")
+            .output()?;
+
+        let res: Result<Vec<_>, anyhow::Error> = output
+            .stdout
+            .lines()
+            .map(|s| {
+                let s = s?;
+                let info = ContactInfo::from_str(&s)?;
                 Ok(info)
             })
             .collect();
@@ -227,11 +246,18 @@ pub struct Attachment {
     pub size: u64,
 }
 
+#[derive(Debug)]
+pub struct ContactInfo {
+    pub name: String,
+    pub phone_number: String,
+}
+
+// TODO: robust parsing
 impl FromStr for GroupInfo {
-    type Err = ParseGroupInfoError;
+    type Err = ParseInfoError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        use ParseGroupInfoError::*;
+        use ParseInfoError::*;
 
         // group id
         if !s.starts_with("Id: ") {
@@ -248,7 +274,7 @@ impl FromStr for GroupInfo {
 
         // TODO: parse rest
 
-        Ok(GroupInfo {
+        Ok(Self {
             group_id: group_id.to_string(),
             name: Some(name.to_string()),
             members: None,
@@ -256,8 +282,40 @@ impl FromStr for GroupInfo {
     }
 }
 
+// TODO: robust parsing
+impl FromStr for ContactInfo {
+    type Err = ParseInfoError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        use ParseInfoError::*;
+
+        // phone number
+        if !s.starts_with("Number: ") {
+            return Err(UnexpectedCharAt(0));
+        }
+        let s = &s[8..];
+        let pos = s.find("Name: ").ok_or(UnexpectedCharAt(4))?;
+        let phone_number = s[..pos].trim();
+        let s = &s[pos + 6..];
+
+        // name
+        let pos = s.find("Blocked: ").ok_or(UnexpectedCharAt(pos))?;
+        let mut name = s[..pos].trim();
+        if name.is_empty() {
+            name = phone_number
+        }
+
+        // TODO: parse rest
+
+        Ok(Self {
+            name: name.to_string(),
+            phone_number: phone_number.to_string(),
+        })
+    }
+}
+
 #[derive(Debug, Error)]
-pub enum ParseGroupInfoError {
+pub enum ParseInfoError {
     #[error("unexpected char at: {0}")]
     UnexpectedCharAt(usize),
 }
