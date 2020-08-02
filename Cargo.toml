@@ -4,21 +4,28 @@ description = "Signal messenger client for terminal"
 version = "0.1.0"
 authors = ["boxdot <d@zerovolt.org>"]
 edition = "2018"
+keywords = ["signal", "tui"]
+repository = "https://github.com/boxdot/gurk-rs"
+license = "MIT OR Apache-2.0"
+categories = ["command-line-utilities"]
+
+[badges]
+gitlab = { repository = "https://github.com/boxdot/gurk-rs", branch = "master" }
 
 [dependencies]
 anyhow = "1.0.32"
+base64 = "0.12.3"
 chrono = { version = "0.4.13", features = ["serde"] }
 crossterm = { version = "0.17.7", features = ["event-stream"] }
-tui = { version = "0.10.0", default-features = false, features = ["crossterm"] }
-unicode-width = "0.1.8"
-textwrap = "0.12.1"
+dirs = "3.0.1"
+itertools = "0.9.0"
+scopeguard = "1.1.0"
 serde = { version = "1.0.114", features = ["derive"] }
 serde_json = "1.0.57"
 structopt = "0.3.15"
-toml = "0.5.6"
-dirs = "3.0.1"
+textwrap = "0.12.1"
 thiserror = "1.0.20"
 tokio = { version = "0.2.22", features = ["full"] }
-base64 = "0.12.3"
-itertools = "0.9.0"
-scopeguard = "1.1.0"
+toml = "0.5.6"
+tui = { version = "0.10.0", default-features = false, features = ["crossterm"] }
+unicode-width = "0.1.8"

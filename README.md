@@ -1,8 +1,44 @@
-# gurk
+# gurk 🥒
+![CI](https://github.com/boxdot/gurk-rs/workflows/CI/badge.svg)
 
-Signal Messenger client for terminal.
+[Signal Messenger] client for terminal.
 
-WIP
+TODO: add screenshot or gif
+
+## Usage
+
+You need to download and install [`signal-cli`], such that it is found in your `PATH`.
+
+1. Download and install `signal-cli`
+2. Follow the instructions at https://github.com/AsamK/signal-cli#usage to register a new client.
+3. Install gurk with `cargo install gurk`
+4. Drop the config file in your `$HOME` folder. For more config options, see [`src/config.rs`].
+    ```
+    [user]
+    name = "Your user name"
+    phone_number = "Your phone number used in Signal"
+    ```
+5. Run `gurk`
+
+At the first run, `gurk` will sync groups and contacts.
+
+## Missing features / known issues
+
+* Use a simple database (like sqlite, sled, leveldb) for storing messages, contacts, etc... instead
+  of a JSON file.
+* Add optional Gnome notifications over dbus.
+* Add scrolling of messages.
+* Add reply functionality to a single message.
+* Add mouse navigation.
+* Add search of messages/chats. Add quick switch between chats by name.
+* It is not possible to send multiline messages, since the `Enter` key sends the messages. Add a
+  shortcut or a mode for typing multiline messages.
+* Add sending of attachments.
+
+The communication with the Signal backend is implemented via [`signal-cli`]. It provides some
+funtionality like lookup of group/contact name only over the dbus interface. Therefore, `gurk` only
+works on Linux. We should evaluate if it is possible to switch to the [`libsignal-service-rs`]
+crate.
 
 ## License
 
@@ -16,3 +52,8 @@ WIP
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in this document by you, as defined in the Apache-2.0 license,
 shall be dual licensed as above, without any additional terms or conditions.
+
+[Signal Messenger]: https://signal.org
+[`signal-cli`]: https://github.com/AsamK/signal-cli
+[`libsignal-service-rs`]: https://github.com/Michael-F-Bryan/libsignal-service-rs
+[`src/config.rs`]: https://github.com/boxdot/gurk-rs/blob/master/src/config.rs
