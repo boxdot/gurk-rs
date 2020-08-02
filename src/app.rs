@@ -165,16 +165,18 @@ impl App {
         })
     }
 
+    pub fn put_char(&mut self, c: char) {
+        let mut idx = self.data.input_cursor;
+        while !self.data.input.is_char_boundary(idx) {
+            idx += 1;
+        }
+        self.data.input.insert(idx, c);
+        self.data.input_cursor += 1;
+    }
+
     pub fn on_key(&mut self, key: KeyCode) {
         match key {
-            KeyCode::Char(c) => {
-                let mut idx = self.data.input_cursor;
-                while !self.data.input.is_char_boundary(idx) {
-                    idx += 1;
-                }
-                self.data.input.insert(idx, c);
-                self.data.input_cursor += 1;
-            }
+            KeyCode::Char(c) => self.put_char(c),
             KeyCode::Enter if !self.data.input.is_empty() => {
                 if let Some(idx) = self.data.channels.state.selected() {
                     self.send_input(idx)
