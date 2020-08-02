@@ -104,7 +104,8 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &App, area: Rect) {
         .channels
         .state
         .selected()
-        .map(|idx| &app.data.channels.items[idx].messages[..])
+        .and_then(|idx| app.data.channels.items.get(idx))
+        .map(|channel| &channel.messages[..])
         .unwrap_or(&[]);
 
     let max_username_width = messages

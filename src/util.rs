@@ -25,7 +25,13 @@ impl<T> StatefulList<T> {
                     i + 1
                 }
             }
-            None => 0,
+            None => {
+                if !self.items.is_empty() {
+                    0
+                } else {
+                    return; // nothing to select
+                }
+            }
         };
         self.state.select(Some(i));
     }
@@ -39,7 +45,13 @@ impl<T> StatefulList<T> {
                     i - 1
                 }
             }
-            None => 0,
+            None => {
+                if !self.items.is_empty() {
+                    0
+                } else {
+                    return; // nothing to select
+                }
+            }
         };
         self.state.select(Some(i));
     }

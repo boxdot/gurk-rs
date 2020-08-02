@@ -149,7 +149,7 @@ impl App {
                 data
             }
         };
-        if data.channels.state.selected().is_none() {
+        if data.channels.state.selected().is_none() && !data.channels.items.is_empty() {
             data.channels.state.select(Some(0));
             data.save(&config.data_path)?;
         }
