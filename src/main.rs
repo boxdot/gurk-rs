@@ -1,3 +1,5 @@
+//! Signal Messenger client for terminal
+
 mod app;
 mod config;
 mod signal;
