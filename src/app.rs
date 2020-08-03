@@ -130,7 +130,8 @@ pub enum Event<I> {
 
 impl App {
     pub fn try_new(verbose: bool) -> anyhow::Result<Self> {
-        let config_path = config::installed_config().expect("missing default location for config");
+        let config_path = config::installed_config()
+            .context("config file not found at one of the default locations")?;
         let config = config::load_from(&config_path)
             .with_context(|| format!("failed to read config from: {}", config_path.display()))?;
 
@@ -140,7 +141,15 @@ impl App {
             None
         };
 
-        let mut data = match AppData::load(&config.data_path) {
+        let mut load_data_path = config.data_path.clone();
+        if !load_data_path.exists() {
+            // try also to load from legacy data path
+            if let Some(fallback_data_path) = config::fallback_data_path() {
+                load_data_path = fallback_data_path;
+            }
+        }
+
+        let mut data = match AppData::load(&load_data_path) {
             Ok(data) => data,
             Err(_) => {
                 let client = signal::SignalClient::from_config(config.clone());

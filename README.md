@@ -12,12 +12,22 @@ You need to download and install [`signal-cli`], such that it is found in your `
 1. Download and install `signal-cli`
 2. Follow the instructions at https://github.com/AsamK/signal-cli#usage to register a new client.
 3. Install gurk with `cargo install gurk`
-4. Drop the config file in your `$HOME` folder. For more config options, see [`src/config.rs`].
+4. Drop a config file with the following context
     ```
     [user]
     name = "Your user name"
     phone_number = "Your phone number used in Signal"
     ```
+
+  in one of the following locations:
+
+1. `$XDG_CONFIG_HOME/gurk/gurk.toml`
+2. `$XDG_CONFIG_HOME/gurk.yml`
+3. `$HOME/.config/gurk/gurk.toml`
+4. `$HOME/.gurk.toml`
+
+  For more config options, see [`src/config.rs`].
+
 5. Run `gurk`
 
 At the first run, `gurk` will sync groups and contacts.
@@ -37,7 +47,7 @@ At the first run, `gurk` will sync groups and contacts.
 * Add support for blocked contacts/groups.
 
 The communication with the Signal backend is implemented via [`signal-cli`]. It provides some
-funtionality like lookup of group/contact name only over the dbus interface. Therefore, `gurk` only
+functionality like lookup of group/contact name only over the dbus interface. Therefore, `gurk` only
 works on Linux. We should evaluate if it is possible to switch to the [`libsignal-service-rs`]
 crate.
 
