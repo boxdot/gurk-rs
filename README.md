@@ -10,7 +10,9 @@
 You need to download and install [`signal-cli`], such that it is found in your `PATH`.
 
 1. Download and install `signal-cli`
-2. Follow the instructions at https://github.com/AsamK/signal-cli#usage to register a new client.
+2. Follow the instructions at
+   https://github.com/AsamK/signal-cli/wiki/Linking-other-devices-(Provisioning) to link
+   `signal-cli` to your phone/device.
 3. Install gurk with `cargo install gurk`
 4. Drop the config file in your `$HOME` folder. For more config options, see [`src/config.rs`].
     ```
