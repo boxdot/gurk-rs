@@ -15,7 +15,7 @@ use std::path::PathBuf;
 
 pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     let chunks = Layout::default()
-        .constraints([Constraint::Ratio(1, 4), Constraint::Ratio(3, 4)])
+        .constraints([Constraint::Ratio(1, 4), Constraint::Ratio(3, 4)].as_ref())
         .direction(Direction::Horizontal)
         .split(f.size());
 
@@ -78,10 +78,13 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     };
 
     let chunks = Layout::default()
-        .constraints([
-            Constraint::Min(0),
-            Constraint::Length(num_input_lines as u16 + 2 + extra_cursor_line),
-        ])
+        .constraints(
+            [
+                Constraint::Min(0),
+                Constraint::Length(num_input_lines as u16 + 2 + extra_cursor_line),
+            ]
+            .as_ref(),
+        )
         .direction(Direction::Vertical)
         .split(area);
 
