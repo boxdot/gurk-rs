@@ -1,4 +1,5 @@
 use serde::Deserialize;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -42,11 +43,41 @@ pub fn load_from(path: impl AsRef<Path>) -> anyhow::Result<Config> {
     Ok(config)
 }
 
+/// Get the location of the first found default config file paths
+/// according to the following order:
+///
+/// 1. $XDG_CONFIG_HOME/gurk/gurk.toml
+/// 2. $XDG_CONFIG_HOME/gurk.yml
+/// 3. $HOME/.config/gurk/gurk.toml
+/// 4. $HOME/.gurk.toml
 pub fn installed_config() -> Option<PathBuf> {
-    let config_dir = dirs::config_dir()?.join("gurk");
-    fs::create_dir_all(&config_dir)
-        .unwrap_or_else(|_| panic!("{:?} did not exist and could not be created", &config_dir));
-    Some(config_dir.join("gurk.toml"))
+    // case 1
+    let config_dir = dirs::config_dir()?;
+    let config_file = config_dir.join("gurk/gurk.toml");
+    if config_file.exists() {
+        return Some(config_file);
+    }
+
+    // case 2
+    let config_file = config_dir.join("gurk.toml");
+    if config_file.exists() {
+        return Some(config_file);
+    }
+
+    // case 3
+    let home_dir = dirs::home_dir()?;
+    let config_file = home_dir.join(".config/gurk/gurk.toml");
+    if config_file.exists() {
+        return Some(config_file);
+    }
+
+    // case 4
+    let config_file = home_dir.join(".gurk.toml");
+    if config_file.exists() {
+        return Some(config_file);
+    }
+
+    None
 }
 
 fn default_data_path() -> PathBuf {
@@ -57,4 +88,9 @@ fn default_data_path() -> PathBuf {
     fs::create_dir_all(&data_dir)
         .unwrap_or_else(|_| panic!("{:?} did not exist and could not be created", &data_dir));
     data_dir.join("gurk.data.json")
+}
+
+/// Fallback to legacy data path location
+pub fn fallback_data_path() -> Option<PathBuf> {
+    dirs::home_dir().map(|p| p.join(".gurk.data.json"))
 }
