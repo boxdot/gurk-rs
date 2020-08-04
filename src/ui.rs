@@ -66,7 +66,7 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
                     lines.push(String::new());
                 }
                 match c {
-                    '\r' => lines.push(String::new()),
+                    '\n' => lines.push(String::new()),
                     _ => lines.last_mut().unwrap().push(c),
                 }
                 lines

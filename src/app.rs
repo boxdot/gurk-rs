@@ -176,6 +176,7 @@ impl App {
 
     pub fn on_key(&mut self, key: KeyCode) {
         match key {
+            KeyCode::Char('\r') => self.put_char('\n'),
             KeyCode::Char(c) => self.put_char(c),
             KeyCode::Enter if !self.data.input.is_empty() => {
                 if let Some(idx) = self.data.channels.state.selected() {
@@ -183,19 +184,8 @@ impl App {
                 }
             }
             KeyCode::Backspace => {
-                if self.data.input_cursor > 0
-                    && self.data.input_cursor < self.data.input.width() + 1
-                {
-                    self.data.input_cursor = self.data.input_cursor.saturating_sub(1);
-                    let idx = self
-                        .data
-                        .input
-                        .chars()
-                        .take(self.data.input_cursor)
-                        .map(|c| c.len_utf8())
-                        .sum();
-                    self.data.input.remove(idx);
-                }
+                self.data.input_cursor = self.data.input_cursor.saturating_sub(1);
+                self.data.input.pop();
             }
             _ => {}
         }
