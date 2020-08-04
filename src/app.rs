@@ -184,8 +184,11 @@ impl App {
                 }
             }
             KeyCode::Backspace => {
-                self.data.input_cursor = self.data.input_cursor.saturating_sub(1);
-                self.data.input.pop();
+                if self.data.input_cursor > 0 {
+                    let idx = self.data.input_cursor - 1;
+                    self.data.input.remove(idx);
+                    self.data.input_cursor = idx;
+                }
             }
             _ => {}
         }
@@ -244,7 +247,7 @@ impl App {
     }
 
     pub fn on_right(&mut self) {
-        if self.data.input_cursor < self.data.input.width() {
+        if self.data.input_cursor < self.data.input.len() {
             self.data.input_cursor += 1;
         }
     }
