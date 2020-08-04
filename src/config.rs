@@ -51,7 +51,7 @@ pub fn load_from(path: impl AsRef<Path>) -> anyhow::Result<Config> {
 /// 3. $HOME/.config/gurk/gurk.toml
 /// 4. $HOME/.gurk.toml
 pub fn installed_config() -> Option<PathBuf> {
-    // case 1
+    // case 1, and 3 as fallback (note: case 2 is not possible if 1 is not possible)
     let config_dir = dirs::config_dir()?;
     let config_file = config_dir.join("gurk/gurk.toml");
     if config_file.exists() {
@@ -64,14 +64,8 @@ pub fn installed_config() -> Option<PathBuf> {
         return Some(config_file);
     }
 
-    // case 3
-    let home_dir = dirs::home_dir()?;
-    let config_file = home_dir.join(".config/gurk/gurk.toml");
-    if config_file.exists() {
-        return Some(config_file);
-    }
-
     // case 4
+    let home_dir = dirs::home_dir()?;
     let config_file = home_dir.join(".gurk.toml");
     if config_file.exists() {
         return Some(config_file);
