@@ -37,7 +37,24 @@ pub struct Db;
 
 impl Db {
     fn load_channels(db: &sled::Db) -> anyhow::Result<Vec<Channel>> {
-        unimplemented!()
+        let channels = db.open_tree(b"channels")?;
+
+        let mut out = vec![];
+
+        for name_value_res in &channels {
+            let (_id, bytes) = name_value_res?;
+            let content = str::from_utf8(&bytes)?;
+            let channel = Channel {
+                id: "".to_owned(),
+                name: content.to_owned(),
+                is_group: false,
+                messages: Vec::new(),
+                unread_messages: 0,
+            };
+            out.push(channel);
+        }
+
+        Ok(out)
     }
 
     fn load_messages(db: &sled::Db) -> anyhow::Result<Vec<Message>> {
@@ -91,7 +108,7 @@ impl Storage for Db {
     fn save(data: &AppData, path: impl AsRef<Path>) -> anyhow::Result<()> {
         let db = sled::open(path)?;
         let messages = db.open_tree(b"messages")?;
-        let channels = db.open_tree(b"messages")?;
+        let channels = db.open_tree(b"channels")?;
 
         for (ch_count, channel) in data.channels.items.iter().enumerate() {
             Self::save_channel(&channels, ch_count as u64, channel)?;
