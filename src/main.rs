@@ -1,7 +1,7 @@
-mod storage;
 mod app;
 mod config;
 mod signal;
+mod storage;
 mod ui;
 mod util;
 

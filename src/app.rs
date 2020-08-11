@@ -35,7 +35,6 @@ pub struct AppData {
 }
 
 impl AppData {
-
     fn init_from_signal(client: &signal::SignalClient) -> anyhow::Result<Self> {
         let groups = client
             .get_groups()
