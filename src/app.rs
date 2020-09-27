@@ -5,6 +5,7 @@ use crate::util::StatefulList;
 use anyhow::Context;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use crossterm::event::KeyCode;
+use notify_rust::Notification;
 use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthStr;
 
@@ -357,6 +358,12 @@ impl App {
         } else {
             self.reset_unread_messages();
         }
+
+        Notification::new()
+            .summary("Gurk")
+            .body("New Signal message received")
+            .show()
+            .expect("Was not able to send message notification.");
 
         self.bubble_up_channel(channel_idx);
         self.save().unwrap();
