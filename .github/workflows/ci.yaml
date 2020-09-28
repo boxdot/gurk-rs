@@ -12,6 +12,10 @@ jobs:
     env:
       RUSTFLAGS: -D warnings
     steps:
+      - name: Install build dependencies for libdbus-sys
+        run: |
+          sudo apt update
+          sudo apt install -y libdbus-1-dev pkg-config
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
@@ -43,6 +47,10 @@ jobs:
     name: clippy
     runs-on: ubuntu-latest
     steps:
+      - name: Install build dependencies for libdbus-sys
+        run: |
+          sudo apt update
+          sudo apt install -y libdbus-1-dev pkg-config
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
