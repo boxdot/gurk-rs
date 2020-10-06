@@ -2,7 +2,7 @@ use crate::signal;
 use crate::{app, App};
 
 use anyhow::Context;
-use chrono::Timelike;
+use chrono::{Datelike, Timelike};
 use tui::backend::Backend;
 use tui::layout::{Constraint, Corner, Direction, Layout, Rect};
 use tui::style::{Color, Style};
@@ -101,15 +101,8 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     );
 }
 
-fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &App, area: Rect) {
-    let messages = app
-        .data
-        .channels
-        .state
-        .selected()
-        .and_then(|idx| app.data.channels.items.get(idx))
-        .map(|channel| &channel.messages[..])
-        .unwrap_or(&[]);
+fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
+    let messages: &Vec<app::Message> = &app.data.messages.items;
 
     let max_username_width = messages
         .iter()
@@ -118,55 +111,54 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &App, area: Rect) {
         .unwrap_or(0);
 
     let width = area.width - 2; // without borders
-    let max_lines = area.height;
 
     let time_style = Style::default().fg(Color::Yellow);
-    let messages = messages
-        .iter()
-        .rev()
-        // we can't show more messages atm and don't have messages navigation
-        .take(max_lines as usize)
-        .map(|msg| {
-            let arrived_at = msg.arrived_at.with_timezone(&chrono::Local);
+    let messages = messages.iter().rev().map(|msg| {
+        let arrived_at = msg.arrived_at.with_timezone(&chrono::Local);
 
-            let time = Span::styled(
-                format!("{:02}:{:02} ", arrived_at.hour(), arrived_at.minute()),
-                time_style,
-            );
-            let from = displayed_name(&msg.from, app.config.first_name_only);
-            let from = Span::styled(
-                textwrap::indent(&from, &" ".repeat(max_username_width - from.width())),
-                Style::default().fg(user_color(&msg.from)),
-            );
-            let delimeter = Span::from(": ");
+        let time = Span::styled(
+            format!(
+                "{:02} {:02}:{:02} ",
+                arrived_at.weekday(),
+                arrived_at.hour(),
+                arrived_at.minute()
+            ),
+            time_style,
+        );
+        let from = displayed_name(&msg.from, app.config.first_name_only);
+        let from = Span::styled(
+            textwrap::indent(&from, &" ".repeat(max_username_width - from.width())),
+            Style::default().fg(user_color(&msg.from)),
+        );
+        let delimeter = Span::from(": ");
 
-            let displayed_message = displayed_message(&msg);
+        let displayed_message = displayed_message(&msg);
 
-            let prefix_width = (time.width() + from.width() + delimeter.width()) as u16;
-            let indent = " ".repeat(prefix_width.into());
-            let lines = textwrap::wrap_iter(
-                displayed_message.as_str(),
-                width.saturating_sub(prefix_width).into(),
-            );
+        let prefix_width = (time.width() + from.width() + delimeter.width()) as u16;
+        let indent = " ".repeat(prefix_width.into());
+        let lines = textwrap::wrap_iter(
+            displayed_message.as_str(),
+            width.saturating_sub(prefix_width).into(),
+        );
 
-            let spans: Vec<Spans> = lines
-                .enumerate()
-                .map(|(idx, line)| {
-                    let res = if idx == 0 {
-                        vec![
-                            time.clone(),
-                            from.clone(),
-                            delimeter.clone(),
-                            Span::from(line.to_string()),
-                        ]
-                    } else {
-                        vec![Span::from(format!("{}{}", indent, line))]
-                    };
-                    Spans::from(res)
-                })
-                .collect();
-            spans
-        });
+        let spans: Vec<Spans> = lines
+            .enumerate()
+            .map(|(idx, line)| {
+                let res = if idx == 0 {
+                    vec![
+                        time.clone(),
+                        from.clone(),
+                        delimeter.clone(),
+                        Span::from(line.to_string()),
+                    ]
+                } else {
+                    vec![Span::from(format!("{}{}", indent, line))]
+                };
+                Spans::from(res)
+            })
+            .collect();
+        spans
+    });
 
     let mut items: Vec<_> = messages.map(|s| ListItem::new(Text::from(s))).collect();
 
@@ -185,8 +177,9 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &App, area: Rect) {
     let list = List::new(items)
         .block(Block::default().title("Messages").borders(Borders::ALL))
         .style(Style::default().fg(Color::White))
+        .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray))
         .start_corner(Corner::BottomLeft);
-    f.render_widget(list, area);
+    f.render_stateful_widget(list, area, &mut app.data.messages.state);
 }
 
 // Randomly but deterministically choose a color for a username

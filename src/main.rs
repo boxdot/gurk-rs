@@ -34,6 +34,7 @@ async fn main() -> anyhow::Result<()> {
     let args = Args::from_args();
 
     let mut app = App::try_new(args.verbose)?;
+    app.load_messages();
 
     enable_raw_mode()?;
     let _raw_mode_guard = scopeguard::guard((), |_| {
@@ -78,6 +79,8 @@ async fn main() -> anyhow::Result<()> {
                 KeyCode::Up => app.on_up(),
                 KeyCode::Right => app.on_right(),
                 KeyCode::Down => app.on_down(),
+                KeyCode::PageUp => app.on_pgup(),
+                KeyCode::PageDown => app.on_pgdn(),
                 code => app.on_key(code),
             },
             Some(Event::Message { payload, message }) => {
