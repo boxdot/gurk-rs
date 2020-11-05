@@ -1,6 +1,7 @@
 use crate::config::{self, Config};
 use crate::signal;
 use crate::util::StatefulList;
+use crate::jami::Jami;
 
 use anyhow::Context;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
@@ -18,6 +19,7 @@ pub struct App {
     pub log_file: Option<File>,
     pub signal_client: signal::SignalClient,
     pub data: AppData,
+    pub jami: Jami,
 }
 
 impl App {
@@ -48,38 +50,36 @@ impl AppData {
         Ok(data)
     }
 
-    fn init_from_signal(client: &signal::SignalClient) -> anyhow::Result<Self> {
-        let groups = client
-            .get_groups()
-            .context("failed to fetch groups from signal")?;
-        let group_channels = groups.into_iter().map(|group_info| {
-            let name = group_info
-                .name
-                .as_ref()
-                .unwrap_or_else(|| &group_info.group_id)
-                .to_string();
-            Channel {
-                id: group_info.group_id,
-                name,
-                is_group: true,
-                messages: Vec::new(),
-                unread_messages: 0,
-            }
+    fn init_from_jami() -> anyhow::Result<Self> {
+        let mut channels = Vec::new();
+        let mut messages = Vec::new();
+        messages.push(Message {
+            from: String::new(),
+            message: Some(String::from("TODO")),
+            attachments: Vec::new(),
+            arrived_at: Utc::now(),
         });
 
-        let contacts = client
-            .get_contacts()
-            .context("failed to fetch contact from signal")?;
-        let contact_channels = contacts.into_iter().map(|contact_info| Channel {
-            id: contact_info.phone_number,
-            name: contact_info.name,
+        channels.push(Channel {
+            id: String::from("Welcome"),
+            name: String::from("Welcome"),
             is_group: false,
-            messages: Vec::new(),
+            messages,
             unread_messages: 0,
         });
+        
+        for account in Jami::get_account_list() {
+            for contact in Jami::get_contacts(&account.id) {
+                channels.push(Channel {
+                    id: contact["id"].clone(),
+                    name: contact["id"].clone(),
+                    is_group: false,
+                    messages: Vec::new(),
+                    unread_messages: 0,
+                });
+            }
+        }
 
-        let mut channels: Vec<_> = group_channels.chain(contact_channels).collect();
-        channels.sort_unstable_by(|a, b| a.name.cmp(&b.name));
 
         let mut channels = StatefulList::with_items(channels);
         if !channels.items.is_empty() {
@@ -149,21 +149,15 @@ impl App {
             }
         }
 
-        let mut data = match AppData::load(&load_data_path) {
-            Ok(data) => data,
-            Err(_) => {
-                let client = signal::SignalClient::from_config(config.clone());
-                let data = AppData::init_from_signal(&client)?;
-                data.save(&config.data_path)?;
-                data
-            }
-        };
+        let client = signal::SignalClient::from_config(config.clone());        
+        let mut data = AppData::init_from_jami()?;
         if data.channels.state.selected().is_none() && !data.channels.items.is_empty() {
             data.channels.state.select(Some(0));
             data.save(&config.data_path)?;
         }
 
         let signal_client = signal::SignalClient::from_config(config.clone());
+        let jami = Jami::init().unwrap();
 
         Ok(Self {
             config,
@@ -171,6 +165,7 @@ impl App {
             should_quit: false,
             signal_client,
             log_file,
+            jami,
         })
     }
 

@@ -1,10 +1,12 @@
 //! Signal Messenger client for terminal
 
 mod app;
+mod account;
 mod config;
 mod signal;
 mod ui;
 mod util;
+mod jami;
 
 use app::{App, Event};
 
