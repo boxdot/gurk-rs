@@ -357,27 +357,6 @@ impl Jami {
     }
 
     /**
-     * Enable a Ring account
-     * @param self
-     */
-    /*pub fn enable_account(&self) {
-        let dbus_msg = Message::new_method_call(self.jami_dbus, self.configuration_path,
-                                                self.configuration_iface,
-                                                "sendRegister");
-        if !dbus_msg.is_ok() {
-            error!("sendRegister call fails. Please verify daemon's API.");
-            return;
-        }
-        let conn = Connection::get_private(BusType::Session);
-        if !conn.is_ok() {
-            return;
-        }
-        let dbus = conn.unwrap();
-        let _ = dbus.send_with_reply_and_block(
-            dbus_msg.unwrap().append2(self.account.id.clone(), true), 2000);
-    }*/
-
-    /**
      * Update current RORI account by handling accountsChanged signals from daemon.
      * @param self
      * @param ci
@@ -460,37 +439,5 @@ impl Jami {
         // incomingTrustRequest return three arguments
         let (account_id, from, _, _) = msg.get4::<&str, &str, Dict<&str, &str, _>, u64>();
         Some((account_id.unwrap().to_string(), from.unwrap().to_string()))
-    }
-
-
-    /**
-     * Send a new text message to rori
-     * @param self
-     * @param body text to send
-     * @return the interaction id if success. TODO, watch message status (if received)
-     */
-    fn send_interaction_to_rori(&self, payloads: HashMap<&str, &str>) -> u64 {
-        0
-        /*let payloads = Dict::new(payloads.iter());
-
-        let dbus_msg = Message::new_method_call(self.jami_dbus, self.configuration_path, self.configuration_iface,
-                                                "sendTextMessage");
-        if !dbus_msg.is_ok() {
-            error!("sendTextMessage fails. Please verify daemon's API.");
-            return 0;
-        }
-        let conn = Connection::get_private(BusType::Session);
-        if !conn.is_ok() {
-            return 0;
-        }
-        let dbus = conn.unwrap();
-        let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append3(&*self.account.id,
-            self.hash.clone(), payloads), 2000).unwrap();
-        // sendTextMessage returns one argument, which is a u64.
-        let interaction_id: u64  = match response.get1() {
-            Some(interaction_id) => interaction_id,
-            None => 0
-        };
-        interaction_id*/
     }
 }

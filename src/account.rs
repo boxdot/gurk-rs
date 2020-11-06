@@ -26,11 +26,12 @@
  **/
 
 use std::fmt;
+use serde::{Serialize, Deserialize};
 
 /**
  * Represent a Jami account, just here to store informations.
  **/
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Account {
     pub id: String,
     pub hash: String,
@@ -53,5 +54,12 @@ impl Account {
             alias: String::new(),
             enabled: false,
         }
+    }
+
+    pub fn get_display_name(&self) -> String {
+        if !self.alias.is_empty() {
+            return self.alias.clone();
+        }
+        return self.hash.clone();
     }
 }

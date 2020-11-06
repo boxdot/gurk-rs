@@ -1,3 +1,4 @@
+use crate::account::Account;
 use crate::config::{self, Config};
 use crate::signal;
 use crate::util::StatefulList;
@@ -29,15 +30,9 @@ impl App {
 }
 
 #[derive(Serialize, Deserialize)]
-pub enum Page {
-    Accounts,
-    Conversations,
-}
-
-#[derive(Serialize, Deserialize)]
 pub struct AppData {
     pub channels: StatefulList<Channel>,
-    pub page: Page,
+    pub account: Account,
     pub input: String,
     #[serde(skip)]
     pub input_cursor: usize,
@@ -83,32 +78,28 @@ impl AppData {
             unread_messages: 0,
         });
         
-        for account in Jami::get_account_list() {
+        let accounts = Jami::get_account_list();
+        let account = match accounts.len() {
+            0 => Account::null(),
+            _ => accounts[0].clone(),
+        };
+        for conversation in Jami::get_conversations(&account.id) {
             channels.push(Channel {
-                id: account.id.clone(),
-                name: account.alias,
+                id: conversation.clone(),
+                name: conversation,
+                is_group: true,
+                messages: Vec::new(),
+                unread_messages: 0,
+            });
+        }
+        for contact in Jami::get_contacts(&account.id) {
+            channels.push(Channel {
+                id: contact["id"].clone(),
+                name: contact["id"].clone(),
                 is_group: false,
                 messages: Vec::new(),
                 unread_messages: 0,
             });
-            for conversation in Jami::get_conversations(&account.id) {
-                channels.push(Channel {
-                    id: conversation.clone(),
-                    name: conversation,
-                    is_group: true,
-                    messages: Vec::new(),
-                    unread_messages: 0,
-                });
-            }
-            /*for contact in Jami::get_contacts(&account.id) {
-                channels.push(Channel {
-                    id: contact["id"].clone(),
-                    name: contact["id"].clone(),
-                    is_group: false,
-                    messages: Vec::new(),
-                    unread_messages: 0,
-                });
-            }*/
         }
 
 
@@ -121,7 +112,7 @@ impl AppData {
             channels,
             input: String::new(),
             input_cursor: 0,
-            page: Page::Accounts,
+            account,
         })
     }
 }
@@ -242,7 +233,7 @@ impl App {
         self.data.input_cursor = 0;
 
         channel.messages.push(Message {
-            from: self.config.user.name.clone(),
+            from: self.data.account.get_display_name(),
             message: Some(message.clone()),
             attachments: Vec::new(),
             arrived_at: Utc::now(),
@@ -258,6 +249,16 @@ impl App {
                     attachments: Vec::new(),
                     arrived_at: Utc::now(),
                 });
+            }
+            if message == "/list" {
+                for account in Jami::get_account_list() {
+                    channel.messages.push(Message {
+                        from: String::new(),
+                        message: Some(String::from(format!("{}", account))),
+                        attachments: Vec::new(),
+                        arrived_at: Utc::now(),
+                    });
+                }
             } else if message == "/help" {
                 channel.messages.push(Message {
                     from: String::new(),
@@ -271,17 +272,16 @@ impl App {
                     attachments: Vec::new(),
                     arrived_at: Utc::now(),
                 });
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("/list: list accounts")),
+                    attachments: Vec::new(),
+                    arrived_at: Utc::now(),
+                });
             }
         } else {
             // TODO simplify
-            let mut account_id = String::new();
-            for account in Jami::get_account_list() {
-                for conversation in Jami::get_conversations(&account.id) {
-                    if conversation == channel.id {
-                        account_id = account.id.clone();
-                    }
-                }
-            }
+            let account_id = &self.data.account.id;
             if message == "/leave" {
                 Jami::rm_conversation(&account_id, &channel.id);
                 channel.messages.push(Message {
