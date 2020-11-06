@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthStr;
 
 use std::fs::File;
-use std::io::Write;
+use std::io::{self, BufRead, Write};
 use std::path::Path;
 
 pub struct App {
@@ -53,12 +53,19 @@ impl AppData {
     fn init_from_jami() -> anyhow::Result<Self> {
         let mut channels = Vec::new();
         let mut messages = Vec::new();
-        messages.push(Message {
-            from: String::new(),
-            message: Some(String::from("TODO")),
-            attachments: Vec::new(),
-            arrived_at: Utc::now(),
-        });
+
+
+        let file = File::open("rsc/welcome-art");
+        if file.is_ok() {
+            for line in io::BufReader::new(file.unwrap()).lines() {
+                messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from(line.unwrap())),
+                    attachments: Vec::new(),
+                    arrived_at: Utc::now(),
+                });
+            }
+        }
 
         channels.push(Channel {
             id: String::from("Welcome"),
