@@ -185,6 +185,127 @@ impl Jami {
         contacts_list
     }
 
+    /**
+     * Start conversation
+     * @param id        Id of the account
+     */
+    pub fn start_conversation(id: &String) {
+        let mut account_list: Vec<Account> = Vec::new();
+        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
+                                                "cx.ring.Ring.ConfigurationManager",
+                                                "startConversation");
+        if !dbus_msg.is_ok() {
+            error!("startConversation fails. Please verify daemon's API.");
+            return;
+        }
+        let conn = Connection::get_private(BusType::Session);
+        if !conn.is_ok() {
+            return;
+        }
+        let dbus = conn.unwrap();
+        let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append1(&*id), 2000).unwrap();
+    }
+
+    /**
+     * Get current conversations for account
+     * @param id        Id of the account
+     * @return current conversations
+     */
+    pub fn get_conversations(id: &String) -> Vec<String> {
+        let mut conversations: Vec<String> = Vec::new();
+        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
+                                                "cx.ring.Ring.ConfigurationManager",
+                                                "getConversations");
+        if !dbus_msg.is_ok() {
+            error!("getAccountList fails. Please verify daemon's API.");
+            return conversations;
+        }
+        let conn = Connection::get_private(BusType::Session);
+        if !conn.is_ok() {
+            return conversations;
+        }
+        let dbus = conn.unwrap();
+        let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append1(&*id), 2000).unwrap();
+        // getAccountList returns one argument, which is an array of strings.
+        let conv_resp: Array<&str, _> = match response.get1() {
+            Some(conversations) => conversations,
+            None => return conversations
+        };
+        for conv in conv_resp {
+            conversations.push(String::from(conv));
+        }
+        conversations
+    }
+
+    /**
+     * Remove a conversation for an account
+     * @param id        Id of the account
+     * @param conv_id   Id of the conversation
+     * @return if the conversation is removed
+     */
+    pub fn rm_conversation(id: &String, conv_id: &String) -> bool {
+        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
+                                                "cx.ring.Ring.ConfigurationManager",
+                                                "removeConversation");
+        if !dbus_msg.is_ok() {
+            error!("getAccountList fails. Please verify daemon's API.");
+            return false;
+        }
+        let conn = Connection::get_private(BusType::Session);
+        if !conn.is_ok() {
+            return false;
+        }
+        let dbus = conn.unwrap();
+        let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append2(&*id, &*conv_id), 2000).unwrap();
+        true
+    }
+
+    /**
+     * Remove a conversation for an account
+     * @param id        Id of the account
+     * @param conv_id   Id of the conversation
+     * @param hash      Id of the member to invite
+     */
+    pub fn add_conversation_member(id: &String, conv_id: &String, hash: &String) {
+        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
+                                                "cx.ring.Ring.ConfigurationManager",
+                                                "addConversationMember");
+        if !dbus_msg.is_ok() {
+            error!("getAccountList fails. Please verify daemon's API.");
+            return;
+        }
+        let conn = Connection::get_private(BusType::Session);
+        if !conn.is_ok() {
+            return;
+        }
+        let dbus = conn.unwrap();
+        let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append3(&*id, &*conv_id, &*hash), 2000).unwrap();
+    }
+
+    /**
+     * Remove a conversation for an account
+     * @param id        Id of the account
+     * @param conv_id   Id of the conversation
+     * @param hash      Id of the member to invite
+     * @param hash      Id of the member to invite
+     */
+    pub fn send_conversation_message(id: &String, conv_id: &String, message: &String, parent: &String) -> u64 {
+        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
+                                                "cx.ring.Ring.ConfigurationManager",
+                                                "sendMessage");
+        if !dbus_msg.is_ok() {
+            error!("getAccountList fails. Please verify daemon's API.");
+            return 0;
+        }
+        let conn = Connection::get_private(BusType::Session);
+        if !conn.is_ok() {
+            return 0;
+        }
+        let dbus = conn.unwrap();
+        let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append3(&*id, &*conv_id, &*message).append1(&*parent), 2000).unwrap();
+        response.get1().unwrap_or(0) as u64
+    }
+
 // Private stuff
     /**
      * Build a new account with an id from the daemon
