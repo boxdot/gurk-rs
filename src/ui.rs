@@ -1,4 +1,3 @@
-use crate::signal;
 use crate::{app, App};
 
 use anyhow::Context;
@@ -113,7 +112,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &App, area: Rect) {
 
     let max_username_width = messages
         .iter()
-        .map(|msg| displayed_name(&msg.from, app.config.first_name_only).width())
+        .map(|msg| displayed_name(&msg.from, true).width())
         .max()
         .unwrap_or(0);
 
@@ -133,19 +132,18 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &App, area: Rect) {
                 format!("{:02}:{:02} ", arrived_at.hour(), arrived_at.minute()),
                 time_style,
             );
-            let from = displayed_name(&msg.from, app.config.first_name_only);
+            let from = displayed_name(&msg.from, true);
             let from = Span::styled(
                 textwrap::indent(&from, &" ".repeat(max_username_width - from.width())),
                 Style::default().fg(user_color(&msg.from)),
             );
             let delimeter = Span::from(": ");
 
-            let displayed_message = displayed_message(&msg);
-
             let prefix_width = (time.width() + from.width() + delimeter.width()) as u16;
             let indent = " ".repeat(prefix_width.into());
+            let message = msg.message.clone().unwrap_or(String::new());
             let lines = textwrap::wrap_iter(
-                displayed_message.as_str(),
+                message.as_str(),
                 width.saturating_sub(prefix_width).into(),
             );
 
@@ -208,61 +206,6 @@ fn displayed_name(name: &str, first_name_only: bool) -> &str {
     } else {
         &name
     }
-}
-
-fn displayed_message(msg: &app::Message) -> String {
-    let symlinks = symlink_attachments(&msg.attachments).unwrap();
-    let displayed_attachments = symlinks
-        .into_iter()
-        .map(|path| format!("[file://{}]", path.display()));
-    let message = msg.message.as_deref().unwrap_or_default();
-    if !message.is_empty() {
-        itertools::join(
-            std::iter::once(message.to_string()).chain(displayed_attachments),
-            "\n",
-        )
-    } else {
-        itertools::join(displayed_attachments, "\n")
-    }
-}
-
-/// Creates symlinks to attachments in default tmp dir with short random file names.
-fn symlink_attachments(attachments: &[signal::Attachment]) -> anyhow::Result<Vec<PathBuf>> {
-    let signal_cli_data_dir = std::env::var("XDG_DATA_HOME")
-        .map(|s| PathBuf::from(s).join("signal-cli"))
-        .or_else(|_| {
-            std::env::var("HOME").map(|s| PathBuf::from(s).join(".local/share/signal-cli"))
-        })
-        .context("could not find signal-cli data path")?;
-
-    let tmp_attachments_dir = std::env::temp_dir().join("gurk");
-    std::fs::create_dir_all(&tmp_attachments_dir)
-        .with_context(|| format!("failed to create {}", tmp_attachments_dir.display()))?;
-
-    let tmp_attachments_symlinks: anyhow::Result<Vec<_>> = attachments
-        .iter()
-        .map(|attachment| {
-            let source = signal_cli_data_dir.join("attachments").join(&attachment.id);
-
-            let mut filename = id_to_short_random_filename(&attachment.id);
-            if let Some(ext) = attachment.filename.extension() {
-                filename += ".";
-                filename += &ext.to_string_lossy();
-            };
-            let dest = tmp_attachments_dir.join(filename);
-
-            let _ = std::fs::remove_file(&dest);
-            std::os::unix::fs::symlink(&source, &dest).with_context(|| {
-                format!(
-                    "failed to create symlink: {} -> {}",
-                    source.display(),
-                    dest.display(),
-                )
-            })?;
-            Ok(dest)
-        })
-        .collect();
-    Ok(tmp_attachments_symlinks?)
 }
 
 fn xorshift32(mut x: u32) -> u32 {

@@ -407,7 +407,7 @@ impl Jami {
                                 if key == "text/plain" {
                                     datatype = key.to_string();
                                     body = value.to_string();
-                                    events.push(Event::Message { payload: body, message: None });
+                                    events.push(Event::Message { payload: body });
                                 } else {
                                     metadatas.insert(
                                         key.to_string(),

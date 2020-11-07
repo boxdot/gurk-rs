@@ -1,6 +1,4 @@
 use crate::account::Account;
-use crate::config::{self, Config};
-use crate::signal;
 use crate::util::StatefulList;
 use crate::jami::Jami;
 
@@ -15,18 +13,10 @@ use std::io::{self, BufRead, Write};
 use std::path::Path;
 
 pub struct App {
-    pub config: Config,
     pub should_quit: bool,
     pub log_file: Option<File>,
-    pub signal_client: signal::SignalClient,
     pub data: AppData,
     pub jami: Jami,
-}
-
-impl App {
-    fn save(&self) -> anyhow::Result<()> {
-        self.data.save(&self.config.data_path)
-    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -64,7 +54,6 @@ impl AppData {
                 messages.push(Message {
                     from: String::new(),
                     message: Some(String::from(line.unwrap())),
-                    attachments: Vec::new(),
                     arrived_at: Utc::now(),
                 });
             }
@@ -133,8 +122,6 @@ pub struct Message {
     pub from: String,
     #[serde(alias = "text")] // remove
     pub message: Option<String>,
-    #[serde(default)]
-    pub attachments: Vec<signal::Attachment>,
     pub arrived_at: DateTime<Utc>,
 }
 
@@ -143,54 +130,34 @@ pub struct Message {
 pub enum Event<I> {
     Input(I),
     Message {
-        /// used for debugging
         payload: String,
-        /// some message if deserialized successfully
-        message: Option<signal::Message>,
     },
     Resize,
 }
 
 impl App {
-    pub fn try_new(verbose: bool) -> anyhow::Result<Self> {
-        let config_path = config::installed_config()
-            .context("config file not found at one of the default locations")?;
-        let config = config::load_from(&config_path)
-            .with_context(|| format!("failed to read config from: {}", config_path.display()))?;
 
+    pub fn try_new(verbose: bool) -> anyhow::Result<Self> {
         let log_file = if verbose {
-            Some(File::create("gurk.log").unwrap())
+            Some(File::create("jami-cli.log").unwrap())
         } else {
             None
         };
-
-        let mut load_data_path = config.data_path.clone();
-        if !load_data_path.exists() {
-            // try also to load from legacy data path
-            if let Some(fallback_data_path) = config::fallback_data_path() {
-                load_data_path = fallback_data_path;
-            }
-        }
-
-        let client = signal::SignalClient::from_config(config.clone());        
         let mut data = AppData::init_from_jami()?;
         if data.channels.state.selected().is_none() && !data.channels.items.is_empty() {
             data.channels.state.select(Some(0));
-            data.save(&config.data_path)?;
         }
 
-        let signal_client = signal::SignalClient::from_config(config.clone());
         let jami = Jami::init().unwrap();
 
         Ok(Self {
-            config,
             data,
             should_quit: false,
-            signal_client,
             log_file,
             jami,
         })
     }
+
 
     pub fn on_key(&mut self, key: KeyCode) {
         match key {
@@ -240,7 +207,6 @@ impl App {
         channel.messages.push(Message {
             from: self.data.account.get_display_name(),
             message: Some(message.clone()),
-            attachments: Vec::new(),
             arrived_at: Utc::now(),
         });
 
@@ -251,7 +217,6 @@ impl App {
                 channel.messages.push(Message {
                     from: String::new(),
                     message: Some(String::from("TODO refresh view")),
-                    attachments: Vec::new(),
                     arrived_at: Utc::now(),
                 });
             }
@@ -260,7 +225,6 @@ impl App {
                     channel.messages.push(Message {
                         from: String::new(),
                         message: Some(String::from(format!("{}", account))),
-                        attachments: Vec::new(),
                         arrived_at: Utc::now(),
                     });
                 }
@@ -268,25 +232,21 @@ impl App {
                 channel.messages.push(Message {
                     from: String::new(),
                     message: Some(String::from("/help: Show this help")),
-                    attachments: Vec::new(),
                     arrived_at: Utc::now(),
                 });
                 channel.messages.push(Message {
                     from: String::new(),
                     message: Some(String::from("/new: start a new conversation")),
-                    attachments: Vec::new(),
                     arrived_at: Utc::now(),
                 });
                 channel.messages.push(Message {
                     from: String::new(),
                     message: Some(String::from("/list: list accounts")),
-                    attachments: Vec::new(),
                     arrived_at: Utc::now(),
                 });
                 channel.messages.push(Message {
                     from: String::new(),
                     message: Some(String::from("/exit: quit")),
-                    attachments: Vec::new(),
                     arrived_at: Utc::now(),
                 });
             }
@@ -298,7 +258,6 @@ impl App {
                 channel.messages.push(Message {
                     from: String::new(),
                     message: Some(String::from("TODO refresh view")),
-                    attachments: Vec::new(),
                     arrived_at: Utc::now(),
                 });
                 // TODO remove channel
@@ -308,32 +267,27 @@ impl App {
                 channel.messages.push(Message {
                     from: String::new(),
                     message: Some(format!("You invited {}", hash)),
-                    attachments: Vec::new(),
                     arrived_at: Utc::now(),
                 });
             } else if message == "/help" {
                 channel.messages.push(Message {
                     from: String::new(),
                     message: Some(String::from("/help: Show this help")),
-                    attachments: Vec::new(),
                     arrived_at: Utc::now(),
                 });
                 channel.messages.push(Message {
                     from: String::new(),
                     message: Some(String::from("/leave: Leave this conversation")),
-                    attachments: Vec::new(),
                     arrived_at: Utc::now(),
                 });
                 channel.messages.push(Message {
                     from: String::new(),
                     message: Some(String::from("/invite [hash|username]: Invite somebody to the conversation")),
-                    attachments: Vec::new(),
                     arrived_at: Utc::now(),
                 });
                 channel.messages.push(Message {
                     from: String::new(),
                     message: Some(String::from("/exit: quit")),
-                    attachments: Vec::new(),
                     arrived_at: Utc::now(),
                 });
             } else {
@@ -344,20 +298,15 @@ impl App {
 
         self.reset_unread_messages();
         self.bubble_up_channel(channel_idx);
-        self.save().unwrap();
     }
 
     pub fn on_up(&mut self) {
-        if self.reset_unread_messages() {
-            self.save().unwrap();
-        }
+        self.reset_unread_messages();
         self.data.channels.previous();
     }
 
     pub fn on_down(&mut self) {
-        if self.reset_unread_messages() {
-            self.save().unwrap();
-        }
+        self.reset_unread_messages();
         self.data.channels.next();
     }
 
@@ -390,140 +339,11 @@ impl App {
 
     pub async fn on_message(
         &mut self,
-        message: Option<signal::Message>,
         payload: String,
     ) -> Option<()> {
-        self.log(format!("incoming: {} -> {:?}", payload, message));
-        let mut message = message?;
-
-        let mut msg: signal::InnerMessage = message
-            .envelope
-            .sync_message
-            .take()
-            .map(|m| m.sent_message)
-            .or_else(|| message.envelope.data_message.take())?;
-
-        // message text + attachments paths
-        let text = msg.message.take();
-        let attachments = msg.attachments.take().unwrap_or_default();
-        if text.is_none() && attachments.is_empty() {
-            return None;
-        }
-
-        let channel_id = msg
-            .group_info
-            .as_ref()
-            .map(|g| g.group_id.as_str())
-            .or_else(|| {
-                if message.envelope.source == self.config.user.phone_number {
-                    msg.destination.as_deref()
-                } else {
-                    Some(message.envelope.source.as_str())
-                }
-            })?
-            .to_string();
-        let is_group = msg.group_info.is_some();
-
-        let arrived_at = NaiveDateTime::from_timestamp(
-            message.envelope.timestamp as i64 / 1000,
-            (message.envelope.timestamp % 1000) as u32,
-        );
-        let arrived_at = Utc.from_utc_datetime(&arrived_at);
-
-        let name = self
-            .resolve_contact_name(message.envelope.source.clone())
-            .await;
-
-        let channel_idx = if let Some(channel_idx) = self
-            .data
-            .channels
-            .items
-            .iter_mut()
-            .position(|channel| channel.id == channel_id && channel.is_group == is_group)
-        {
-            channel_idx
-        } else {
-            let channel_name = if is_group {
-                let group_name = signal::SignalClient::get_group_name(&channel_id).await;
-                group_name.unwrap_or_else(|| channel_id.clone())
-            } else {
-                name.clone()
-            };
-            self.data.channels.items.push(Channel {
-                id: channel_id.clone(),
-                name: channel_name,
-                is_group,
-                messages: Vec::new(),
-                unread_messages: 0,
-            });
-            self.data.channels.items.len() - 1
-        };
-
-        self.data.channels.items[channel_idx]
-            .messages
-            .push(Message {
-                from: name,
-                message: text,
-                attachments,
-                arrived_at,
-            });
-        if self.data.channels.state.selected() != Some(channel_idx) {
-            self.data.channels.items[channel_idx].unread_messages += 1;
-        } else {
-            self.reset_unread_messages();
-        }
-
-        self.bubble_up_channel(channel_idx);
-        self.save().unwrap();
+        self.log(format!("incoming: {}", payload));
 
         Some(())
-    }
-
-    async fn resolve_contact_name(&mut self, phone_number: String) -> String {
-        let contact_channel = self
-            .data
-            .channels
-            .items
-            .iter()
-            .find(|channel| channel.id == phone_number && !channel.is_group);
-        let contact_channel_exists = contact_channel.is_some();
-        let name = match contact_channel {
-            _ if phone_number == self.config.user.phone_number => {
-                Some(self.config.user.name.clone())
-            }
-            Some(channel) if channel.id == channel.name => {
-                signal::SignalClient::get_contact_name(&phone_number).await
-            }
-            None => signal::SignalClient::get_contact_name(&phone_number).await,
-            Some(channel) => Some(channel.name.clone()),
-        };
-
-        if let Some(name) = name.as_ref() {
-            for channel in self.data.channels.items.iter_mut() {
-                for message in channel.messages.iter_mut() {
-                    if message.from == phone_number {
-                        message.from = name.clone();
-                    }
-                }
-                if channel.id == phone_number {
-                    channel.name = name.clone();
-                }
-            }
-        }
-
-        let name = name.unwrap_or_else(|| phone_number.clone());
-
-        if !contact_channel_exists {
-            self.data.channels.items.push(Channel {
-                id: phone_number,
-                name: name.clone(),
-                is_group: false,
-                messages: Vec::new(),
-                unread_messages: 0,
-            })
-        }
-
-        name
     }
 
     fn bubble_up_channel(&mut self, channel_idx: usize) {

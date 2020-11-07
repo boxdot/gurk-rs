@@ -1,9 +1,5 @@
-//! Signal Messenger client for terminal
-
 mod app;
 mod account;
-mod config;
-mod signal;
 mod ui;
 mod util;
 mod jami;
@@ -65,8 +61,6 @@ async fn main() -> anyhow::Result<()> {
 
     let mut terminal = Terminal::new(backend)?;
 
-    //let signal_client = signal::SignalClient::from_config(app.config.clone());
-    //tokio::spawn(async move { signal_client.stream_messages(tx).await });
     tokio::spawn(async move { Jami::handle_events(tx).await });
 
     terminal.clear()?;
@@ -84,8 +78,8 @@ async fn main() -> anyhow::Result<()> {
                 KeyCode::Down => app.on_down(),
                 code => app.on_key(code),
             },
-            Some(Event::Message { payload, message }) => {
-                app.on_message(message, payload).await;
+            Some(Event::Message { payload }) => {
+                app.on_message(payload).await;
             }
             Some(Event::Resize) => {
                 // will just redraw the app
