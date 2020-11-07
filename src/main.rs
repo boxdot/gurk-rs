@@ -83,6 +83,9 @@ async fn main() -> anyhow::Result<()> {
             }
             Some(Event::Resize) => {
                 // will just redraw the app
+            },
+            Some(Event::RegistrationStateChanged(account_id, registration_state)) => {
+                app.on_registration_state_changed(&account_id, &registration_state);
             }
             None => {
                 break;

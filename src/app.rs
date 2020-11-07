@@ -42,6 +42,20 @@ impl AppData {
         Ok(data)
     }
 
+    // Move to jami namespace
+    fn select_jami_account() -> Account {
+        let accounts = Jami::get_account_list();
+        // Select first enabled account
+        for account in &accounts {
+            if account.enabled {
+                return account.clone();
+            }
+        }
+        // No valid account found, generate a new one
+        Jami::add_account("", "", false);
+        return Account::null();
+    }
+
     fn init_from_jami() -> anyhow::Result<Self> {
         let mut channels = Vec::new();
 
@@ -67,11 +81,7 @@ impl AppData {
             unread_messages: 0,
         });
         
-        let accounts = Jami::get_account_list();
-        let account = match accounts.len() {
-            0 => Account::null(),
-            _ => accounts[0].clone(),
-        };
+        let account = AppData::select_jami_account();
         for conversation in Jami::get_conversations(&account.id) {
             channels.push(Channel {
                 id: conversation.clone(),
@@ -132,6 +142,7 @@ pub enum Event<I> {
     Message {
         payload: String,
     },
+    RegistrationStateChanged(String, String),
     Resize,
 }
 
@@ -190,6 +201,12 @@ impl App {
                 }
             }
             _ => {}
+        }
+    }
+
+    pub fn on_registration_state_changed(&mut self, _account_id: &String, registration_state: &String) {
+        if registration_state == "REGISTERED" && self.data.account == Account::null() {
+            self.data.account = AppData::select_jami_account();
         }
     }
 

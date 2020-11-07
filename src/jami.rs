@@ -58,38 +58,78 @@ impl Jami {
         Ok(manager)
     }
 
-    /**
-     * Listen from interresting signals from dbus and call handlers
-     * @param self
-     */
-    pub fn handle_signals(manager: Arc<Mutex<Jami>>) {
-        // Use another dbus connection to listen signals.
-        let dbus_listener = Connection::get_private(BusType::Session).unwrap();
-        dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=incomingAccountMessage").unwrap();
-        dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=incomingTrustRequest").unwrap();
-        dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=accountsChanged").unwrap();
-        dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=registrationStateChanged").unwrap();
-        // For each signals, call handlers.
-        for i in dbus_listener.iter(100) {
+    pub async fn handle_events<T: std::fmt::Debug>(
+        mut tx: tokio::sync::mpsc::Sender<crate::app::Event<T>>,
+    ) -> Result<(), std::io::Error> {
+        
+        loop {
+            // todo separate + doc
+            let mut events = Vec::new();
+            {
+                let dbus_listener = Connection::get_private(BusType::Session).unwrap();
+                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=incomingAccountMessage").unwrap();
+                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=incomingTrustRequest").unwrap();
+                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=accountsChanged").unwrap();
+                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=registrationStateChanged").unwrap();
+                // For each signals, call handlers.
+                for ci in dbus_listener.iter(100) {
+                    let msg = if let ConnectionItem::Signal(ref signal) = ci { signal } else { continue };
+                    if &*msg.interface().unwrap() != "cx.ring.Ring.ConfigurationManager" { continue };
+                    if &*msg.member().unwrap() == "incomingAccountMessage" {
+                        // incomingAccountMessage return three arguments
+                        let (account_id, _msg_id, author_hash, payloads) = msg.get4::<&str, &str, &str, Dict<&str, &str, _>>();
+                        let author_hash = author_hash.unwrap().to_string();
+                        let mut body = String::new();
+                        let mut datatype = String::new();
+                        let mut metadatas: HashMap<String, String> = HashMap::new();
+                        for detail in payloads.unwrap() {
+                            match detail {
+                                (key, value) => {
+                                    // TODO for now, text/plain is the only supported datatypes, changes this with key in supported datatypes
+                                    if key == "text/plain" {
+                                        datatype = key.to_string();
+                                        body = value.to_string();
+                                        events.push(Event::Message { payload: body });
+                                    } else {
+                                        metadatas.insert(
+                                            key.to_string(),
+                                            value.to_string()
+                                        );
+                                    }
+                                }
+                            }
+                        };
+                    } else if &*msg.member().unwrap() == "registrationStateChanged" { 
+                        let (account_id, registration_state, _, _) = msg.get4::<&str, &str, u64, &str>();
+                        events.push(Event::RegistrationStateChanged(String::from(account_id.unwrap()), String::from(registration_state.unwrap())));
+                    }
+                    
+                    // Send events
+                    if !events.is_empty() {
+                        break;
+                    }
+                }
+            }
 
-            /*let mut m = manager.lock().unwrap();
-            m.handle_accounts_signals(&i);
-            m.handle_registration_changed(&i);
-            if let Some((account_id, interaction)) = m.handle_interactions(&i) {
-                info!("New interation for {}: {}", account_id, interaction);
-            };*/
+            for ev in events {
+                if tx.send(ev).await.is_err() {
+                    break; // receiver closed
+                }
+            }
         }
+
+        Ok(())
     }
 
     // Helpers
 
     /**
-     * Add a RING account
+     * Add a new account
      * @param main_info path or alias
      * @param password
      * @param from_archive if main_info is a path
      */
-    pub fn add_account(main_info: &str, password: &str, from_archive: bool) {
+    pub fn add_account(main_info: &str, password: &str, from_archive: bool) -> String {
         let mut details: HashMap<&str, &str> = HashMap::new();
         if from_archive {
             details.insert("Account.archivePath", main_info);
@@ -104,11 +144,11 @@ impl Jami {
                                                 "addAccount");
         if !dbus_msg.is_ok() {
             error!("addAccount fails. Please verify daemon's API.");
-            return;
+            return String::new();
         }
         let conn = Connection::get_private(BusType::Session);
         if !conn.is_ok() {
-            return;
+            return String::new();
         }
         let dbus = conn.unwrap();
         let response = dbus.send_with_reply_and_block(dbus_msg.unwrap()
@@ -119,6 +159,7 @@ impl Jami {
             None => ""
         };
         info!("New account: {:?}", account_added);
+        String::from(account_added)
     }
 
     /**
@@ -370,106 +411,6 @@ impl Jami {
         // TODO test if RORI accounts is still exists
     }
 
-    /**
-    * Handle new interactions signals
-    * @param self
-    * @param ci
-    * @return (accountId, interaction)
-    */
-
-    pub async fn handle_events<T: std::fmt::Debug>(
-        mut tx: tokio::sync::mpsc::Sender<crate::app::Event<T>>,
-    ) -> Result<(), std::io::Error> {
-        
-        loop {
-            let mut events = Vec::new();
-            {
-                let dbus_listener = Connection::get_private(BusType::Session).unwrap();
-                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=incomingAccountMessage").unwrap();
-                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=incomingTrustRequest").unwrap();
-                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=accountsChanged").unwrap();
-                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=registrationStateChanged").unwrap();
-                // For each signals, call handlers.
-                for ci in dbus_listener.iter(100) {
-                    let msg = if let ConnectionItem::Signal(ref signal) = ci { signal } else { continue };
-                    if &*msg.interface().unwrap() != "cx.ring.Ring.ConfigurationManager" { continue };
-                    if &*msg.member().unwrap() != "incomingAccountMessage" { continue };
-                    // incomingAccountMessage return three arguments
-                    let (account_id, _msg_id, author_hash, payloads) = msg.get4::<&str, &str, &str, Dict<&str, &str, _>>();
-                    let author_hash = author_hash.unwrap().to_string();
-                    let mut body = String::new();
-                    let mut datatype = String::new();
-                    let mut metadatas: HashMap<String, String> = HashMap::new();
-                    for detail in payloads.unwrap() {
-                        match detail {
-                            (key, value) => {
-                                // TODO for now, text/plain is the only supported datatypes, changes this with key in supported datatypes
-                                if key == "text/plain" {
-                                    datatype = key.to_string();
-                                    body = value.to_string();
-                                    events.push(Event::Message { payload: body });
-                                } else {
-                                    metadatas.insert(
-                                        key.to_string(),
-                                        value.to_string()
-                                    );
-                                }
-                            }
-                        }
-                    };
-                    // Send events
-                    if !events.is_empty() {
-                        break;
-                    }
-                }
-            }
-
-            for ev in events {
-                if tx.send(ev).await.is_err() {
-                    break; // receiver closed
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    
-    /*fn handle_interactions(&self, ci: &ConnectionItem) -> Option<(String, Interaction)> {
-        // Check signal
-        let msg = if let &ConnectionItem::Signal(ref signal) = ci { signal } else { return None };
-        if &*msg.interface().unwrap() != "cx.ring.Ring.ConfigurationManager" { return None };
-        if &*msg.member().unwrap() != "incomingAccountMessage" { return None };
-        // incomingAccountMessage return three arguments
-        let (account_id, _msg_id, author_hash, payloads) = msg.get4::<&str, &str, &str, Dict<&str, &str, _>>();
-        let author_hash = author_hash.unwrap().to_string();
-        let mut body = String::new();
-        let mut datatype = String::new();
-        let mut metadatas: HashMap<String, String> = HashMap::new();
-        for detail in payloads.unwrap() {
-            match detail {
-                (key, value) => {
-                    // TODO for now, text/plain is the only supported datatypes, changes this with key in supported datatypes
-                    if key == "text/plain" {
-                        datatype = key.to_string();
-                        body = value.to_string();
-                    } else {
-                        metadatas.insert(
-                            key.to_string(),
-                            value.to_string()
-                        );
-                    }
-                }
-            }
-        };
-        let interaction = Interaction {
-            author_hash: author_hash,
-            body: body,
-            datatype: datatype,
-            metadatas: metadatas
-        };
-        Some((account_id.unwrap().to_string(), interaction))
-    }*/
 
     /**
      * Update current RORI account by handling accountsChanged signals from daemon
