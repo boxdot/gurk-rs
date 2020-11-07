@@ -187,9 +187,58 @@ impl Jami {
             None => return account_list
         };
         for account in accounts {
-            account_list.push(Jami::build_account(account));
+            account_list.push(Jami::get_account(account));
         }
         account_list
+    }
+
+    /**
+     * Build a new account with an id from the daemon
+     * @param id the account id to build
+     * @return the account retrieven
+     */
+    pub fn get_account(id: &str) -> Account {
+        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
+                                                "cx.ring.Ring.ConfigurationManager",
+                                                "getAccountDetails");
+        if !dbus_msg.is_ok() {
+            error!("getAccountDetails fails. Please verify daemon's API.");
+            return Account::null();
+        }
+        let conn = Connection::get_private(BusType::Session);
+        if !conn.is_ok() {
+            error!("connection not ok.");
+            return Account::null();
+        }
+        let dbus = conn.unwrap();
+        let response = dbus.send_with_reply_and_block(
+                                           dbus_msg.unwrap().append1(id), 2000
+                                       ).ok().expect("Is the ring-daemon launched?");
+        let details: Dict<&str, &str, _> = match response.get1() {
+            Some(details) => details,
+            None => {
+                return Account::null();
+            }
+        };
+
+        let mut account = Account::null();
+        account.id = id.to_owned();
+        for detail in details {
+            match detail {
+                (key, value) => {
+                    if key == "Account.enable" {
+                        account.enabled = value == "true";
+                    }
+                    if key == "Account.alias" {
+                        account.alias = String::from(value);
+                    }
+                    if key == "Account.username" {
+                        account.hash = String::from(value).replace("ring:", "");
+                    }
+                }
+            }
+        }
+        account
     }
 
     /**
@@ -349,54 +398,6 @@ impl Jami {
     }
 
 // Private stuff
-    /**
-     * Build a new account with an id from the daemon
-     * @param id the account id to build
-     * @return the account retrieven
-     */
-    fn build_account(id: &str) -> Account {
-        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
-                                                "cx.ring.Ring.ConfigurationManager",
-                                                "getAccountDetails");
-        if !dbus_msg.is_ok() {
-            error!("getAccountDetails fails. Please verify daemon's API.");
-            return Account::null();
-        }
-        let conn = Connection::get_private(BusType::Session);
-        if !conn.is_ok() {
-            error!("connection not ok.");
-            return Account::null();
-        }
-        let dbus = conn.unwrap();
-        let response = dbus.send_with_reply_and_block(
-                                           dbus_msg.unwrap().append1(id), 2000
-                                       ).ok().expect("Is the ring-daemon launched?");
-        let details: Dict<&str, &str, _> = match response.get1() {
-            Some(details) => details,
-            None => {
-                return Account::null();
-            }
-        };
-
-        let mut account = Account::null();
-        account.id = id.to_owned();
-        for detail in details {
-            match detail {
-                (key, value) => {
-                    if key == "Account.enable" {
-                        account.enabled = value == "true";
-                    }
-                    if key == "Account.alias" {
-                        account.alias = String::from(value);
-                    }
-                    if key == "Account.username" {
-                        account.hash = String::from(value).replace("ring:", "");
-                    }
-                }
-            }
-        }
-        account
-    }
 
     /**
      * Update current RORI account by handling accountsChanged signals from daemon.

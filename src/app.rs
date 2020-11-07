@@ -56,12 +56,11 @@ impl AppData {
         return Account::null();
     }
 
-    fn init_from_jami() -> anyhow::Result<Self> {
+    fn channels_for_account(account: &Account) -> Vec<Channel> {
         let mut channels = Vec::new();
-
-        // TODO move to fund
         let mut messages = Vec::new();
 
+        // TODO move out welcome
         let file = File::open("rsc/welcome-art");
         if file.is_ok() {
             for line in io::BufReader::new(file.unwrap()).lines() {
@@ -81,7 +80,6 @@ impl AppData {
             unread_messages: 0,
         });
         
-        let account = AppData::select_jami_account();
         for conversation in Jami::get_conversations(&account.id) {
             channels.push(Channel {
                 id: conversation.clone(),
@@ -100,7 +98,15 @@ impl AppData {
                 unread_messages: 0,
             });
         }
+        channels
+    }
 
+    fn init_from_jami() -> anyhow::Result<Self> {
+        let account = AppData::select_jami_account();
+        let mut channels = Vec::new();
+        if !account.id.is_empty() {
+            channels = AppData::channels_for_account(&account);
+        }
 
         let mut channels = StatefulList::with_items(channels);
         if !channels.items.is_empty() {
@@ -245,6 +251,23 @@ impl App {
                         arrived_at: Utc::now(),
                     });
                 }
+            } else if message.starts_with("/switch ") {
+                let account_id = String::from(message.strip_prefix("/switch ").unwrap());
+                let account = Jami::get_account(&*account_id);
+                if account.id.is_empty() {
+                    channel.messages.push(Message {
+                        from: String::new(),
+                        message: Some(String::from("Invalid account id.")),
+                        arrived_at: Utc::now(),
+                    });
+                } else {
+                    self.data.account = account;
+                    let channels = AppData::channels_for_account(&self.data.account);
+                    self.data.channels = StatefulList::with_items(channels);
+                    if !self.data.channels.items.is_empty() {
+                        self.data.channels.state.select(Some(0));
+                    }
+                }
             } else if message == "/help" {
                 channel.messages.push(Message {
                     from: String::new(),
@@ -259,6 +282,11 @@ impl App {
                 channel.messages.push(Message {
                     from: String::new(),
                     message: Some(String::from("/list: list accounts")),
+                    arrived_at: Utc::now(),
+                });
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("/switch <id>: switch to an account")),
                     arrived_at: Utc::now(),
                 });
                 channel.messages.push(Message {
