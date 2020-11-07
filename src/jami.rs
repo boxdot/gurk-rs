@@ -25,6 +25,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  **/
 
+use crate::app::Event;
 use crate::account::Account;
 use dbus::{Connection, ConnectionItem, BusType, Message};
 use dbus::arg::{Array, Dict};
@@ -375,6 +376,65 @@ impl Jami {
     * @param ci
     * @return (accountId, interaction)
     */
+
+    pub async fn handle_events<T: std::fmt::Debug>(
+        mut tx: tokio::sync::mpsc::Sender<crate::app::Event<T>>,
+    ) -> Result<(), std::io::Error> {
+        
+        loop {
+            let mut events = Vec::new();
+            {
+                let dbus_listener = Connection::get_private(BusType::Session).unwrap();
+                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=incomingAccountMessage").unwrap();
+                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=incomingTrustRequest").unwrap();
+                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=accountsChanged").unwrap();
+                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=registrationStateChanged").unwrap();
+                // For each signals, call handlers.
+                for ci in dbus_listener.iter(100) {
+                    let msg = if let ConnectionItem::Signal(ref signal) = ci { signal } else { continue };
+                    if &*msg.interface().unwrap() != "cx.ring.Ring.ConfigurationManager" { continue };
+                    if &*msg.member().unwrap() != "incomingAccountMessage" { continue };
+                    // incomingAccountMessage return three arguments
+                    let (account_id, _msg_id, author_hash, payloads) = msg.get4::<&str, &str, &str, Dict<&str, &str, _>>();
+                    let author_hash = author_hash.unwrap().to_string();
+                    let mut body = String::new();
+                    let mut datatype = String::new();
+                    let mut metadatas: HashMap<String, String> = HashMap::new();
+                    for detail in payloads.unwrap() {
+                        match detail {
+                            (key, value) => {
+                                // TODO for now, text/plain is the only supported datatypes, changes this with key in supported datatypes
+                                if key == "text/plain" {
+                                    datatype = key.to_string();
+                                    body = value.to_string();
+                                    events.push(Event::Message { payload: body, message: None });
+                                } else {
+                                    metadatas.insert(
+                                        key.to_string(),
+                                        value.to_string()
+                                    );
+                                }
+                            }
+                        }
+                    };
+                    // Send events
+                    if !events.is_empty() {
+                        break;
+                    }
+                }
+            }
+
+            for ev in events {
+                if tx.send(ev).await.is_err() {
+                    break; // receiver closed
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    
     /*fn handle_interactions(&self, ci: &ConnectionItem) -> Option<(String, Interaction)> {
         // Check signal
         let msg = if let &ConnectionItem::Signal(ref signal) = ci { signal } else { return None };

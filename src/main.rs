@@ -9,6 +9,7 @@ mod util;
 mod jami;
 
 use app::{App, Event};
+use crate::jami::Jami;
 
 use crossterm::{
     event::{
@@ -64,8 +65,9 @@ async fn main() -> anyhow::Result<()> {
 
     let mut terminal = Terminal::new(backend)?;
 
-    let signal_client = signal::SignalClient::from_config(app.config.clone());
-    tokio::spawn(async move { signal_client.stream_messages(tx).await });
+    //let signal_client = signal::SignalClient::from_config(app.config.clone());
+    //tokio::spawn(async move { signal_client.stream_messages(tx).await });
+    tokio::spawn(async move { Jami::handle_events(tx).await });
 
     terminal.clear()?;
 
