@@ -1,6 +1,8 @@
+use crate::account::Account;
 use crate::config::{self, Config};
 use crate::signal;
 use crate::util::StatefulList;
+use crate::jami::Jami;
 
 use anyhow::Context;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
@@ -9,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthStr;
 
 use std::fs::File;
-use std::io::Write;
+use std::io::{self, BufRead, Write};
 use std::path::Path;
 
 pub struct App {
@@ -18,6 +20,7 @@ pub struct App {
     pub log_file: Option<File>,
     pub signal_client: signal::SignalClient,
     pub data: AppData,
+    pub jami: Jami,
 }
 
 impl App {
@@ -29,6 +32,7 @@ impl App {
 #[derive(Serialize, Deserialize)]
 pub struct AppData {
     pub channels: StatefulList<Channel>,
+    pub account: Account,
     pub input: String,
     #[serde(skip)]
     pub input_cursor: usize,
@@ -48,38 +52,56 @@ impl AppData {
         Ok(data)
     }
 
-    fn init_from_signal(client: &signal::SignalClient) -> anyhow::Result<Self> {
-        let groups = client
-            .get_groups()
-            .context("failed to fetch groups from signal")?;
-        let group_channels = groups.into_iter().map(|group_info| {
-            let name = group_info
-                .name
-                .as_ref()
-                .unwrap_or_else(|| &group_info.group_id)
-                .to_string();
-            Channel {
-                id: group_info.group_id,
-                name,
+    fn init_from_jami() -> anyhow::Result<Self> {
+        let mut channels = Vec::new();
+
+        // TODO move to fund
+        let mut messages = Vec::new();
+
+        let file = File::open("rsc/welcome-art");
+        if file.is_ok() {
+            for line in io::BufReader::new(file.unwrap()).lines() {
+                messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from(line.unwrap())),
+                    attachments: Vec::new(),
+                    arrived_at: Utc::now(),
+                });
+            }
+        }
+
+        channels.push(Channel {
+            id: String::from("Welcome"),
+            name: String::from("Welcome"),
+            is_group: false,
+            messages,
+            unread_messages: 0,
+        });
+        
+        let accounts = Jami::get_account_list();
+        let account = match accounts.len() {
+            0 => Account::null(),
+            _ => accounts[0].clone(),
+        };
+        for conversation in Jami::get_conversations(&account.id) {
+            channels.push(Channel {
+                id: conversation.clone(),
+                name: conversation,
                 is_group: true,
                 messages: Vec::new(),
                 unread_messages: 0,
-            }
-        });
+            });
+        }
+        for contact in Jami::get_contacts(&account.id) {
+            channels.push(Channel {
+                id: contact["id"].clone(),
+                name: contact["id"].clone(),
+                is_group: false,
+                messages: Vec::new(),
+                unread_messages: 0,
+            });
+        }
 
-        let contacts = client
-            .get_contacts()
-            .context("failed to fetch contact from signal")?;
-        let contact_channels = contacts.into_iter().map(|contact_info| Channel {
-            id: contact_info.phone_number,
-            name: contact_info.name,
-            is_group: false,
-            messages: Vec::new(),
-            unread_messages: 0,
-        });
-
-        let mut channels: Vec<_> = group_channels.chain(contact_channels).collect();
-        channels.sort_unstable_by(|a, b| a.name.cmp(&b.name));
 
         let mut channels = StatefulList::with_items(channels);
         if !channels.items.is_empty() {
@@ -90,6 +112,7 @@ impl AppData {
             channels,
             input: String::new(),
             input_cursor: 0,
+            account,
         })
     }
 }
@@ -149,21 +172,15 @@ impl App {
             }
         }
 
-        let mut data = match AppData::load(&load_data_path) {
-            Ok(data) => data,
-            Err(_) => {
-                let client = signal::SignalClient::from_config(config.clone());
-                let data = AppData::init_from_signal(&client)?;
-                data.save(&config.data_path)?;
-                data
-            }
-        };
+        let client = signal::SignalClient::from_config(config.clone());        
+        let mut data = AppData::init_from_jami()?;
         if data.channels.state.selected().is_none() && !data.channels.items.is_empty() {
             data.channels.state.select(Some(0));
             data.save(&config.data_path)?;
         }
 
         let signal_client = signal::SignalClient::from_config(config.clone());
+        let jami = Jami::init().unwrap();
 
         Ok(Self {
             config,
@@ -171,6 +188,7 @@ impl App {
             should_quit: false,
             signal_client,
             log_file,
+            jami,
         })
     }
 
@@ -214,18 +232,115 @@ impl App {
         let message: String = self.data.input.drain(..).collect();
         self.data.input_cursor = 0;
 
-        if !channel.is_group {
-            signal::SignalClient::send_message(&message, &channel.id);
-        } else {
-            signal::SignalClient::send_group_message(&message, &channel.id);
+        if message == "/exit" {
+            self.should_quit = true;
+            return;
         }
 
         channel.messages.push(Message {
-            from: self.config.user.name.clone(),
-            message: Some(message),
+            from: self.data.account.get_display_name(),
+            message: Some(message.clone()),
             attachments: Vec::new(),
             arrived_at: Utc::now(),
         });
+
+        // TODO enum
+        if !channel.is_group {
+            if message == "/new" {
+                Jami::start_conversation(&channel.id);
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("TODO refresh view")),
+                    attachments: Vec::new(),
+                    arrived_at: Utc::now(),
+                });
+            }
+            if message == "/list" {
+                for account in Jami::get_account_list() {
+                    channel.messages.push(Message {
+                        from: String::new(),
+                        message: Some(String::from(format!("{}", account))),
+                        attachments: Vec::new(),
+                        arrived_at: Utc::now(),
+                    });
+                }
+            } else if message == "/help" {
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("/help: Show this help")),
+                    attachments: Vec::new(),
+                    arrived_at: Utc::now(),
+                });
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("/new: start a new conversation")),
+                    attachments: Vec::new(),
+                    arrived_at: Utc::now(),
+                });
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("/list: list accounts")),
+                    attachments: Vec::new(),
+                    arrived_at: Utc::now(),
+                });
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("/exit: quit")),
+                    attachments: Vec::new(),
+                    arrived_at: Utc::now(),
+                });
+            }
+        } else {
+            // TODO simplify
+            let account_id = &self.data.account.id;
+            if message == "/leave" {
+                Jami::rm_conversation(&account_id, &channel.id);
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("TODO refresh view")),
+                    attachments: Vec::new(),
+                    arrived_at: Utc::now(),
+                });
+                // TODO remove channel
+            } else if message.starts_with("/invite") {
+                let hash = String::from(message.strip_prefix("/invite ").unwrap());
+                Jami::add_conversation_member(&account_id, &channel.id, &hash);
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(format!("You invited {}", hash)),
+                    attachments: Vec::new(),
+                    arrived_at: Utc::now(),
+                });
+            } else if message == "/help" {
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("/help: Show this help")),
+                    attachments: Vec::new(),
+                    arrived_at: Utc::now(),
+                });
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("/leave: Leave this conversation")),
+                    attachments: Vec::new(),
+                    arrived_at: Utc::now(),
+                });
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("/invite [hash|username]: Invite somebody to the conversation")),
+                    attachments: Vec::new(),
+                    arrived_at: Utc::now(),
+                });
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("/exit: quit")),
+                    attachments: Vec::new(),
+                    arrived_at: Utc::now(),
+                });
+            } else {
+                Jami::send_conversation_message(&account_id, &channel.id, &message, &String::new());
+            }
+
+        }
 
         self.reset_unread_messages();
         self.bubble_up_channel(channel_idx);
