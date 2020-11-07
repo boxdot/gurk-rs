@@ -232,6 +232,11 @@ impl App {
         let message: String = self.data.input.drain(..).collect();
         self.data.input_cursor = 0;
 
+        if message == "/exit" {
+            self.should_quit = true;
+            return;
+        }
+
         channel.messages.push(Message {
             from: self.data.account.get_display_name(),
             message: Some(message.clone()),
@@ -278,6 +283,12 @@ impl App {
                     attachments: Vec::new(),
                     arrived_at: Utc::now(),
                 });
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("/exit: quit")),
+                    attachments: Vec::new(),
+                    arrived_at: Utc::now(),
+                });
             }
         } else {
             // TODO simplify
@@ -316,6 +327,12 @@ impl App {
                 channel.messages.push(Message {
                     from: String::new(),
                     message: Some(String::from("/invite [hash|username]: Invite somebody to the conversation")),
+                    attachments: Vec::new(),
+                    arrived_at: Utc::now(),
+                });
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("/exit: quit")),
                     attachments: Vec::new(),
                     arrived_at: Utc::now(),
                 });
