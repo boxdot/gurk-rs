@@ -86,6 +86,9 @@ async fn main() -> anyhow::Result<()> {
             },
             Some(Event::RegistrationStateChanged(account_id, registration_state)) => {
                 app.on_registration_state_changed(&account_id, &registration_state);
+            },
+            Some(Event::ConversationReady(account_id, conversation_id)) => {
+                app.on_conversation_ready(account_id, conversation_id);
             }
             None => {
                 break;

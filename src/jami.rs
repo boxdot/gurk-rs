@@ -1,39 +1,10 @@
-/**
- * Copyright (c) 2020, Sébastien Blin <sebastien.blin@enconn.fr>
- * All rights reserved.
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright
- *  notice, this list of conditions and the following disclaimer.
- * * Redistributions in binary form must reproduce the above copyright
- *  notice, this list of conditions and the following disclaimer in the
- *  documentation and/or other materials provided with the distribution.
- * * Neither the name of the University of California, Berkeley nor the
- *  names of its contributors may be used to endorse or promote products
- *  derived from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE REGENTS AND CONTRIBUTORS BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
- * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- **/
-
 use crate::app::Event;
 use crate::account::Account;
 use dbus::{Connection, ConnectionItem, BusType, Message};
 use dbus::arg::{Array, Dict};
 use log::{debug, error, log_enabled, info, Level};
-use serde_json::{Value, from_str};
 use std::collections::HashMap;
 use std::io::Read;
-use std::sync::{Arc, Mutex};
 
 /**TODO
  */
@@ -71,6 +42,7 @@ impl Jami {
                 dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=accountsChanged").unwrap();
                 dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=registrationStateChanged").unwrap();
                 dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=messageReceived").unwrap();
+                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=conversationReady").unwrap();
                 // For each signals, call handlers.
                 for ci in dbus_listener.iter(100) {
                     let msg = if let ConnectionItem::Signal(ref signal) = ci { signal } else { continue };
@@ -89,6 +61,9 @@ impl Jami {
                     } else if &*msg.member().unwrap() == "registrationStateChanged" { 
                         let (account_id, registration_state, _, _) = msg.get4::<&str, &str, u64, &str>();
                         events.push(Event::RegistrationStateChanged(String::from(account_id.unwrap()), String::from(registration_state.unwrap())));
+                    } else if &*msg.member().unwrap() == "conversationReady" { 
+                        let (account_id, conversation_id) = msg.get2::<&str, &str>();
+                        events.push(Event::ConversationReady(String::from(account_id.unwrap()), String::from(conversation_id.unwrap())));
                     }
                     
                     // Send events
@@ -268,7 +243,6 @@ impl Jami {
      * @param id        Id of the account
      */
     pub fn start_conversation(id: &String) {
-        let mut account_list: Vec<Account> = Vec::new();
         let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
                                                 "cx.ring.Ring.ConfigurationManager",
                                                 "startConversation");

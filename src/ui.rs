@@ -1,6 +1,5 @@
-use crate::{app, App};
+use crate::App;
 
-use anyhow::Context;
 use chrono::Timelike;
 use tui::backend::Backend;
 use tui::layout::{Constraint, Corner, Direction, Layout, Rect};
@@ -9,8 +8,6 @@ use tui::text::{Span, Spans, Text};
 use tui::widgets::{Block, Borders, List, ListItem, Paragraph};
 use tui::Frame;
 use unicode_width::UnicodeWidthStr;
-
-use std::path::PathBuf;
 
 pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     let chunks = Layout::default()
@@ -206,25 +203,4 @@ fn displayed_name(name: &str, first_name_only: bool) -> &str {
     } else {
         &name
     }
-}
-
-fn xorshift32(mut x: u32) -> u32 {
-    x ^= x << 13;
-    x ^= x >> 17;
-    x ^= x << 5;
-    x
-}
-
-fn id_to_short_random_filename(id: &str) -> String {
-    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    let mut seed = id
-        .chars()
-        .fold(0u32, |acc, c| acc.wrapping_add(c as u32))
-        .max(1); // must be != 0
-    (0..6)
-        .map(move |_| {
-            seed = xorshift32(seed);
-            CHARSET[seed as usize % CHARSET.len()] as char
-        })
-        .collect()
 }

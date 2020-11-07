@@ -2,8 +2,7 @@ use crate::account::Account;
 use crate::util::StatefulList;
 use crate::jami::Jami;
 
-use anyhow::Context;
-use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, Utc};
 use crossterm::event::KeyCode;
 use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthStr;
@@ -114,7 +113,7 @@ impl AppData {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Channel {
     /// Either phone number or group id
     pub id: String,
@@ -125,7 +124,7 @@ pub struct Channel {
     pub unread_messages: usize,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Message {
     pub from: String,
     #[serde(alias = "text")] // remove
@@ -142,6 +141,7 @@ pub enum Event<I> {
         conversation_id: String,
         payloads: HashMap<String, String>
     },
+    ConversationReady(String, String),
     RegistrationStateChanged(String, String),
     Resize,
 }
@@ -227,11 +227,6 @@ impl App {
         if !channel.is_group {
             if message == "/new" {
                 Jami::start_conversation(&self.data.account.id);
-                channel.messages.push(Message {
-                    from: String::new(),
-                    message: Some(String::from("TODO refresh view")),
-                    arrived_at: Utc::now(),
-                });
             }
             if message == "/list" {
                 for account in Jami::get_account_list() {
@@ -391,21 +386,42 @@ impl App {
         if account_id == self.data.account.id {
             let channels = &mut self.data.channels;
             if let Some(idx) = channels.state.selected() {
-                let mut channel = &mut channels.items[idx];
-                if payloads.get("type").unwrap() == "text/plain" {
-                    channel.messages.push(Message {
-                        from: String::from(payloads.get("author").unwrap()),
-                        message: Some(String::from(payloads.get("body").unwrap())),
-                        arrived_at: Utc::now(), // TODO timestamp
-                    });
-                } else {
-                    channel.messages.push(Message {
-                        from: String::new(),
-                        message: Some(String::from(format!("{:?}", payloads))),
-                        arrived_at: Utc::now(),
-                    });
+                let channel = &mut channels.items[idx];
+                if channel.id == conversation_id {
+                    if payloads.get("type").unwrap() == "text/plain" {
+                        channel.messages.push(Message {
+                            from: String::from(payloads.get("author").unwrap()),
+                            message: Some(String::from(payloads.get("body").unwrap())),
+                            arrived_at: Utc::now(), // TODO timestamp
+                        });
+                    } else {
+                        channel.messages.push(Message {
+                            from: String::new(),
+                            message: Some(String::from(format!("{:?}", payloads))),
+                            arrived_at: Utc::now(),
+                        });
+                    }
                 }
             }
+        }
+        Some(())
+    }
+
+    pub fn on_conversation_ready(
+        &mut self,
+        account_id: String,
+        conversation_id: String,
+    ) -> Option<()> {
+        if account_id == self.data.account.id {
+            self.data.channels.items.push(Channel {
+                id: conversation_id.clone(),
+                name: conversation_id,
+                is_group: true,
+                messages: Vec::new(),
+                unread_messages: 0,
+            });
+            self.bubble_up_channel(self.data.channels.items.len() - 1);
+            self.data.channels.state.select(Some(0));
         }
         Some(())
     }
