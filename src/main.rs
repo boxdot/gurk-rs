@@ -78,8 +78,8 @@ async fn main() -> anyhow::Result<()> {
                 KeyCode::Down => app.on_down(),
                 code => app.on_key(code),
             },
-            Some(Event::Message { payload }) => {
-                app.on_message(payload).await;
+            Some(Event::Message { account_id, conversation_id, payloads }) => {
+                app.on_message(account_id, conversation_id, payloads).await;
             }
             Some(Event::Resize) => {
                 // will just redraw the app

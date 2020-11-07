@@ -8,6 +8,7 @@ use crossterm::event::KeyCode;
 use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthStr;
 
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead, Write};
 use std::path::Path;
@@ -89,15 +90,6 @@ impl AppData {
                 unread_messages: 0,
             });
         }
-        for contact in Jami::get_contacts(&account.id) {
-            channels.push(Channel {
-                id: contact["id"].clone(),
-                name: contact["id"].clone(),
-                is_group: false,
-                messages: Vec::new(),
-                unread_messages: 0,
-            });
-        }
         channels
     }
 
@@ -146,7 +138,9 @@ pub struct Message {
 pub enum Event<I> {
     Input(I),
     Message {
-        payload: String,
+        account_id: String,
+        conversation_id: String,
+        payloads: HashMap<String, String>
     },
     RegistrationStateChanged(String, String),
     Resize,
@@ -227,16 +221,12 @@ impl App {
             return;
         }
 
-        channel.messages.push(Message {
-            from: self.data.account.get_display_name(),
-            message: Some(message.clone()),
-            arrived_at: Utc::now(),
-        });
+        let mut show_msg = true;
 
         // TODO enum
         if !channel.is_group {
             if message == "/new" {
-                Jami::start_conversation(&channel.id);
+                Jami::start_conversation(&self.data.account.id);
                 channel.messages.push(Message {
                     from: String::new(),
                     message: Some(String::from("TODO refresh view")),
@@ -336,9 +326,18 @@ impl App {
                     arrived_at: Utc::now(),
                 });
             } else {
+                show_msg = false;
                 Jami::send_conversation_message(&account_id, &channel.id, &message, &String::new());
             }
+        }
 
+        if show_msg {
+            let channel = &mut self.data.channels.items[channel_idx];
+            channel.messages.push(Message {
+                from: self.data.account.get_display_name(),
+                message: Some(message.clone()),
+                arrived_at: Utc::now(),
+            });
         }
 
         self.reset_unread_messages();
@@ -384,10 +383,30 @@ impl App {
 
     pub async fn on_message(
         &mut self,
-        payload: String,
+        account_id: String,
+        conversation_id: String,
+        payloads: HashMap<String, String>,
     ) -> Option<()> {
-        self.log(format!("incoming: {}", payload));
-
+        self.log(format!("incoming: {:?}", payloads));
+        if account_id == self.data.account.id {
+            let channels = &mut self.data.channels;
+            if let Some(idx) = channels.state.selected() {
+                let mut channel = &mut channels.items[idx];
+                if payloads.get("type").unwrap() == "text/plain" {
+                    channel.messages.push(Message {
+                        from: String::from(payloads.get("author").unwrap()),
+                        message: Some(String::from(payloads.get("body").unwrap())),
+                        arrived_at: Utc::now(), // TODO timestamp
+                    });
+                } else {
+                    channel.messages.push(Message {
+                        from: String::new(),
+                        message: Some(String::from(format!("{:?}", payloads))),
+                        arrived_at: Utc::now(),
+                    });
+                }
+            }
+        }
         Some(())
     }
 

@@ -67,38 +67,25 @@ impl Jami {
             let mut events = Vec::new();
             {
                 let dbus_listener = Connection::get_private(BusType::Session).unwrap();
-                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=incomingAccountMessage").unwrap();
                 dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=incomingTrustRequest").unwrap();
                 dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=accountsChanged").unwrap();
                 dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=registrationStateChanged").unwrap();
+                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=messageReceived").unwrap();
                 // For each signals, call handlers.
                 for ci in dbus_listener.iter(100) {
                     let msg = if let ConnectionItem::Signal(ref signal) = ci { signal } else { continue };
                     if &*msg.interface().unwrap() != "cx.ring.Ring.ConfigurationManager" { continue };
-                    if &*msg.member().unwrap() == "incomingAccountMessage" {
-                        // incomingAccountMessage return three arguments
-                        let (account_id, _msg_id, author_hash, payloads) = msg.get4::<&str, &str, &str, Dict<&str, &str, _>>();
-                        let author_hash = author_hash.unwrap().to_string();
-                        let mut body = String::new();
-                        let mut datatype = String::new();
-                        let mut metadatas: HashMap<String, String> = HashMap::new();
-                        for detail in payloads.unwrap() {
-                            match detail {
-                                (key, value) => {
-                                    // TODO for now, text/plain is the only supported datatypes, changes this with key in supported datatypes
-                                    if key == "text/plain" {
-                                        datatype = key.to_string();
-                                        body = value.to_string();
-                                        events.push(Event::Message { payload: body });
-                                    } else {
-                                        metadatas.insert(
-                                            key.to_string(),
-                                            value.to_string()
-                                        );
-                                    }
-                                }
-                            }
-                        };
+                    if &*msg.member().unwrap() == "messageReceived" {
+                        let (account_id, conversation_id, payloads_dict) = msg.get3::<&str, &str, Dict<&str, &str, _>>();
+                        let mut payloads: HashMap<String, String> = HashMap::new();
+                        for (key, value) in payloads_dict.unwrap() {
+                            payloads.insert(String::from(key), String::from(value));
+                        }
+                        events.push(Event::Message {
+                            account_id: String::from(account_id.unwrap()),
+                            conversation_id: String::from(conversation_id.unwrap()),
+                            payloads
+                        });
                     } else if &*msg.member().unwrap() == "registrationStateChanged" { 
                         let (account_id, registration_state, _, _) = msg.get4::<&str, &str, u64, &str>();
                         events.push(Event::RegistrationStateChanged(String::from(account_id.unwrap()), String::from(registration_state.unwrap())));
