@@ -284,13 +284,19 @@ impl App {
             // TODO simplify
             let account_id = &self.data.account.id;
             if message == "/leave" {
-                Jami::rm_conversation(&account_id, &channel.id);
-                channel.messages.push(Message {
-                    from: String::new(),
-                    message: Some(String::from("TODO refresh view")),
-                    arrived_at: Utc::now(),
-                });
-                // TODO remove channel
+                if Jami::rm_conversation(&account_id, &channel.id) {
+                    self.data.channels.items.remove(channel_idx);
+                    if !self.data.channels.items.is_empty() {
+                        self.data.channels.state.select(Some(0));
+                    }
+                    return;
+                } else {
+                    channel.messages.push(Message {
+                        from: String::new(),
+                        message: Some(String::from("Cannot remove conversation")),
+                        arrived_at: Utc::now(),
+                    });
+                }
             } else if message.starts_with("/invite") {
                 let hash = String::from(message.strip_prefix("/invite ").unwrap());
                 Jami::add_conversation_member(&account_id, &channel.id, &hash);

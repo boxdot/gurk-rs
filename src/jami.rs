@@ -319,7 +319,12 @@ impl Jami {
         }
         let dbus = conn.unwrap();
         let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append2(&*id, &*conv_id), 2000).unwrap();
-        true
+
+        let isRemoved: bool = match response.get1() {
+            Some(isRemoved) => isRemoved,
+            None => false
+        };
+        isRemoved
     }
 
     /**
