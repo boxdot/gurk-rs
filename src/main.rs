@@ -93,7 +93,10 @@ async fn main() -> anyhow::Result<()> {
             },
             Some(Event::ConversationReady(account_id, conversation_id)) => {
                 app.on_conversation_ready(account_id, conversation_id);
-            }
+            },
+            Some(Event::RegisteredNameFound(account_id, status, address, name)) => {
+                app.on_registered_name_found(account_id, status, address, name);
+            },
             None => {
                 break;
             }

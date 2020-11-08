@@ -23,9 +23,17 @@ pub struct App {
 pub struct AppData {
     pub channels: StatefulList<Channel>,
     pub account: Account,
+    pub out_invite: Vec<OutgoingInvite>,
     pub input: String,
     #[serde(skip)]
     pub input_cursor: usize,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct OutgoingInvite {
+    pub account: String,
+    pub channel: String,
+    pub member: String,
 }
 
 impl AppData {
@@ -107,6 +115,7 @@ impl AppData {
         Ok(AppData {
             channels,
             input: String::new(),
+            out_invite: Vec::new(),
             input_cursor: 0,
             account,
         })
@@ -143,6 +152,7 @@ pub enum Event<I> {
     },
     ConversationReady(String, String),
     RegistrationStateChanged(String, String),
+    RegisteredNameFound(String, u64, String, String),
     Resize,
 }
 
@@ -298,13 +308,25 @@ impl App {
                     });
                 }
             } else if message.starts_with("/invite") {
-                let hash = String::from(message.strip_prefix("/invite ").unwrap());
-                Jami::add_conversation_member(&account_id, &channel.id, &hash);
-                channel.messages.push(Message {
-                    from: String::new(),
-                    message: Some(format!("You invited {}", hash)),
-                    arrived_at: Utc::now(),
-                });
+                let mut member = String::from(message.strip_prefix("/invite ").unwrap());
+                if Jami::is_hash(&member) {
+                    Jami::add_conversation_member(&account_id, &channel.id, &member);
+                } else {
+                    let mut ns = String::new();
+                    if member.find("@") != None {
+                        let member_cloned = member.clone();
+                        let split : Vec<&str> = member_cloned.split("@").collect();
+                        member = split[0].to_string();
+                        ns = split[1].to_string();
+                    }
+                    self.data.out_invite.push(OutgoingInvite {
+                        account: account_id.to_string(),
+                        channel: channel.id.clone(),
+                        member: member.clone(),
+                    });
+                    show_msg = false;
+                    Jami::lookup_name(&account_id, &ns, &member);
+                }
             } else if message == "/help" {
                 channel.messages.push(Message {
                     from: String::new(),
@@ -400,6 +422,22 @@ impl App {
                             message: Some(String::from(payloads.get("body").unwrap())),
                             arrived_at: Utc::now(), // TODO timestamp
                         });
+                    } else if payloads.get("type").unwrap() == "member" {
+                        let body = String::from(payloads.get("body").unwrap());
+                        if body.starts_with("Add member ") {
+                            let enter = format!("--> | {} has been added", body.strip_prefix("Add member ").unwrap());
+                            channel.messages.push(Message {
+                                from: String::new(),
+                                message: Some(String::from(enter)),
+                                arrived_at: Utc::now(), // TODO timestamp
+                            });
+                        } else {
+                            channel.messages.push(Message {
+                                from: String::new(),
+                                message: Some(String::from(payloads.get("body").unwrap())),
+                                arrived_at: Utc::now(), // TODO timestamp
+                            });
+                        }
                     } else {
                         channel.messages.push(Message {
                             from: String::new(),
@@ -428,6 +466,37 @@ impl App {
             });
             self.bubble_up_channel(self.data.channels.items.len() - 1);
             self.data.channels.state.select(Some(0));
+        }
+        Some(())
+    }
+
+    pub fn on_registered_name_found(
+        &mut self,
+        account_id: String,
+        status: u64,
+        address: String,
+        name: String,
+    ) -> Option<()> {
+        for i in 0..self.data.out_invite.len() {
+            let mut out_invite = &self.data.out_invite[i];
+            if out_invite.account == account_id && out_invite.member == name {
+                if status == 0 {
+                    Jami::add_conversation_member(&out_invite.account, &out_invite.channel, &address);
+                } else {
+                    let channels = &mut self.data.channels.items;
+                    for channel in &mut *channels {
+                        if channel.id == out_invite.channel {
+                            channel.messages.push(Message {
+                                from: String::new(),
+                                message: Some(String::from("Cannot invite member")),
+                                arrived_at: Utc::now(),
+                            });
+                        }
+                    }
+                }
+                self.data.out_invite.remove(i);
+                break;
+            }
         }
         Some(())
     }

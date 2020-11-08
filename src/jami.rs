@@ -46,6 +46,7 @@ impl Jami {
                 dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=registrationStateChanged").unwrap();
                 dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=messageReceived").unwrap();
                 dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=conversationReady").unwrap();
+                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=registeredNameFound").unwrap();
                 // For each signals, call handlers.
                 for ci in dbus_listener.iter(100) {
                     if stop.load(Ordering::Relaxed) {
@@ -70,6 +71,9 @@ impl Jami {
                     } else if &*msg.member().unwrap() == "conversationReady" { 
                         let (account_id, conversation_id) = msg.get2::<&str, &str>();
                         events.push(Event::ConversationReady(String::from(account_id.unwrap()), String::from(conversation_id.unwrap())));
+                    } else if &*msg.member().unwrap() == "registeredNameFound" { 
+                        let (account_id, status, address, name) = msg.get4::<&str, i32, &str, &str>();
+                        events.push(Event::RegisteredNameFound(String::from(account_id.unwrap()), status.unwrap() as u64, String::from(address.unwrap()), String::from(name.unwrap())));
                     }
                     
                     // Send events
@@ -93,7 +97,43 @@ impl Jami {
         Ok(())
     }
 
+    /**
+     * Asynchronously lookup a name
+     * @param account
+     * @param name_service
+     * @param name
+     * @return if dbus is ok
+     */
+    pub fn lookup_name(account: &String, name_service: &String, name: &String) -> bool {
+        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
+                                                "cx.ring.Ring.ConfigurationManager",
+                                                "lookupName");
+        if !dbus_msg.is_ok() {
+            error!("lookupName fails. Please verify daemon's API.");
+            return false;
+        }
+        let conn = Connection::get_private(BusType::Session);
+        if !conn.is_ok() {
+            return false;
+        }
+        let dbus = conn.unwrap();
+        let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append3(&*account, &*name_service, &*name), 2000).unwrap();
+        true
+    }
+
     // Helpers
+
+    pub fn is_hash(string: &String) -> bool {
+        if string.len() != 40 {
+            return false;
+        }
+        for i in 0..string.len() {
+            if "0123456789abcdef".find(string.as_bytes()[i] as char) == None {
+                return false;
+            }
+        }
+        true
+    }
 
     /**
      * Add a new account
