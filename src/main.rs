@@ -20,6 +20,8 @@ use tokio::stream::StreamExt;
 use tui::{backend::CrosstermBackend, Terminal};
 
 use std::io::Write;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 #[derive(Debug, StructOpt)]
 struct Args {
@@ -60,8 +62,10 @@ async fn main() -> anyhow::Result<()> {
     let backend = CrosstermBackend::new(stdout);
 
     let mut terminal = Terminal::new(backend)?;
+    let mut stop = Arc::new(AtomicBool::new(false));
+    let stop_cloned = stop.clone();
 
-    tokio::spawn(async move { Jami::handle_events(tx).await });
+    tokio::spawn(async move { Jami::handle_events(tx, stop_cloned).await });
 
     terminal.clear()?;
 
@@ -98,6 +102,8 @@ async fn main() -> anyhow::Result<()> {
             break;
         }
     }
+
+    stop.store(true, Ordering::Relaxed);
 
     execute!(
         terminal.backend_mut(),

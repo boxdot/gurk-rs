@@ -4,6 +4,8 @@ use dbus::{Connection, ConnectionItem, BusType, Message};
 use dbus::arg::{Array, Dict};
 use log::{debug, error, log_enabled, info, Level};
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::io::Read;
 
 /**TODO
@@ -31,6 +33,7 @@ impl Jami {
 
     pub async fn handle_events<T: std::fmt::Debug>(
         mut tx: tokio::sync::mpsc::Sender<crate::app::Event<T>>,
+        stop: Arc<AtomicBool>,
     ) -> Result<(), std::io::Error> {
         
         loop {
@@ -45,6 +48,9 @@ impl Jami {
                 dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=conversationReady").unwrap();
                 // For each signals, call handlers.
                 for ci in dbus_listener.iter(100) {
+                    if stop.load(Ordering::Relaxed) {
+                        break;
+                    }
                     let msg = if let ConnectionItem::Signal(ref signal) = ci { signal } else { continue };
                     if &*msg.interface().unwrap() != "cx.ring.Ring.ConfigurationManager" { continue };
                     if &*msg.member().unwrap() == "messageReceived" {
@@ -73,9 +79,13 @@ impl Jami {
                 }
             }
 
+            if stop.load(Ordering::Relaxed) {
+                break;
+            }
+
             for ev in events {
                 if tx.send(ev).await.is_err() {
-                    break; // receiver closed
+                    return Ok(()); // receiver closed
                 }
             }
         }
