@@ -254,6 +254,42 @@ impl Jami {
     }
 
     /**
+     * Get current members for a conversation
+     * @param id        Id of the account
+     * @param convid    Id of the conversation
+     * @return current members
+     */
+    pub fn get_members(id: &String, convid: &String) -> Vec<HashMap<String, String>> {
+        let mut members: Vec<HashMap<String, String>> = Vec::new();
+        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
+                                                "cx.ring.Ring.ConfigurationManager",
+                                                "getConversationMembers");
+        if !dbus_msg.is_ok() {
+            error!("getConversationMembers fails. Please verify daemon's API.");
+            return members;
+        }
+        let conn = Connection::get_private(BusType::Session);
+        if !conn.is_ok() {
+            return members;
+        }
+        let dbus = conn.unwrap();
+        let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append2(&*id, &*convid), 2000).unwrap();
+        // getAccountList returns one argument, which is an array of strings.
+        let contacts: Array<Dict<&str, &str, _>, _> = match response.get1() {
+            Some(contacts) => contacts,
+            None => return members
+        };
+        for contact in contacts {
+            let mut details = HashMap::new();
+            for (key, value) in contact {
+                details.insert(String::from(key), String::from(value));
+            }
+            members.push(details);
+        }
+        members
+    }
+
+    /**
      * Get current contacts for account
      * @param id        Id of the account
      * @return current contacts
@@ -360,11 +396,11 @@ impl Jami {
         let dbus = conn.unwrap();
         let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append2(&*id, &*conv_id), 2000).unwrap();
 
-        let isRemoved: bool = match response.get1() {
-            Some(isRemoved) => isRemoved,
+        let removed: bool = match response.get1() {
+            Some(removed) => removed,
             None => false
         };
-        isRemoved
+        removed
     }
 
     /**

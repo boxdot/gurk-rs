@@ -22,6 +22,7 @@ pub struct App {
 #[derive(Serialize, Deserialize)]
 pub struct AppData {
     pub channels: StatefulList<Channel>,
+    pub hash2name: HashMap<String, String>,
     pub account: Account,
     pub out_invite: Vec<OutgoingInvite>,
     pub input: String,
@@ -64,6 +65,17 @@ impl AppData {
         return Account::null();
     }
 
+    fn lookup_members(&mut self) {
+        // Refresh titles for channel
+        for channel in &mut *self.channels.items {
+                println!("@@@ {:?}", channel.members);
+            for member in &*channel.members {
+                println!("@@@");
+                Jami::lookup_name(&self.account.id, &String::new(), &member.hash);
+            }
+        }
+    }
+
     fn channels_for_account(account: &Account) -> Vec<Channel> {
         let mut channels = Vec::new();
         let mut messages = Vec::new();
@@ -83,15 +95,32 @@ impl AppData {
         channels.push(Channel {
             id: String::from("Welcome"),
             name: String::from("Welcome"),
+            members: Vec::new(),
             is_group: false,
             messages,
             unread_messages: 0,
         });
         
         for conversation in Jami::get_conversations(&account.id) {
+            let members_from_daemon = Jami::get_members(&account.id, &conversation);
+            let mut members = Vec::new();
+            for member in members_from_daemon {
+                let role : Role;
+                if member["role"].to_string() == "admin" {
+                    role = Role::Admin;
+                } else {
+                    role = Role::Member;
+                }
+                let hash = member["uri"].to_string();
+                members.push(Member {
+                    hash,
+                    role,
+                })
+            }
             channels.push(Channel {
                 id: conversation.clone(),
                 name: conversation,
+                members: Vec::new(),
                 is_group: true,
                 messages: Vec::new(),
                 unread_messages: 0,
@@ -115,6 +144,7 @@ impl AppData {
         Ok(AppData {
             channels,
             input: String::new(),
+            hash2name: HashMap::new(),
             out_invite: Vec::new(),
             input_cursor: 0,
             account,
@@ -123,11 +153,24 @@ impl AppData {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Role {
+    Member,
+    Admin
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Member {
+    hash: String,
+    role: Role, // TODO enum
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Channel {
     /// Either phone number or group id
     pub id: String,
     pub name: String,
     pub is_group: bool,
+    pub members: Vec<Member>,
     pub messages: Vec<Message>,
     #[serde(default)]
     pub unread_messages: usize,
@@ -165,6 +208,7 @@ impl App {
             None
         };
         let mut data = AppData::init_from_jami()?;
+        data.lookup_members();
         if data.channels.state.selected().is_none() && !data.channels.items.is_empty() {
             data.channels.state.select(Some(0));
         }
@@ -262,6 +306,7 @@ impl App {
                     if !self.data.channels.items.is_empty() {
                         self.data.channels.state.select(Some(0));
                     }
+                    self.data.lookup_members();
                 }
             } else if message == "/help" {
                 channel.messages.push(Message {
@@ -460,6 +505,7 @@ impl App {
             self.data.channels.items.push(Channel {
                 id: conversation_id.clone(),
                 name: conversation_id,
+                members: Vec::new(),
                 is_group: true,
                 messages: Vec::new(),
                 unread_messages: 0,
@@ -477,6 +523,8 @@ impl App {
         address: String,
         name: String,
     ) -> Option<()> {
+        println!("on_registered");
+        self.data.hash2name.insert(address.clone(), name.clone());
         for i in 0..self.data.out_invite.len() {
             let mut out_invite = &self.data.out_invite[i];
             if out_invite.account == account_id && out_invite.member == name {
@@ -496,6 +544,21 @@ impl App {
                 }
                 self.data.out_invite.remove(i);
                 break;
+            }
+        }
+
+        // Refresh titles for channel
+        for channel in &mut *self.data.channels.items {
+            let mut refresh_name = false;
+            let mut name = String::new();
+            for member in &*channel.members {
+                name += self.data.hash2name.get(&member.hash).unwrap_or(&member.hash);
+                if member.hash == address {
+                    refresh_name = true;
+                }
+            }
+            if refresh_name {
+                channel.name = name;
             }
         }
         Some(())
