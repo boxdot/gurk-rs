@@ -2,35 +2,16 @@ use crate::app::Event;
 use crate::account::Account;
 use dbus::{Connection, ConnectionItem, BusType, Message};
 use dbus::arg::{Array, Dict};
-use log::{debug, error, log_enabled, info, Level};
+use log::{error, info};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::io::Read;
 
 /**TODO
  */
-pub struct Jami {
-    jami_dbus: &'static str,
-    configuration_path: &'static str,
-    configuration_iface: &'static str,
-}
+pub struct Jami {}
 
 impl Jami {
-    /**
-     * Init the RORI server, the database and retrieve the RING account linked
-     * @param hash to retrieve
-     * @return a Manager if success, else an error
-     */
-    pub fn init() -> Result<Jami, &'static str> {
-        let mut manager = Jami {
-            jami_dbus: "cx.ring.Ring",
-            configuration_path: "/cx/ring/Ring/ConfigurationManager",
-            configuration_iface: "cx.ring.Ring.ConfigurationManager",
-        };
-        Ok(manager)
-    }
-
     pub async fn handle_events<T: std::fmt::Debug>(
         mut tx: tokio::sync::mpsc::Sender<crate::app::Event<T>>,
         stop: Arc<AtomicBool>,
@@ -121,7 +102,7 @@ impl Jami {
             return false;
         }
         let dbus = conn.unwrap();
-        let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append3(&*account, &*name_service, &*name), 2000).unwrap();
+        let _ = dbus.send_with_reply_and_block(dbus_msg.unwrap().append3(&*account, &*name_service, &*name), 2000).unwrap();
         true
     }
 
@@ -145,7 +126,7 @@ impl Jami {
             return false;
         }
         let dbus = conn.unwrap();
-        let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append3(&*account, &*name_service, &*address), 2000).unwrap();
+        let _ = dbus.send_with_reply_and_block(dbus_msg.unwrap().append3(&*account, &*name_service, &*address), 2000).unwrap();
         true
     }
 
@@ -318,41 +299,6 @@ impl Jami {
     }
 
     /**
-     * Get current contacts for account
-     * @param id        Id of the account
-     * @return current contacts
-     */
-    pub fn get_contacts(id: &String) -> Vec<HashMap<String, String>> {
-        let mut contacts_list: Vec<HashMap<String, String>> = Vec::new();
-        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
-                                                "cx.ring.Ring.ConfigurationManager",
-                                                "getContacts");
-        if !dbus_msg.is_ok() {
-            error!("getAccountList fails. Please verify daemon's API.");
-            return contacts_list;
-        }
-        let conn = Connection::get_private(BusType::Session);
-        if !conn.is_ok() {
-            return contacts_list;
-        }
-        let dbus = conn.unwrap();
-        let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append1(&*id), 2000).unwrap();
-        // getAccountList returns one argument, which is an array of strings.
-        let contacts: Array<Dict<&str, &str, _>, _> = match response.get1() {
-            Some(contacts) => contacts,
-            None => return contacts_list
-        };
-        for contact in contacts {
-            let mut details = HashMap::new();
-            for (key, value) in contact {
-                details.insert(String::from(key), String::from(value));
-            }
-            contacts_list.push(details);
-        }
-        contacts_list
-    }
-
-    /**
      * Start conversation
      * @param id        Id of the account
      */
@@ -451,7 +397,7 @@ impl Jami {
             return;
         }
         let dbus = conn.unwrap();
-        let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append3(&*id, &*conv_id, &*hash), 2000).unwrap();
+        let _ = dbus.send_with_reply_and_block(dbus_msg.unwrap().append3(&*id, &*conv_id, &*hash), 2000).unwrap();
     }
 
     /**
@@ -478,49 +424,4 @@ impl Jami {
         response.get1().unwrap_or(0) as u64
     }
 
-// Private stuff
-
-    /**
-     * Update current RORI account by handling accountsChanged signals from daemon.
-     * @param self
-     * @param ci
-     */
-    fn handle_accounts_signals(&mut self, ci: &ConnectionItem) {
-        // Check signal
-        let msg = if let &ConnectionItem::Signal(ref signal) = ci { signal } else { return };
-        if &*msg.interface().unwrap() != "cx.ring.Ring.ConfigurationManager" { return };
-        if &*msg.member().unwrap() != "accountsChanged" { return };
-        // TODO test if RORI accounts is still exists
-    }
-
-
-    /**
-     * Update current RORI account by handling accountsChanged signals from daemon
-     * @param self
-     * @param ci
-     */
-    fn handle_registration_changed(&self, ci: &ConnectionItem) {
-        // Check signal
-        let msg = if let &ConnectionItem::Signal(ref signal) = ci { signal } else { return };
-        if &*msg.interface().unwrap() != "cx.ring.Ring.ConfigurationManager" { return };
-        if &*msg.member().unwrap() != "registrationStateChanged" { return };
-        // let (account_id, registration_state, _, _) = msg.get4::<&str, &str, u64, &str>();
-        // TODO the account can be disabled. Inform UI
-    }
-
-    /**
-     * Handle new pending requests signals
-     * @param self
-     * @param ci
-     * @return (accountId, from)
-     */
-    fn handle_requests(&self, ci: &ConnectionItem) -> Option<(String, String)> {
-        // Check signal
-        let msg = if let &ConnectionItem::Signal(ref signal) = ci { signal } else { return None };
-        if &*msg.interface().unwrap() != "cx.ring.Ring.ConfigurationManager" { return None };
-        if &*msg.member().unwrap() != "incomingTrustRequest" { return None };
-        // incomingTrustRequest return three arguments
-        let (account_id, from, _, _) = msg.get4::<&str, &str, Dict<&str, &str, _>, u64>();
-        Some((account_id.unwrap().to_string(), from.unwrap().to_string()))
-    }
 }

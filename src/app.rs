@@ -10,13 +10,11 @@ use unicode_width::UnicodeWidthStr;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead, Write};
-use std::path::Path;
 
 pub struct App {
     pub should_quit: bool,
     pub log_file: Option<File>,
     pub data: AppData,
-    pub jami: Jami,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -38,18 +36,6 @@ pub struct OutgoingInvite {
 }
 
 impl AppData {
-    fn save(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
-        let f = File::create(path)?;
-        serde_json::to_writer(f, self)?;
-        Ok(())
-    }
-
-    fn load(path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        let f = File::open(path)?;
-        let mut data: Self = serde_json::from_reader(f)?;
-        data.input_cursor = data.input.width();
-        Ok(data)
-    }
 
     // Move to jami namespace
     fn select_jami_account() -> Account {
@@ -212,13 +198,10 @@ impl App {
             data.channels.state.select(Some(0));
         }
 
-        let jami = Jami::init().unwrap();
-
         Ok(Self {
             data,
             should_quit: false,
             log_file,
-            jami,
         })
     }
 
@@ -565,7 +548,7 @@ impl App {
     ) -> Option<()> {
         self.data.hash2name.insert(address.clone(), name.clone());
         for i in 0..self.data.out_invite.len() {
-            let mut out_invite = &self.data.out_invite[i];
+            let out_invite = &self.data.out_invite[i];
             if out_invite.account == account_id && out_invite.member == name {
                 if status == 0 {
                     let conversation : String;

@@ -62,7 +62,7 @@ async fn main() -> anyhow::Result<()> {
     let backend = CrosstermBackend::new(stdout);
 
     let mut terminal = Terminal::new(backend)?;
-    let mut stop = Arc::new(AtomicBool::new(false));
+    let stop = Arc::new(AtomicBool::new(false));
     let stop_cloned = stop.clone();
 
     tokio::spawn(async move { Jami::handle_events(tx, stop_cloned).await });
