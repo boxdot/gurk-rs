@@ -379,7 +379,7 @@ impl Jami {
     }
 
     /**
-     * Remove a conversation for an account
+     * Invite a member to a conversation
      * @param id        Id of the account
      * @param conv_id   Id of the conversation
      * @param hash      Id of the member to invite
@@ -389,7 +389,29 @@ impl Jami {
                                                 "cx.ring.Ring.ConfigurationManager",
                                                 "addConversationMember");
         if !dbus_msg.is_ok() {
-            error!("getAccountList fails. Please verify daemon's API.");
+            error!("addConversationMember fails. Please verify daemon's API.");
+            return;
+        }
+        let conn = Connection::get_private(BusType::Session);
+        if !conn.is_ok() {
+            return;
+        }
+        let dbus = conn.unwrap();
+        let _ = dbus.send_with_reply_and_block(dbus_msg.unwrap().append3(&*id, &*conv_id, &*hash), 2000).unwrap();
+    }
+
+    /**
+     * Remove a member from a conversation
+     * @param id        Id of the account
+     * @param conv_id   Id of the conversation
+     * @param hash      Id of the member to invite
+     */
+    pub fn rm_conversation_member(id: &String, conv_id: &String, hash: &String) {
+        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
+                                                "cx.ring.Ring.ConfigurationManager",
+                                                "rmConversationMember");
+        if !dbus_msg.is_ok() {
+            error!("rmConversationMember fails. Please verify daemon's API.");
             return;
         }
         let conn = Connection::get_private(BusType::Session);

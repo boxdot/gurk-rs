@@ -24,6 +24,8 @@ pub struct AppData {
     pub account: Account,
     #[serde(skip)]
     pub out_invite: Vec<OutgoingInvite>,
+    #[serde(skip)]
+    pub pending_rm: Vec<PendingRm>,
     pub input: String,
     #[serde(skip)]
     pub input_cursor: usize,
@@ -32,6 +34,12 @@ pub struct AppData {
 pub struct OutgoingInvite {
     pub account: String,
     pub channel: Option<String>,
+    pub member: String,
+}
+
+pub struct PendingRm {
+    pub account: String,
+    pub channel: String,
     pub member: String,
 }
 
@@ -130,6 +138,7 @@ impl AppData {
             input: String::new(),
             hash2name: HashMap::new(),
             out_invite: Vec::new(),
+            pending_rm: Vec::new(),
             input_cursor: 0,
             account,
         })
@@ -324,6 +333,11 @@ impl App {
                 });
                 channel.messages.push(Message {
                     from: String::new(),
+                    message: Some(String::from("/msg <id|username>: Starts a conversation with someone")),
+                    arrived_at: Utc::now(),
+                });
+                channel.messages.push(Message {
+                    from: String::new(),
                     message: Some(String::from("/list: list accounts")),
                     arrived_at: Utc::now(),
                 });
@@ -375,6 +389,27 @@ impl App {
                     show_msg = false;
                     Jami::lookup_name(&account_id, &ns, &member);
                 }
+            }  else if message.starts_with("/kick") {
+                // TODO remove code duplication
+                let mut member = String::from(message.strip_prefix("/kick ").unwrap());
+                if Jami::is_hash(&member) {
+                    Jami::rm_conversation_member(&account_id, &channel.id, &member);
+                } else {
+                    let mut ns = String::new();
+                    if member.find("@") != None {
+                        let member_cloned = member.clone();
+                        let split : Vec<&str> = member_cloned.split("@").collect();
+                        member = split[0].to_string();
+                        ns = split[1].to_string();
+                    }
+                    self.data.pending_rm.push(PendingRm {
+                        account: account_id.to_string(),
+                        channel: channel.id.clone(),
+                        member: member.clone(),
+                    });
+                    show_msg = false;
+                    Jami::lookup_name(&account_id, &ns, &member);
+                }
             } else if message == "/help" {
                 channel.messages.push(Message {
                     from: String::new(),
@@ -389,6 +424,11 @@ impl App {
                 channel.messages.push(Message {
                     from: String::new(),
                     message: Some(String::from("/invite [hash|username]: Invite somebody to the conversation")),
+                    arrived_at: Utc::now(),
+                });
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("/kick [hash|username]: Kick someone from the conversation")),
                     arrived_at: Utc::now(),
                 });
                 channel.messages.push(Message {
@@ -547,6 +587,7 @@ impl App {
         name: String,
     ) -> Option<()> {
         self.data.hash2name.insert(address.clone(), name.clone());
+        // pending invite
         for i in 0..self.data.out_invite.len() {
             let out_invite = &self.data.out_invite[i];
             if out_invite.account == account_id && out_invite.member == name {
@@ -571,6 +612,18 @@ impl App {
                     }
                 }
                 self.data.out_invite.remove(i);
+                break;
+            }
+        }
+
+        // pending remove
+        for i in 0..self.data.pending_rm.len() {
+            let pending_rm = &self.data.pending_rm[i];
+            if pending_rm.account == account_id && pending_rm.member == name {
+                if status == 0 {
+                    Jami::rm_conversation_member(&pending_rm.account, &pending_rm.channel, &address);
+                }
+                self.data.pending_rm.remove(i);
                 break;
             }
         }
