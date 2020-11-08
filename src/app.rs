@@ -24,16 +24,16 @@ pub struct AppData {
     pub channels: StatefulList<Channel>,
     pub hash2name: HashMap<String, String>,
     pub account: Account,
+    #[serde(skip)]
     pub out_invite: Vec<OutgoingInvite>,
     pub input: String,
     #[serde(skip)]
     pub input_cursor: usize,
 }
 
-#[derive(Serialize, Deserialize)]
 pub struct OutgoingInvite {
     pub account: String,
-    pub channel: String,
+    pub channel: Option<String>,
     pub member: String,
 }
 
@@ -68,10 +68,8 @@ impl AppData {
     fn lookup_members(&mut self) {
         // Refresh titles for channel
         for channel in &mut *self.channels.items {
-                println!("@@@ {:?}", channel.members);
             for member in &*channel.members {
-                println!("@@@");
-                Jami::lookup_name(&self.account.id, &String::new(), &member.hash);
+                Jami::lookup_address(&self.account.id, &String::new(), &member.hash);
             }
         }
     }
@@ -120,7 +118,7 @@ impl AppData {
             channels.push(Channel {
                 id: conversation.clone(),
                 name: conversation,
-                members: Vec::new(),
+                members,
                 is_group: true,
                 messages: Vec::new(),
                 unread_messages: 0,
@@ -194,6 +192,7 @@ pub enum Event<I> {
         payloads: HashMap<String, String>
     },
     ConversationReady(String, String),
+    ConversationRequest(String, String),
     RegistrationStateChanged(String, String),
     RegisteredNameFound(String, u64, String, String),
     Resize,
@@ -278,11 +277,32 @@ impl App {
         let mut show_msg = true;
 
         // TODO enum
-        if !channel.is_group {
+        if message.starts_with("/msg ") {
+            let account_id = &self.data.account.id;
+            let mut member = String::from(message.strip_prefix("/msg ").unwrap());
+            if Jami::is_hash(&member) {
+                let conversation = Jami::start_conversation(&account_id);
+                Jami::add_conversation_member(&account_id, &conversation, &member);
+            } else {
+                let mut ns = String::new();
+                if member.find("@") != None {
+                    let member_cloned = member.clone();
+                    let split : Vec<&str> = member_cloned.split("@").collect();
+                    member = split[0].to_string();
+                    ns = split[1].to_string();
+                }
+                self.data.out_invite.push(OutgoingInvite {
+                    account: account_id.to_string(),
+                    channel: None,
+                    member: member.clone(),
+                });
+                show_msg = false;
+                Jami::lookup_name(&account_id, &ns, &member);
+            }
+        } else if !channel.is_group {
             if message == "/new" {
                 Jami::start_conversation(&self.data.account.id);
-            }
-            if message == "/list" {
+            } else if message == "/list" {
                 for account in Jami::get_account_list() {
                     channel.messages.push(Message {
                         from: String::new(),
@@ -366,7 +386,7 @@ impl App {
                     }
                     self.data.out_invite.push(OutgoingInvite {
                         account: account_id.to_string(),
-                        channel: channel.id.clone(),
+                        channel: Some(channel.id.clone()),
                         member: member.clone(),
                     });
                     show_msg = false;
@@ -516,6 +536,26 @@ impl App {
         Some(())
     }
 
+    pub fn on_conversation_request(
+        &mut self,
+        account_id: String,
+        conversation_id: String,
+    ) -> Option<()> {
+        if account_id == self.data.account.id {
+            self.data.channels.items.push(Channel {
+                id: conversation_id.clone(),
+                name: String::from(format!("r:{}", conversation_id)),
+                members: Vec::new(),
+                is_group: true,
+                messages: Vec::new(),
+                unread_messages: 0,
+            });
+            self.bubble_up_channel(self.data.channels.items.len() - 1);
+            self.data.channels.state.select(Some(0));
+        }
+        Some(())
+    }
+
     pub fn on_registered_name_found(
         &mut self,
         account_id: String,
@@ -523,17 +563,22 @@ impl App {
         address: String,
         name: String,
     ) -> Option<()> {
-        println!("on_registered");
         self.data.hash2name.insert(address.clone(), name.clone());
         for i in 0..self.data.out_invite.len() {
             let mut out_invite = &self.data.out_invite[i];
             if out_invite.account == account_id && out_invite.member == name {
                 if status == 0 {
-                    Jami::add_conversation_member(&out_invite.account, &out_invite.channel, &address);
+                    let conversation : String;
+                    if out_invite.channel.as_ref().is_none() {
+                        conversation = Jami::start_conversation(&self.data.account.id);
+                    } else {
+                        conversation = out_invite.channel.clone().unwrap();
+                    }
+                    Jami::add_conversation_member(&out_invite.account, &conversation, &address);
                 } else {
                     let channels = &mut self.data.channels.items;
                     for channel in &mut *channels {
-                        if channel.id == out_invite.channel {
+                        if channel.id == out_invite.channel.clone().unwrap_or(String::new()) {
                             channel.messages.push(Message {
                                 from: String::new(),
                                 message: Some(String::from("Cannot invite member")),

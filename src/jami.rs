@@ -47,6 +47,7 @@ impl Jami {
                 dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=messageReceived").unwrap();
                 dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=conversationReady").unwrap();
                 dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=registeredNameFound").unwrap();
+                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=conversationRequestReceived").unwrap();
                 // For each signals, call handlers.
                 for ci in dbus_listener.iter(100) {
                     if stop.load(Ordering::Relaxed) {
@@ -74,6 +75,9 @@ impl Jami {
                     } else if &*msg.member().unwrap() == "registeredNameFound" { 
                         let (account_id, status, address, name) = msg.get4::<&str, i32, &str, &str>();
                         events.push(Event::RegisteredNameFound(String::from(account_id.unwrap()), status.unwrap() as u64, String::from(address.unwrap()), String::from(name.unwrap())));
+                    } else if &*msg.member().unwrap() == "conversationRequestReceived" { 
+                        let (account_id, conversation_id, _) = msg.get3::<&str, &str, Dict<&str, &str, _>>();
+                        events.push(Event::ConversationRequest(String::from(account_id.unwrap()), String::from(conversation_id.unwrap())));
                     }
                     
                     // Send events
@@ -118,6 +122,30 @@ impl Jami {
         }
         let dbus = conn.unwrap();
         let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append3(&*account, &*name_service, &*name), 2000).unwrap();
+        true
+    }
+
+    /**
+     * Asynchronously lookup an address
+     * @param account
+     * @param name_service
+     * @param address
+     * @return if dbus is ok
+     */
+    pub fn lookup_address(account: &String, name_service: &String, address: &String) -> bool {
+        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
+                                                "cx.ring.Ring.ConfigurationManager",
+                                                "lookupAddress");
+        if !dbus_msg.is_ok() {
+            error!("lookupAddress fails. Please verify daemon's API.");
+            return false;
+        }
+        let conn = Connection::get_private(BusType::Session);
+        if !conn.is_ok() {
+            return false;
+        }
+        let dbus = conn.unwrap();
+        let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append3(&*account, &*name_service, &*address), 2000).unwrap();
         true
     }
 
@@ -328,20 +356,21 @@ impl Jami {
      * Start conversation
      * @param id        Id of the account
      */
-    pub fn start_conversation(id: &String) {
+    pub fn start_conversation(id: &String) -> String {
         let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
                                                 "cx.ring.Ring.ConfigurationManager",
                                                 "startConversation");
         if !dbus_msg.is_ok() {
             error!("startConversation fails. Please verify daemon's API.");
-            return;
+            return String::new();
         }
         let conn = Connection::get_private(BusType::Session);
         if !conn.is_ok() {
-            return;
+            return String::new();
         }
         let dbus = conn.unwrap();
         let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append1(&*id), 2000).unwrap();
+        response.get1().unwrap_or(String::new())
     }
 
     /**
