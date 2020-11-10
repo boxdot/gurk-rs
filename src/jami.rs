@@ -29,6 +29,7 @@ impl Jami {
                 dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=conversationReady").unwrap();
                 dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=registeredNameFound").unwrap();
                 dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=conversationRequestReceived").unwrap();
+                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=conversationLoaded").unwrap();
                 // For each signals, call handlers.
                 for ci in dbus_listener.iter(100) {
                     if stop.load(Ordering::Relaxed) {
@@ -59,6 +60,17 @@ impl Jami {
                     } else if &*msg.member().unwrap() == "conversationRequestReceived" { 
                         let (account_id, conversation_id, _) = msg.get3::<&str, &str, Dict<&str, &str, _>>();
                         events.push(Event::ConversationRequest(String::from(account_id.unwrap()), String::from(conversation_id.unwrap())));
+                    } else if &*msg.member().unwrap() == "conversationLoaded" { 
+                        let (id, account_id, conversation_id, messages_dbus) = msg.get4::<u32, &str, &str, Array<Dict<&str, &str, _>, _>>();
+                        let mut messages = Vec::new();
+                        for message_dbus in messages_dbus.unwrap() {
+                            let mut message: HashMap<String, String> = HashMap::new();
+                            for (key, value) in message_dbus {
+                                message.insert(String::from(key), String::from(value));
+                            }
+                            messages.push(message);
+                        }
+                        events.push(Event::ConversationLoaded(id.unwrap(), String::from(account_id.unwrap()), String::from(conversation_id.unwrap()), messages));
                     }
                     
                     // Send events
@@ -349,6 +361,33 @@ impl Jami {
         }
         conversations
     }
+
+
+    /**
+     * Asynchronously load a conversation
+     * @param account
+     * @param conversation
+     * @param from              "" if latest else the commit id
+     * @param size              0 if all else max number of messages to get
+     * @return the id of the request
+     */
+    pub fn load_conversation(account: &String, conversation: &String, from: &String, size: u32) -> u32 {
+        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
+                                                "cx.ring.Ring.ConfigurationManager",
+                                                "loadConversationMessages");
+        if !dbus_msg.is_ok() {
+            error!("loadConversationMessages fails. Please verify daemon's API.");
+            return 0;
+        }
+        let conn = Connection::get_private(BusType::Session);
+        if !conn.is_ok() {
+            return 0;
+        }
+        let dbus = conn.unwrap();
+        let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append3(&*account, &*conversation, &*from).append1(size), 2000).unwrap();
+        response.get1().unwrap_or(0)
+    }
+
 
     /**
      * Remove a conversation for an account

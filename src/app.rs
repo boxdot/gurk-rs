@@ -190,6 +190,7 @@ pub enum Event<I> {
     ConversationRequest(String, String),
     RegistrationStateChanged(String, String),
     RegisteredNameFound(String, u64, String, String),
+    ConversationLoaded(u32, String, String, Vec<HashMap<String, String>>),
     Resize,
 }
 
@@ -249,7 +250,7 @@ impl App {
         }
     }
 
-    pub fn on_registration_state_changed(&mut self, _account_id: &String, registration_state: &String) {
+    pub async fn on_registration_state_changed(&mut self, _account_id: &String, registration_state: &String) {
         if registration_state == "REGISTERED" && self.data.account == Account::null() {
             self.data.account = AppData::select_jami_account();
         }
@@ -458,11 +459,25 @@ impl App {
     pub fn on_up(&mut self) {
         self.reset_unread_messages();
         self.data.channels.previous();
+        if let Some(idx) = self.data.channels.state.selected() {
+            let channel = &mut self.data.channels.items[idx];
+            if channel.is_group {
+                channel.messages.clear();
+                Jami::load_conversation(&self.data.account.id, &channel.id, &String::new(), 0);            
+            }           
+        }
     }
 
     pub fn on_down(&mut self) {
         self.reset_unread_messages();
         self.data.channels.next();
+        if let Some(idx) = self.data.channels.state.selected() {
+            let channel = &mut self.data.channels.items[idx];
+            if channel.is_group {
+                channel.messages.clear();
+                Jami::load_conversation(&self.data.account.id, &channel.id, &String::new(), 0);            
+            }
+        }
     }
 
     fn reset_unread_messages(&mut self) -> bool {
@@ -500,11 +515,16 @@ impl App {
     ) -> Option<()> {
         self.log(format!("incoming: {:?}", payloads));
         if account_id == self.data.account.id {
-            let channels = &mut self.data.channels;
-            if let Some(idx) = channels.state.selected() {
-                let channel = &mut channels.items[idx];
+            for channel in &mut *self.data.channels.items {
                 if channel.id == conversation_id {
-                    if payloads.get("type").unwrap() == "text/plain" {
+                    if payloads.get("type").unwrap().is_empty() {
+                        let enter = format!("--> | {} started the conversation", payloads.get("author").unwrap());
+                        channel.messages.push(Message {
+                            from: String::new(),
+                            message: Some(String::from(enter)),
+                            arrived_at: Utc::now(), // TODO timestamp
+                        });
+                    } else if payloads.get("type").unwrap() == "text/plain" {
                         channel.messages.push(Message {
                             from: String::from(payloads.get("author").unwrap()),
                             message: Some(String::from(payloads.get("body").unwrap())),
@@ -539,7 +559,22 @@ impl App {
         Some(())
     }
 
-    pub fn on_conversation_ready(
+    pub async fn on_conversation_loaded(
+        &mut self,
+        _id: u32,
+        account_id: String,
+        conversation_id: String,
+        messages: Vec<HashMap<String, String>>,
+    ) -> Option<()> {
+        let messages: Vec<_> = messages.into_iter().rev().collect();
+        for msg in messages {
+            // TODO no need to clone
+            let _ = self.on_message(account_id.clone(), conversation_id.clone(), msg).await;
+        }
+        Some(())
+    }
+
+    pub async fn on_conversation_ready(
         &mut self,
         account_id: String,
         conversation_id: String,
@@ -559,7 +594,7 @@ impl App {
         Some(())
     }
 
-    pub fn on_conversation_request(
+    pub async fn on_conversation_request(
         &mut self,
         account_id: String,
         conversation_id: String,
@@ -579,7 +614,7 @@ impl App {
         Some(())
     }
 
-    pub fn on_registered_name_found(
+    pub async fn on_registered_name_found(
         &mut self,
         account_id: String,
         status: u64,
@@ -634,6 +669,7 @@ impl App {
             let mut name = String::new();
             for member in &*channel.members {
                 name += self.data.hash2name.get(&member.hash).unwrap_or(&member.hash);
+                name += ", ";
                 if member.hash == address {
                     refresh_name = true;
                 }

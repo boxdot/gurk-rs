@@ -34,8 +34,6 @@ struct Args {
 async fn main() -> anyhow::Result<()> {
     let args = Args::from_args();
 
-    let mut app = App::try_new(args.verbose)?;
-
     enable_raw_mode()?;
     let _raw_mode_guard = scopeguard::guard((), |_| {
         disable_raw_mode().unwrap();
@@ -59,16 +57,19 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    let backend = CrosstermBackend::new(stdout);
-
-    let mut terminal = Terminal::new(backend)?;
     let stop = Arc::new(AtomicBool::new(false));
     let stop_cloned = stop.clone();
 
     tokio::spawn(async move { Jami::handle_events(tx, stop_cloned).await });
 
+    let backend = CrosstermBackend::new(stdout);
+
+
+    let mut terminal = Terminal::new(backend)?;
+
     terminal.clear()?;
 
+    let mut app = App::try_new(args.verbose)?;
     loop {
         terminal.draw(|f| ui::draw(f, &mut app))?;
         match rx.recv().await {
@@ -89,16 +90,19 @@ async fn main() -> anyhow::Result<()> {
                 // will just redraw the app
             },
             Some(Event::RegistrationStateChanged(account_id, registration_state)) => {
-                app.on_registration_state_changed(&account_id, &registration_state);
+                app.on_registration_state_changed(&account_id, &registration_state).await;
             },
             Some(Event::ConversationReady(account_id, conversation_id)) => {
-                app.on_conversation_ready(account_id, conversation_id);
+                app.on_conversation_ready(account_id, conversation_id).await;
             },
             Some(Event::ConversationRequest(account_id, conversation_id)) => {
-                app.on_conversation_request(account_id, conversation_id);
+                app.on_conversation_request(account_id, conversation_id).await;
             },
             Some(Event::RegisteredNameFound(account_id, status, address, name)) => {
-                app.on_registered_name_found(account_id, status, address, name);
+                app.on_registered_name_found(account_id, status, address, name).await;
+            },
+            Some(Event::ConversationLoaded(id, account_id, conversation_id, messages)) => {
+                app.on_conversation_loaded(id, account_id, conversation_id, messages).await;
             },
             None => {
                 break;
