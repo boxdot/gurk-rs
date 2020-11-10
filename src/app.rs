@@ -684,11 +684,12 @@ impl App {
     fn bubble_up_channel(&mut self, channel_idx: usize) {
         // bubble up channel to the beginning of the list
         let channels = &mut self.data.channels;
-        for (prev, next) in (0..channel_idx).zip(1..channel_idx + 1).rev() {
+        for (prev, next) in (1..channel_idx).zip(2..channel_idx + 1).rev() {
             channels.items.swap(prev, next);
         }
         match channels.state.selected() {
-            Some(selected_idx) if selected_idx == channel_idx => channels.state.select(Some(0)),
+            Some(0) if 0 == channel_idx => channels.state.select(Some(0)),
+            Some(selected_idx) if selected_idx == channel_idx => channels.state.select(Some(1)),
             Some(selected_idx) if selected_idx < channel_idx => {
                 channels.state.select(Some(selected_idx + 1));
             }
