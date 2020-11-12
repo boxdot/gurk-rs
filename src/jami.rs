@@ -275,6 +275,66 @@ impl Jami {
     }
 
     /**
+     * Get account details
+     * @param id the account id to build
+     * @return the account details
+     */
+    pub fn get_account_details(id: &str) -> HashMap<String, String> {
+        let mut result = HashMap::new();
+        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
+                                                "cx.ring.Ring.ConfigurationManager",
+                                                "getAccountDetails");
+        if !dbus_msg.is_ok() {
+            error!("getAccountDetails fails. Please verify daemon's API.");
+            return result;
+        }
+        let conn = Connection::get_private(BusType::Session);
+        if !conn.is_ok() {
+            error!("connection not ok.");
+            return result;
+        }
+        let dbus = conn.unwrap();
+        let response = dbus.send_with_reply_and_block(
+                                           dbus_msg.unwrap().append1(id), 2000
+                                       ).ok().expect("Is the ring-daemon launched?");
+        let details: Dict<&str, &str, _> = match response.get1() {
+            Some(details) => details,
+            None => {
+                return result;
+            }
+        };
+
+        for (key, value) in details {
+            result.insert(String::from(key), String::from(value));
+        }
+        result
+    }
+
+    /**
+     * Get account details
+     * @param id the account id to build
+     * @return the account details
+     */
+    pub fn set_account_details(id: &str, details: HashMap<String, String>)  {
+        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
+                                                "cx.ring.Ring.ConfigurationManager",
+                                                "setAccountDetails");
+        if !dbus_msg.is_ok() {
+            error!("setAccountDetails fails. Please verify daemon's API.");
+            return;
+        }
+        let conn = Connection::get_private(BusType::Session);
+        if !conn.is_ok() {
+            error!("connection not ok.");
+            return;
+        }
+        let dbus = conn.unwrap();
+        let _ = dbus.send_with_reply_and_block(
+                                           dbus_msg.unwrap().append2(id, details), 2000
+                                       ).ok().expect("Is the ring-daemon launched?");
+    }
+
+    /**
      * Get current members for a conversation
      * @param id        Id of the account
      * @param convid    Id of the conversation

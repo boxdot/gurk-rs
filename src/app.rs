@@ -322,6 +322,35 @@ impl App {
                         arrived_at: Utc::now(),
                     });
                 }
+            } else if message == "/get" || message.starts_with("/get ") {
+                let parts : Vec<&str> = message.split(" ").collect();
+                let filter = parts.get(1).unwrap_or(&"").to_string();
+                for (key, value) in Jami::get_account_details(&self.data.account.id) {
+                    if filter.is_empty() || filter.to_lowercase() == key.to_lowercase() {
+                        channel.messages.push(Message {
+                            from: String::new(),
+                            message: Some(String::from(format!("{}: {}", key, value))),
+                            arrived_at: Utc::now(),
+                        });
+                    }
+                }
+                show_msg = false;
+            } else if message.starts_with("/set") {
+                let parts : Vec<&str> = message.split(" ").collect();
+                let key = parts.get(1).unwrap_or(&"").to_string();
+                let value = parts.get(2).unwrap_or(&"").to_string();
+                let mut details = Jami::get_account_details(&self.data.account.id);
+                let mut key_found = String::new();
+                for (key2, _) in &details {
+                    if key2.to_lowercase() == key.to_lowercase() {
+                        key_found = key2.to_string();
+                    }
+                }
+                if !key_found.is_empty() {
+                    details.insert(key_found, value.to_string());
+                }
+                Jami::set_account_details(&self.data.account.id, details);
+                show_msg = false;
             } else if message.starts_with("/switch ") {
                 let account_id = String::from(message.strip_prefix("/switch ").unwrap());
                 let account = Jami::get_account(&*account_id);
@@ -364,6 +393,16 @@ impl App {
                 channel.messages.push(Message {
                     from: String::new(),
                     message: Some(String::from("/switch <id>: switch to an account")),
+                    arrived_at: Utc::now(),
+                });
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("/get [key]: get account details (if key specified, only get key)")),
+                    arrived_at: Utc::now(),
+                });
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("/set <key> <value>: set account detail")),
                     arrived_at: Utc::now(),
                 });
                 channel.messages.push(Message {
