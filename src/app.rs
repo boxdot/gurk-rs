@@ -88,10 +88,21 @@ impl AppData {
             id: String::from("Welcome"),
             name: String::from("Welcome"),
             members: Vec::new(),
-            is_group: false,
+            channel_type: ChannelType::Generated,
             messages,
             unread_messages: 0,
         });
+        
+        for request in Jami::get_conversations_requests(&account.id) {
+            channels.push(Channel {
+                id: request.get("id").unwrap().clone(),
+                name: String::from(format!("r:{}", request.get("id").unwrap())),
+                members: Vec::new(),
+                channel_type: ChannelType::Invite,
+                messages: Vec::new(),
+                unread_messages: 0,
+            });
+        }
         
         for conversation in Jami::get_conversations(&account.id) {
             let members_from_daemon = Jami::get_members(&account.id, &conversation);
@@ -113,7 +124,7 @@ impl AppData {
                 id: conversation.clone(),
                 name: conversation,
                 members,
-                is_group: true,
+                channel_type: ChannelType::Group,
                 messages: Vec::new(),
                 unread_messages: 0,
             });
@@ -157,12 +168,19 @@ pub struct Member {
     role: Role, // TODO enum
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum ChannelType {
+    Generated,
+    Group,
+    Invite,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Channel {
     /// Either phone number or group id
     pub id: String,
     pub name: String,
-    pub is_group: bool,
+    pub channel_type: ChannelType,
     pub members: Vec<Member>,
     pub messages: Vec<Message>,
     #[serde(default)]
@@ -292,7 +310,7 @@ impl App {
                 show_msg = false;
                 Jami::lookup_name(&account_id, &ns, &member);
             }
-        } else if !channel.is_group {
+        } else if channel.channel_type == ChannelType::Generated {
             if message == "/new" {
                 Jami::start_conversation(&self.data.account.id);
             } else if message == "/list" {
@@ -353,7 +371,7 @@ impl App {
                     arrived_at: Utc::now(),
                 });
             }
-        } else {
+        } else if channel.channel_type == ChannelType::Group {
             // TODO simplify
             let account_id = &self.data.account.id;
             if message == "/leave" {
@@ -441,6 +459,39 @@ impl App {
                 show_msg = false;
                 Jami::send_conversation_message(&account_id, &channel.id, &message, &String::new());
             }
+        } else if channel.channel_type == ChannelType::Invite {
+            // TODO simplify
+            let account_id = &self.data.account.id;
+            if message == "/leave" {
+                Jami::decline_request(&account_id, &channel.id);
+                self.data.channels.items.remove(channel_idx);
+                if !self.data.channels.items.is_empty() {
+                    self.data.channels.state.select(Some(0));
+                }
+            } else if message.starts_with("/join") {
+                Jami::accept_request(&account_id, &channel.id);
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("Syncing… the view will update")),
+                    arrived_at: Utc::now(),
+                });
+            } else {
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("/help: Show this help")),
+                    arrived_at: Utc::now(),
+                });
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("/leave: Decline this request")),
+                    arrived_at: Utc::now(),
+                });
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("/join: Accepts the request")),
+                    arrived_at: Utc::now(),
+                });
+            }
         }
 
         if show_msg {
@@ -461,7 +512,7 @@ impl App {
         self.data.channels.previous();
         if let Some(idx) = self.data.channels.state.selected() {
             let channel = &mut self.data.channels.items[idx];
-            if channel.is_group {
+            if channel.channel_type == ChannelType::Group {
                 channel.messages.clear();
                 Jami::load_conversation(&self.data.account.id, &channel.id, &String::new(), 0);            
             }           
@@ -473,7 +524,7 @@ impl App {
         self.data.channels.next();
         if let Some(idx) = self.data.channels.state.selected() {
             let channel = &mut self.data.channels.items[idx];
-            if channel.is_group {
+            if channel.channel_type == ChannelType::Group {
                 channel.messages.clear();
                 Jami::load_conversation(&self.data.account.id, &channel.id, &String::new(), 0);            
             }
@@ -580,11 +631,13 @@ impl App {
         conversation_id: String,
     ) -> Option<()> {
         if account_id == self.data.account.id {
+            self.data.channels.state.select(Some(0));
+            self.data.channels.items.retain(|channel| channel.id != conversation_id);
             self.data.channels.items.push(Channel {
                 id: conversation_id.clone(),
                 name: conversation_id,
                 members: Vec::new(),
-                is_group: true,
+                channel_type: ChannelType::Group,
                 messages: Vec::new(),
                 unread_messages: 0,
             });
@@ -604,7 +657,7 @@ impl App {
                 id: conversation_id.clone(),
                 name: String::from(format!("r:{}", conversation_id)),
                 members: Vec::new(),
-                is_group: true,
+                channel_type: ChannelType::Group,
                 messages: Vec::new(),
                 unread_messages: 0,
             });

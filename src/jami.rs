@@ -342,7 +342,7 @@ impl Jami {
                                                 "cx.ring.Ring.ConfigurationManager",
                                                 "getConversations");
         if !dbus_msg.is_ok() {
-            error!("getAccountList fails. Please verify daemon's API.");
+            error!("getConversations fails. Please verify daemon's API.");
             return conversations;
         }
         let conn = Connection::get_private(BusType::Session);
@@ -362,6 +362,82 @@ impl Jami {
         conversations
     }
 
+    /**
+     * Get current conversations requests for account
+     * @param id        Id of the account
+     * @return current conversations requests
+     */
+    pub fn get_conversations_requests(id: &String) -> Vec<HashMap<String, String>> {
+        let mut requests: Vec<HashMap<String, String>> = Vec::new();
+        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
+                                                "cx.ring.Ring.ConfigurationManager",
+                                                "getConversationRequests");
+        if !dbus_msg.is_ok() {
+            error!("getConversationRequests fails. Please verify daemon's API.");
+            return requests;
+        }
+        let conn = Connection::get_private(BusType::Session);
+        if !conn.is_ok() {
+            return requests;
+        }
+        let dbus = conn.unwrap();
+        let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append1(&*id), 2000).unwrap();
+        // getAccountList returns one argument, which is an array of strings.
+        let requests_rep: Array<Dict<&str, &str, _>, _> = match response.get1() {
+            Some(requests) => requests,
+            None => return requests
+        };
+        for req in requests_rep {
+            let mut request = HashMap::new();
+            for (key, value) in req {
+                request.insert(String::from(key), String::from(value));
+            }
+            requests.push(request);
+        }
+        requests
+    }
+
+    /**
+     * Decline a conversation request
+     * @param id        Id of the account
+     * @param conv_id   Id of the conversation
+     */
+    pub fn decline_request(id: &String, conv_id: &String) {
+        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
+                                                "cx.ring.Ring.ConfigurationManager",
+                                                "declineConversationRequest");
+        if !dbus_msg.is_ok() {
+            error!("declineConversationRequest fails. Please verify daemon's API.");
+            return;
+        }
+        let conn = Connection::get_private(BusType::Session);
+        if !conn.is_ok() {
+            return;
+        }
+        let dbus = conn.unwrap();
+        let _ = dbus.send_with_reply_and_block(dbus_msg.unwrap().append2(&*id, &*conv_id), 2000).unwrap();
+    }
+
+    /**
+     * Accept a conversation request
+     * @param id        Id of the account
+     * @param conv_id   Id of the conversation
+     */
+    pub fn accept_request(id: &String, conv_id: &String) {
+        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
+                                                "cx.ring.Ring.ConfigurationManager",
+                                                "acceptConversationRequest");
+        if !dbus_msg.is_ok() {
+            error!("acceptConversationRequest fails. Please verify daemon's API.");
+            return;
+        }
+        let conn = Connection::get_private(BusType::Session);
+        if !conn.is_ok() {
+            return;
+        }
+        let dbus = conn.unwrap();
+        let _ = dbus.send_with_reply_and_block(dbus_msg.unwrap().append2(&*id, &*conv_id), 2000).unwrap();
+    }
 
     /**
      * Asynchronously load a conversation
