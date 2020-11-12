@@ -2,7 +2,7 @@ use crate::account::Account;
 use crate::util::StatefulList;
 use crate::jami::Jami;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use crossterm::event::KeyCode;
 use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthStr;
@@ -10,6 +10,7 @@ use unicode_width::UnicodeWidthStr;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead, Write};
+use std::time::{Duration, UNIX_EPOCH, SystemTime};
 
 pub struct App {
     pub should_quit: bool,
@@ -568,18 +569,26 @@ impl App {
         if account_id == self.data.account.id {
             for channel in &mut *self.data.channels.items {
                 if channel.id == conversation_id {
+                    let mut arrived_at = SystemTime::UNIX_EPOCH;
+                    let tstr : String = payloads.get("timestamp").unwrap_or(&String::new()).to_string();
+                    if tstr.is_empty() {
+                        arrived_at = SystemTime::now();
+                    } else {
+                        arrived_at += Duration::from_secs(tstr.parse::<u64>().unwrap_or(0));
+                    }
+                    let arrived_at = Utc.timestamp(arrived_at.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64, 0);
                     if payloads.get("type").unwrap().is_empty() {
                         let enter = format!("--> | {} started the conversation", payloads.get("author").unwrap());
                         channel.messages.push(Message {
                             from: String::new(),
                             message: Some(String::from(enter)),
-                            arrived_at: Utc::now(), // TODO timestamp
+                            arrived_at,
                         });
                     } else if payloads.get("type").unwrap() == "text/plain" {
                         channel.messages.push(Message {
                             from: String::from(payloads.get("author").unwrap()),
                             message: Some(String::from(payloads.get("body").unwrap())),
-                            arrived_at: Utc::now(), // TODO timestamp
+                            arrived_at,
                         });
                     } else if payloads.get("type").unwrap() == "member" {
                         let body = String::from(payloads.get("body").unwrap());
@@ -588,20 +597,20 @@ impl App {
                             channel.messages.push(Message {
                                 from: String::new(),
                                 message: Some(String::from(enter)),
-                                arrived_at: Utc::now(), // TODO timestamp
+                                arrived_at,
                             });
                         } else {
                             channel.messages.push(Message {
                                 from: String::new(),
                                 message: Some(String::from(payloads.get("body").unwrap())),
-                                arrived_at: Utc::now(), // TODO timestamp
+                                arrived_at,
                             });
                         }
                     } else {
                         channel.messages.push(Message {
                             from: String::new(),
                             message: Some(String::from(format!("{:?}", payloads))),
-                            arrived_at: Utc::now(),
+                            arrived_at,
                         });
                     }
                 }
