@@ -569,6 +569,7 @@ impl App {
         if account_id == self.data.account.id {
             for channel in &mut *self.data.channels.items {
                 if channel.id == conversation_id {
+                    // Parse timestamp
                     let mut arrived_at = SystemTime::UNIX_EPOCH;
                     let tstr : String = payloads.get("timestamp").unwrap_or(&String::new()).to_string();
                     if tstr.is_empty() {
@@ -577,38 +578,49 @@ impl App {
                         arrived_at += Duration::from_secs(tstr.parse::<u64>().unwrap_or(0));
                     }
                     let arrived_at = Utc.timestamp(arrived_at.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64, 0);
+                    // author
+                    let author_str = payloads.get("author").unwrap_or(&String::new()).to_string();
+                    let mut author = self.data.hash2name.get(&author_str).unwrap_or(&author_str).to_string();
+                    if author.is_empty() {
+                        author = author_str;
+                    }
+                    // print message
                     if payloads.get("type").unwrap().is_empty() {
-                        let enter = format!("--> | {} started the conversation", payloads.get("author").unwrap());
                         channel.messages.push(Message {
-                            from: String::new(),
-                            message: Some(String::from(enter)),
+                            from: author,
+                            message: Some(String::from("--> started the conversation")),
                             arrived_at,
                         });
                     } else if payloads.get("type").unwrap() == "text/plain" {
                         channel.messages.push(Message {
-                            from: String::from(payloads.get("author").unwrap()),
+                            from: author,
                             message: Some(String::from(payloads.get("body").unwrap())),
                             arrived_at,
                         });
                     } else if payloads.get("type").unwrap() == "member" {
                         let body = String::from(payloads.get("body").unwrap());
                         if body.starts_with("Add member ") {
-                            let enter = format!("--> | {} has been added", body.strip_prefix("Add member ").unwrap());
+                            let uri_str = body.strip_prefix("Add member ").unwrap().to_string();
+                            let mut uri = self.data.hash2name.get(&uri_str).unwrap_or(&uri_str).to_string();
+                            if uri.is_empty() {
+                                uri = uri_str;
+                            }
+                            let enter = format!("--> | {} has been added", uri);
                             channel.messages.push(Message {
-                                from: String::new(),
+                                from: author,
                                 message: Some(String::from(enter)),
                                 arrived_at,
                             });
                         } else {
                             channel.messages.push(Message {
-                                from: String::new(),
+                                from: author,
                                 message: Some(String::from(payloads.get("body").unwrap())),
                                 arrived_at,
                             });
                         }
                     } else {
                         channel.messages.push(Message {
-                            from: String::new(),
+                            from: author,
                             message: Some(String::from(format!("{:?}", payloads))),
                             arrived_at,
                         });
@@ -730,7 +742,12 @@ impl App {
             let mut refresh_name = false;
             let mut name = String::new();
             for member in &*channel.members {
-                name += self.data.hash2name.get(&member.hash).unwrap_or(&member.hash);
+                let uri = self.data.hash2name.get(&member.hash).unwrap_or(&member.hash);
+                if !uri.is_empty() {
+                    name += uri;
+                } else {
+                    name += &member.hash;
+                }
                 name += ", ";
                 if member.hash == address {
                     refresh_name = true;
