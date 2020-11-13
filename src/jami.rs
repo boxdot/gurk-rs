@@ -30,6 +30,7 @@ impl Jami {
                 dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=registeredNameFound").unwrap();
                 dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=conversationRequestReceived").unwrap();
                 dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=conversationLoaded").unwrap();
+                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=profileReceived").unwrap();
                 // For each signals, call handlers.
                 for ci in dbus_listener.iter(100) {
                     if stop.load(Ordering::Relaxed) {
@@ -60,6 +61,9 @@ impl Jami {
                     } else if &*msg.member().unwrap() == "conversationRequestReceived" { 
                         let (account_id, conversation_id, _) = msg.get3::<&str, &str, Dict<&str, &str, _>>();
                         events.push(Event::ConversationRequest(String::from(account_id.unwrap()), String::from(conversation_id.unwrap())));
+                    } else if &*msg.member().unwrap() == "profileReceived" { 
+                        let (account_id, from, path) = msg.get3::<&str, &str, &str>();
+                        events.push(Event::ProfileReceived(String::from(account_id.unwrap()), String::from(from.unwrap()), String::from(path.unwrap())));
                     } else if &*msg.member().unwrap() == "conversationLoaded" { 
                         let (id, account_id, conversation_id, messages_dbus) = msg.get4::<u32, &str, &str, Array<Dict<&str, &str, _>, _>>();
                         let mut messages = Vec::new();
@@ -272,6 +276,29 @@ impl Jami {
             }
         }
         account
+    }
+
+    /**
+     * Remove an account
+     * @param id the account id to remove
+     */
+    pub fn rm_account(id: &str) {
+        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
+                                                "cx.ring.Ring.ConfigurationManager",
+                                                "removeAccount");
+        if !dbus_msg.is_ok() {
+            error!("removeAccount fails. Please verify daemon's API.");
+            return;
+        }
+        let conn = Connection::get_private(BusType::Session);
+        if !conn.is_ok() {
+            error!("connection not ok.");
+            return;
+        }
+        let dbus = conn.unwrap();
+        let _ = dbus.send_with_reply_and_block(
+                                           dbus_msg.unwrap().append1(id), 2000
+                                       ).ok().expect("Is the ring-daemon launched?");
     }
 
     /**

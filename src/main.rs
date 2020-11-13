@@ -104,6 +104,9 @@ async fn main() -> anyhow::Result<()> {
             Some(Event::ConversationLoaded(id, account_id, conversation_id, messages)) => {
                 app.on_conversation_loaded(id, account_id, conversation_id, messages).await;
             },
+            Some(Event::ProfileReceived(account_id, from, path)) => {
+                app.on_profile_received(&account_id, &from, &path).await;
+            },
             None => {
                 break;
             }

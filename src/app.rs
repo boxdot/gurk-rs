@@ -6,10 +6,12 @@ use chrono::{DateTime, TimeZone, Utc};
 use crossterm::event::KeyCode;
 use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthStr;
+use app_dirs::{AppDataType, get_app_dir, AppInfo};
 
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::{self, BufRead, Write};
+use std::fs::{copy, File};
+use ical;
+use std::io::{self, BufRead, BufReader, Write};
 use std::time::{Duration, UNIX_EPOCH, SystemTime};
 
 pub struct App {
@@ -208,6 +210,7 @@ pub enum Event<I> {
     ConversationReady(String, String),
     ConversationRequest(String, String),
     RegistrationStateChanged(String, String),
+    ProfileReceived(String, String, String),
     RegisteredNameFound(String, u64, String, String),
     ConversationLoaded(u32, String, String, Vec<HashMap<String, String>>),
     Resize,
@@ -273,6 +276,31 @@ impl App {
         if registration_state == "REGISTERED" && self.data.account == Account::null() {
             self.data.account = AppData::select_jami_account();
         }
+    }
+
+    pub async fn on_profile_received(&mut self, account_id: &String, from: &String, path: &String) {
+        let dest = get_app_dir(
+                        AppDataType::UserData,
+                        &AppInfo{name: "jami", author: "SFL"},
+                        &*format!("{}/profiles", account_id)
+                    );
+        if dest.is_err() {
+            return;
+        }
+        let dest = dest.unwrap().into_os_string().into_string();
+        let dest =  format!("{}/{}.vcf", dest.unwrap(), &base64::encode(&*from));
+        let result = copy(path, dest.clone());
+        if result.is_err() {
+            return;
+        }
+        // TODO parse
+        // TODO add store system for vcards
+        // TODO improve lookup
+//        let buf = BufReader::new(File::open(dest).unwrap());
+//        let reader = ical::VcardParser::new(buf);
+//        for line in reader {
+//            println!("{:?}", line);
+//        }
     }
 
     fn send_input(&mut self, channel_idx: usize) {
