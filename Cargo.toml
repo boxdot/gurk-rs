@@ -29,3 +29,9 @@ tokio = { version = "0.2.22", features = ["full"] }
 toml = "0.5.6"
 tui = { version = "0.10.0", default-features = false, features = ["crossterm"] }
 unicode-width = "0.1.8"
+
+signal-bot = { git = "http://github.com/gferon/signal-bot-rs", branch = "wip" }
+
+libsignal-protocol = { git = "https://github.com/Michael-F-Bryan/libsignal-protocol-rs" }
+libsignal-service = { git = "https://github.com/Michael-F-Bryan/libsignal-service-rs" }
+libsignal-service-actix = { git = "https://github.com/Michael-F-Bryan/libsignal-service-rs" }
