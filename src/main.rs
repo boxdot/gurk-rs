@@ -107,6 +107,9 @@ async fn main() -> anyhow::Result<()> {
             Some(Event::ProfileReceived(account_id, from, path)) => {
                 app.on_profile_received(&account_id, &from, &path).await;
             },
+            Some(Event::AccountsChanged()) => {
+                app.on_accounts_changed().await;
+            },
             None => {
                 break;
             }

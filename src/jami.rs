@@ -11,6 +11,13 @@ use std::sync::atomic::{AtomicBool, Ordering};
  */
 pub struct Jami {}
 
+#[derive(PartialEq)]
+pub enum ImportType {
+    None,
+    BACKUP,
+    NETWORK
+}
+
 impl Jami {
     pub async fn handle_events<T: std::fmt::Debug>(
         mut tx: tokio::sync::mpsc::Sender<crate::app::Event<T>>,
@@ -31,6 +38,7 @@ impl Jami {
                 dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=conversationRequestReceived").unwrap();
                 dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=conversationLoaded").unwrap();
                 dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=profileReceived").unwrap();
+                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=accountsChanged").unwrap();
                 // For each signals, call handlers.
                 for ci in dbus_listener.iter(100) {
                     if stop.load(Ordering::Relaxed) {
@@ -64,6 +72,8 @@ impl Jami {
                     } else if &*msg.member().unwrap() == "profileReceived" { 
                         let (account_id, from, path) = msg.get3::<&str, &str, &str>();
                         events.push(Event::ProfileReceived(String::from(account_id.unwrap()), String::from(from.unwrap()), String::from(path.unwrap())));
+                    } else if &*msg.member().unwrap() == "accountsChanged" { 
+                        events.push(Event::AccountsChanged());
                     } else if &*msg.member().unwrap() == "conversationLoaded" { 
                         let (id, account_id, conversation_id, messages_dbus) = msg.get4::<u32, &str, &str, Array<Dict<&str, &str, _>, _>>();
                         let mut messages = Vec::new();
@@ -166,10 +176,12 @@ impl Jami {
      * @param password
      * @param from_archive if main_info is a path
      */
-    pub fn add_account(main_info: &str, password: &str, from_archive: bool) -> String {
+    pub fn add_account(main_info: &str, password: &str, import_type: ImportType) -> String {
         let mut details: HashMap<&str, &str> = HashMap::new();
-        if from_archive {
+        if import_type == ImportType::BACKUP {
             details.insert("Account.archivePath", main_info);
+        } else if import_type == ImportType::NETWORK {
+            details.insert("Account.archivePin", main_info);
         } else {
             details.insert("Account.alias", main_info);
         }

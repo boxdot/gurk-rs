@@ -1,6 +1,6 @@
 use crate::account::Account;
 use crate::util::StatefulList;
-use crate::jami::Jami;
+use crate::jami::{ ImportType, Jami };
 
 use chrono::{DateTime, TimeZone, Utc};
 use crossterm::event::KeyCode;
@@ -49,7 +49,7 @@ pub struct PendingRm {
 impl AppData {
 
     // Move to jami namespace
-    fn select_jami_account() -> Account {
+    fn select_jami_account(create_if_not: bool) -> Account {
         let accounts = Jami::get_account_list();
         // Select first enabled account
         for account in &accounts {
@@ -57,8 +57,10 @@ impl AppData {
                 return account.clone();
             }
         }
-        // No valid account found, generate a new one
-        Jami::add_account("", "", false);
+        if create_if_not {
+            // No valid account found, generate a new one
+            Jami::add_account("", "", ImportType::None);
+        }
         return Account::null();
     }
 
@@ -136,7 +138,7 @@ impl AppData {
     }
 
     fn init_from_jami() -> anyhow::Result<Self> {
-        let account = AppData::select_jami_account();
+        let account = AppData::select_jami_account(true);
         let mut channels = Vec::new();
         if !account.id.is_empty() {
             channels = AppData::channels_for_account(&account);
@@ -212,6 +214,7 @@ pub enum Event<I> {
     RegistrationStateChanged(String, String),
     ProfileReceived(String, String, String),
     RegisteredNameFound(String, u64, String, String),
+    AccountsChanged(),
     ConversationLoaded(u32, String, String, Vec<HashMap<String, String>>),
     Resize,
 }
@@ -274,7 +277,37 @@ impl App {
 
     pub async fn on_registration_state_changed(&mut self, _account_id: &String, registration_state: &String) {
         if registration_state == "REGISTERED" && self.data.account == Account::null() {
-            self.data.account = AppData::select_jami_account();
+            self.data.account = AppData::select_jami_account(false);
+        }
+    }
+
+    pub async fn on_accounts_changed(&mut self) {
+        let mut still_there = false;
+        for account in Jami::get_account_list() {
+            if account.id == self.data.account.id {
+                still_there = true;
+                break;
+            }
+        }
+        if !still_there {
+            // Reselect an account
+            self.data.account = AppData::select_jami_account(false);
+            if self.data.account.id.is_empty() {
+                self.data.channels.state.select(Some(0));
+                self.data.channels.items.retain(|channel| channel.id.is_empty());
+                self.data.channels.items[0].messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("!!!! No more account left to use")),
+                    arrived_at: Utc::now(),
+                });
+                return;
+            }
+            let channels = AppData::channels_for_account(&self.data.account);
+            self.data.channels = StatefulList::with_items(channels);
+            if !self.data.channels.items.is_empty() {
+                self.data.channels.state.select(Some(0));
+            }
+            self.data.lookup_members();
         }
     }
 
@@ -389,6 +422,7 @@ impl App {
                         arrived_at: Utc::now(),
                     });
                 } else {
+                    //  TODO avoid duplicate code
                     self.data.account = account;
                     let channels = AppData::channels_for_account(&self.data.account);
                     self.data.channels = StatefulList::with_items(channels);
@@ -397,6 +431,21 @@ impl App {
                     }
                     self.data.lookup_members();
                 }
+            } else if message == "/add" {
+                Jami::add_account("", "", ImportType::None);
+            } else if message.starts_with("/rm ") {
+                let account_id = String::from(message.strip_prefix("/rm ").unwrap());
+                Jami::rm_account(&*account_id);
+            } else if message.starts_with("/import ") {
+                let parts : Vec<&str> = message.split(" ").collect();
+                let file = parts.get(1).unwrap_or(&"").to_string();
+                let password = parts.get(2).unwrap_or(&"").to_string();
+                Jami::add_account(&file, &password, ImportType::BACKUP);
+            } else if message.starts_with("/link ") {
+                let parts : Vec<&str> = message.split(" ").collect();
+                let pin = parts.get(1).unwrap_or(&"").to_string();
+                let password = parts.get(2).unwrap_or(&"").to_string();
+                Jami::add_account(&pin, &password, ImportType::NETWORK);
             } else if message == "/help" {
                 channel.messages.push(Message {
                     from: String::new(),
@@ -405,12 +454,12 @@ impl App {
                 });
                 channel.messages.push(Message {
                     from: String::new(),
-                    message: Some(String::from("/new: start a new conversation")),
+                    message: Some(String::from("/new: Start a new conversation")),
                     arrived_at: Utc::now(),
                 });
                 channel.messages.push(Message {
                     from: String::new(),
-                    message: Some(String::from("/msg <id|username>: Starts a conversation with someone")),
+                    message: Some(String::from("/msg <id|username>: Start a conversation with someone")),
                     arrived_at: Utc::now(),
                 });
                 channel.messages.push(Message {
@@ -421,6 +470,26 @@ impl App {
                 channel.messages.push(Message {
                     from: String::new(),
                     message: Some(String::from("/switch <id>: switch to an account")),
+                    arrived_at: Utc::now(),
+                });
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("/add: Add a new account")),
+                    arrived_at: Utc::now(),
+                });
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("/rm <id>: Remove an account")),
+                    arrived_at: Utc::now(),
+                });
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("/link <pin> [password]: Link an account via a PIN")),
+                    arrived_at: Utc::now(),
+                });
+                channel.messages.push(Message {
+                    from: String::new(),
+                    message: Some(String::from("/import <file> [password]: Import an account from a backup")),
                     arrived_at: Utc::now(),
                 });
                 channel.messages.push(Message {
