@@ -1,7 +1,11 @@
-use crate::app::Event;
 use crate::config::Config;
 
+use anyhow::Context as _;
+use futures_util::{stream::Stream, StreamExt};
+use libsignal_protocol::{crypto::DefaultCrypto, Context};
+use libsignal_service::{content::ContentBody, content::Metadata};
 use serde::{Deserialize, Serialize};
+use signal_bot::{config::SledConfigStore, Manager};
 use thiserror::Error;
 
 use std::io::BufRead;
@@ -11,11 +15,23 @@ use std::str::FromStr;
 
 pub struct SignalClient {
     config: Config,
+    manager: Manager<SledConfigStore>,
+}
+
+#[derive(Debug)]
+pub struct Message {
+    metadata: Metadata,
+    body: ContentBody,
 }
 
 impl SignalClient {
     pub fn from_config(config: Config) -> Self {
-        Self { config }
+        let config_store = SledConfigStore::new(config.db_path.clone()).unwrap();
+        let signal_context = Context::new(DefaultCrypto::default()).unwrap();
+
+        let manager = Manager::with_config_store(config_store, signal_context).unwrap();
+
+        Self { config, manager }
     }
 
     pub fn get_groups(&self) -> anyhow::Result<Vec<GroupInfo>> {
@@ -56,40 +72,16 @@ impl SignalClient {
         res
     }
 
-    pub async fn stream_messages<T: std::fmt::Debug>(
-        self,
-        mut tx: tokio::sync::mpsc::Sender<crate::app::Event<T>>,
-    ) -> Result<(), std::io::Error> {
-        use std::process::Stdio;
-        use tokio::io::{AsyncBufReadExt, BufReader};
-
-        let mut cmd = tokio::process::Command::new(self.config.signal_cli.path);
-        cmd.arg("-u")
-            .arg(self.config.user.phone_number)
-            .arg("daemon")
-            .arg("--json")
-            .stdout(Stdio::piped())
-            .kill_on_drop(true);
-        let mut child = cmd.spawn()?;
-        let stdout = child
-            .stdout
-            .take()
-            .expect("child did not have a handle to stdout");
-
-        let mut reader = BufReader::new(stdout).lines();
-        let cmd_handle = tokio::spawn(async { child.await });
-
-        while let Some(payload) = reader.next_line().await? {
-            let message = serde_json::from_str(&payload).ok();
-            if tx.send(Event::Message { payload, message }).await.is_err() {
-                break; // receiver closed
-            }
-        }
-
-        // wait until child process stops
-        cmd_handle.await??;
-
-        Ok(())
+    pub fn stream_messages(self) -> impl Stream<Item = Message> {
+        let (tx, rx) = futures::channel::mpsc::channel(32);
+        tokio::task::spawn_local(async move {
+            self.manager
+                .receive_messages(tx)
+                .await
+                .context("stopped receiving messages from signal")
+                .unwrap();
+        });
+        rx.map(|(metadata, body)| Message { metadata, body })
     }
 
     pub fn send_message(message: &str, phone_number: &str) {
@@ -186,12 +178,6 @@ fn extract_dbus_string_response(s: &[u8]) -> Option<String> {
     let end = start + 1 + line[start + 1..].find('"')?;
     let response = line[start + 1..end].trim();
     Some(response.to_string())
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Message {
-    pub envelope: Envelope,
 }
 
 #[derive(Debug, Clone, Deserialize)]

@@ -10,7 +10,7 @@ use app::{App, Event};
 
 use crossterm::{
     event::{
-        DisableMouseCapture, EnableMouseCapture, Event as CEvent, EventStream, KeyCode,
+        DisableMouseCapture, EnableMouseCapture, Event as CEvent, EventStream, KeyCode, KeyEvent,
         KeyModifiers,
     },
     execute,
@@ -62,8 +62,15 @@ async fn main() -> anyhow::Result<()> {
 
     let mut terminal = Terminal::new(backend)?;
 
+    let local = tokio::task::LocalSet::new();
     let signal_client = signal::SignalClient::from_config(app.config.clone());
-    tokio::spawn(async move { signal_client.stream_messages(tx).await });
+    let (mut tx, mut rx) = tokio::sync::mpsc::channel::<Event<KeyEvent>>(32);
+    local.spawn_local(async move {
+        let mut messages = signal_client.stream_messages();
+        for msg in messages.next().await {
+            tx.send(Event::Message(msg)).await.unwrap();
+        }
+    });
 
     terminal.clear()?;
 
@@ -80,8 +87,8 @@ async fn main() -> anyhow::Result<()> {
                 KeyCode::Down => app.on_down(),
                 code => app.on_key(code),
             },
-            Some(Event::Message { payload, message }) => {
-                app.on_message(message, payload).await;
+            Some(Event::Message(message)) => {
+                app.on_message(message).await;
             }
             Some(Event::Resize) => {
                 // will just redraw the app

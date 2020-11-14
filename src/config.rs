@@ -10,6 +10,8 @@ pub struct Config {
     pub signal_cli: SignalCli,
     #[serde(default = "default_data_path")]
     pub data_path: PathBuf,
+    #[serde(default = "default_db_path")]
+    pub db_path: PathBuf,
     /// Whether only to show the first name of a contact
     #[serde(default)]
     pub first_name_only: bool,
@@ -82,6 +84,16 @@ fn default_data_path() -> PathBuf {
     fs::create_dir_all(&data_dir)
         .unwrap_or_else(|_| panic!("{:?} did not exist and could not be created", &data_dir));
     data_dir.join("gurk.data.json")
+}
+
+fn default_db_path() -> PathBuf {
+    let db_dir = match dirs::data_dir() {
+        Some(dir) => dir.join("gurk").join("db"),
+        None => panic!("default data directory not found, $XDG_DATA_HOME and $HOME are unset"),
+    };
+    fs::create_dir_all(&db_dir)
+        .unwrap_or_else(|_| panic!("{:?} did not exist and could not be created", &db_dir));
+    db_dir
 }
 
 /// Fallback to legacy data path location

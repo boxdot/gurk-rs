@@ -119,12 +119,7 @@ pub struct Message {
 #[derive(Debug)]
 pub enum Event<I> {
     Input(I),
-    Message {
-        /// used for debugging
-        payload: String,
-        /// some message if deserialized successfully
-        message: Option<signal::Message>,
-    },
+    Message(signal::Message),
     Resize,
 }
 
@@ -273,93 +268,92 @@ impl App {
         }
     }
 
-    pub async fn on_message(
-        &mut self,
-        message: Option<signal::Message>,
-        payload: String,
-    ) -> Option<()> {
-        self.log(format!("incoming: {} -> {:?}", payload, message));
-        let mut message = message?;
+    pub async fn on_message(&mut self, message: signal::Message) -> Option<()> {
+        self.log(format!("incoming: {:?}", message));
 
-        let mut msg: signal::InnerMessage = message
-            .envelope
-            .sync_message
-            .take()
-            .map(|m| m.sent_message)
-            .or_else(|| message.envelope.data_message.take())?;
+        // let msg = if let ContentBody::DataMessage(message) = message {
 
-        // message text + attachments paths
-        let text = msg.message.take();
-        let attachments = msg.attachments.take().unwrap_or_default();
-        if text.is_none() && attachments.is_empty() {
-            return None;
-        }
+        // }
 
-        let channel_id = msg
-            .group_info
-            .as_ref()
-            .map(|g| g.group_id.as_str())
-            .or_else(|| {
-                if message.envelope.source == self.config.user.phone_number {
-                    msg.destination.as_deref()
-                } else {
-                    Some(message.envelope.source.as_str())
-                }
-            })?
-            .to_string();
-        let is_group = msg.group_info.is_some();
+        // let mut msg: signal::InnerMessage = message
+        //     .envelope
+        //     .sync_message
+        //     .take()
+        //     .map(|m| m.sent_message)
+        //     .or_else(|| message.envelope.data_message.take())?;
 
-        let arrived_at = NaiveDateTime::from_timestamp(
-            message.envelope.timestamp as i64 / 1000,
-            (message.envelope.timestamp % 1000) as u32,
-        );
-        let arrived_at = Utc.from_utc_datetime(&arrived_at);
+        // // message text + attachments paths
+        // let text = msg.message.take();
+        // let attachments = msg.attachments.take().unwrap_or_default();
+        // if text.is_none() && attachments.is_empty() {
+        //     return None;
+        // }
 
-        let name = self
-            .resolve_contact_name(message.envelope.source.clone())
-            .await;
+        // let channel_id = msg
+        //     .group_info
+        //     .as_ref()
+        //     .map(|g| g.group_id.as_str())
+        //     .or_else(|| {
+        //         if message.envelope.source == self.config.user.phone_number {
+        //             msg.destination.as_deref()
+        //         } else {
+        //             Some(message.envelope.source.as_str())
+        //         }
+        //     })?
+        //     .to_string();
+        // let is_group = msg.group_info.is_some();
 
-        let channel_idx = if let Some(channel_idx) = self
-            .data
-            .channels
-            .items
-            .iter_mut()
-            .position(|channel| channel.id == channel_id && channel.is_group == is_group)
-        {
-            channel_idx
-        } else {
-            let channel_name = if is_group {
-                let group_name = signal::SignalClient::get_group_name(&channel_id).await;
-                group_name.unwrap_or_else(|| channel_id.clone())
-            } else {
-                name.clone()
-            };
-            self.data.channels.items.push(Channel {
-                id: channel_id.clone(),
-                name: channel_name,
-                is_group,
-                messages: Vec::new(),
-                unread_messages: 0,
-            });
-            self.data.channels.items.len() - 1
-        };
+        // let arrived_at = NaiveDateTime::from_timestamp(
+        //     message.envelope.timestamp as i64 / 1000,
+        //     (message.envelope.timestamp % 1000) as u32,
+        // );
+        // let arrived_at = Utc.from_utc_datetime(&arrived_at);
 
-        self.data.channels.items[channel_idx]
-            .messages
-            .push(Message {
-                from: name,
-                message: text,
-                attachments,
-                arrived_at,
-            });
-        if self.data.channels.state.selected() != Some(channel_idx) {
-            self.data.channels.items[channel_idx].unread_messages += 1;
-        } else {
-            self.reset_unread_messages();
-        }
+        // let name = self
+        //     .resolve_contact_name(message.envelope.source.clone())
+        //     .await;
 
-        self.bubble_up_channel(channel_idx);
-        self.save().unwrap();
+        // let channel_idx = if let Some(channel_idx) = self
+        //     .data
+        //     .channels
+        //     .items
+        //     .iter_mut()
+        //     .position(|channel| channel.id == channel_id && channel.is_group == is_group)
+        // {
+        //     channel_idx
+        // } else {
+        //     let channel_name = if is_group {
+        //         let group_name = signal::SignalClient::get_group_name(&channel_id).await;
+        //         group_name.unwrap_or_else(|| channel_id.clone())
+        //     } else {
+        //         name.clone()
+        //     };
+        //     self.data.channels.items.push(Channel {
+        //         id: channel_id.clone(),
+        //         name: channel_name,
+        //         is_group,
+        //         messages: Vec::new(),
+        //         unread_messages: 0,
+        //     });
+        //     self.data.channels.items.len() - 1
+        // };
+
+        // self.data.channels.items[channel_idx]
+        //     .messages
+        //     .push(Message {
+        //         from: name,
+        //         message: text,
+        //         attachments,
+        //         arrived_at,
+        //     });
+        // if self.data.channels.state.selected() != Some(channel_idx) {
+        //     self.data.channels.items[channel_idx].unread_messages += 1;
+        // } else {
+        //     self.reset_unread_messages();
+        // }
+
+        // self.bubble_up_channel(channel_idx);
+        // self.save().unwrap();
 
         Some(())
     }

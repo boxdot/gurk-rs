@@ -1189,6 +1189,8 @@ dependencies = [
  "chrono",
  "crossterm",
  "dirs",
+ "futures",
+ "futures-util",
  "itertools 0.9.0",
  "libsignal-protocol",
  "libsignal-service",
@@ -1450,7 +1452,6 @@ checksum = "4d58d1b70b004888f764dfbf6a26a3b0342a1632d33968e4a179d8011c760614"
 [[package]]
 name = "libsignal-protocol"
 version = "0.1.1-alpha.0"
-source = "git+https://github.com/Michael-F-Bryan/libsignal-protocol-rs#57e0e2c24243b06cff7c694de7c067737386c59f"
 dependencies = [
  "aes 0.6.0",
  "aes-ctr",
@@ -1470,7 +1471,6 @@ dependencies = [
 [[package]]
 name = "libsignal-protocol-sys"
 version = "0.1.1-alpha.0"
-source = "git+https://github.com/Michael-F-Bryan/libsignal-protocol-rs#57e0e2c24243b06cff7c694de7c067737386c59f"
 dependencies = [
  "cmake",
 ]
@@ -2396,7 +2396,6 @@ dependencies = [
 [[package]]
 name = "signal-bot"
 version = "0.1.0"
-source = "git+http://github.com/gferon/signal-bot-rs?branch=wip#80bcef99eefa832e95b238f6bf95ca965983a26e"
 dependencies = [
  "actix",
  "actix-rt",
