@@ -10,12 +10,13 @@ use app::{App, Event};
 
 use crossterm::{
     event::{
-        DisableMouseCapture, EnableMouseCapture, Event as CEvent, EventStream, KeyCode, KeyEvent,
+        DisableMouseCapture, EnableMouseCapture, Event as CEvent, EventStream, KeyCode,
         KeyModifiers,
     },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use log::info;
 use structopt::StructOpt;
 use tokio::stream::StreamExt;
 use tui::{backend::CrosstermBackend, Terminal};
@@ -29,11 +30,32 @@ struct Args {
     verbose: bool,
 }
 
-#[tokio::main]
+fn init_file_logger() -> anyhow::Result<()> {
+    use log::LevelFilter;
+    use log4rs::append::file::FileAppender;
+    use log4rs::config::{Appender, Config, Root};
+    use log4rs::encode::pattern::PatternEncoder;
+
+    let logfile = FileAppender::builder()
+        .encoder(Box::new(PatternEncoder::new("[{d} {l} {M}] {m}\n")))
+        .build("gurk.log")?;
+
+    let config = Config::builder()
+        .appender(Appender::builder().build("logfile", Box::new(logfile)))
+        .build(Root::builder().appender("logfile").build(LevelFilter::Info))?;
+
+    log4rs::init_config(config)?;
+    Ok(())
+}
+
+#[actix_rt::main(?Send)]
 async fn main() -> anyhow::Result<()> {
     let args = Args::from_args();
+    if args.verbose {
+        init_file_logger()?;
+    }
 
-    let mut app = App::try_new(args.verbose)?;
+    let mut app = App::try_new()?;
 
     enable_raw_mode()?;
     let _raw_mode_guard = scopeguard::guard((), |_| {
@@ -43,8 +65,8 @@ async fn main() -> anyhow::Result<()> {
     let mut stdout = std::io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
 
-    let (tx, mut rx) = tokio::sync::mpsc::channel(100);
-    tokio::spawn({
+    let (mut tx, mut rx) = tokio::sync::mpsc::channel(100);
+    actix_rt::spawn({
         let mut tx = tx.clone();
         async move {
             let mut reader = EventStream::new().fuse();
@@ -62,13 +84,14 @@ async fn main() -> anyhow::Result<()> {
 
     let mut terminal = Terminal::new(backend)?;
 
-    let local = tokio::task::LocalSet::new();
-    let signal_client = signal::SignalClient::from_config(app.config.clone());
-    let (mut tx, mut rx) = tokio::sync::mpsc::channel::<Event<KeyEvent>>(32);
-    local.spawn_local(async move {
+    let signal_client = app.signal_client.clone();
+    tokio::task::spawn_local(async move {
+        info!("Listening for incoming signal messages");
         let mut messages = signal_client.stream_messages();
-        for msg in messages.next().await {
-            tx.send(Event::Message(msg)).await.unwrap();
+        while let Some(msg) = messages.next().await {
+            tx.send(Event::Message(msg))
+                .await
+                .expect("logic error: main loop closed");
         }
     });
 

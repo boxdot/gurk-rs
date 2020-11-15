@@ -5,17 +5,16 @@ use crate::util::StatefulList;
 use anyhow::Context;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use crossterm::event::KeyCode;
+use log::debug;
 use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthStr;
 
 use std::fs::File;
-use std::io::Write;
 use std::path::Path;
 
 pub struct App {
     pub config: Config,
     pub should_quit: bool,
-    pub log_file: Option<File>,
     pub signal_client: signal::SignalClient,
     pub data: AppData,
 }
@@ -124,17 +123,11 @@ pub enum Event<I> {
 }
 
 impl App {
-    pub fn try_new(verbose: bool) -> anyhow::Result<Self> {
+    pub fn try_new() -> anyhow::Result<Self> {
         let config_path = config::installed_config()
             .context("config file not found at one of the default locations")?;
         let config = config::load_from(&config_path)
             .with_context(|| format!("failed to read config from: {}", config_path.display()))?;
-
-        let log_file = if verbose {
-            Some(File::create("gurk.log").unwrap())
-        } else {
-            None
-        };
 
         let mut load_data_path = config.data_path.clone();
         if !load_data_path.exists() {
@@ -144,11 +137,12 @@ impl App {
             }
         }
 
+        let signal_client = signal::SignalClient::with_config(config.clone());
+
         let mut data = match AppData::load(&load_data_path) {
             Ok(data) => data,
             Err(_) => {
-                let client = signal::SignalClient::from_config(config.clone());
-                let data = AppData::init_from_signal(&client)?;
+                let data = AppData::init_from_signal(&signal_client)?;
                 data.save(&config.data_path)?;
                 data
             }
@@ -158,14 +152,11 @@ impl App {
             data.save(&config.data_path)?;
         }
 
-        let signal_client = signal::SignalClient::from_config(config.clone());
-
         Ok(Self {
             config,
             data,
             should_quit: false,
             signal_client,
-            log_file,
         })
     }
 
@@ -261,33 +252,56 @@ impl App {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn log(&mut self, msg: impl AsRef<str>) {
-        if let Some(log_file) = &mut self.log_file {
-            writeln!(log_file, "{}", msg.as_ref()).unwrap();
-        }
-    }
-
     pub async fn on_message(&mut self, message: signal::Message) -> Option<()> {
-        self.log(format!("incoming: {:?}", message));
+        log::info!("incoming: {:?}", message);
 
-        // let msg = if let ContentBody::DataMessage(message) = message {
+        // let x = Message {
+        //     metadata: Metadata {
+        //         sender: ServiceAddress {
+        //             uuid: Some("2f309a03-9349-431e-b802-f8e640da79d6"),
+        //             e164: Some("+491722669314"),
+        //             relay: None,
+        //         },
+        //         sender_device: 1,
+        //         timestamp: 1605445192497,
+        //         needs_receipt: false,
+        //     },
+        //     body: DataMessage(DataMessage {
+        //         body: Some("Fugudtf"),
+        //         attachments: [],
+        //         group: None,
+        //         group_v2: None,
+        //         flags: None,
+        //         expire_timer: None,
+        //         profile_key: Some([
+        //             129, 166, 181, 10, 125, 187, 216, 231, 239, 225, 255, 107, 108, 174, 100, 125,
+        //             31, 175, 157, 37, 207, 169, 133, 131, 49, 201, 87, 168, 54, 50, 23, 109,
+        //         ]),
+        //         timestamp: Some(1605445192497),
+        //         quote: None,
+        //         contact: [],
+        //         preview: [],
+        //         sticker: None,
+        //         required_protocol_version: None,
+        //         is_view_once: None,
+        //         reaction: None,
+        //         delete: None,
+        //         body_ranges: [],
+        //     }),
+        // };
 
-        // }
+        let mut msg = if let signal::ContentBody::DataMessage(msg) = message.body {
+            msg
+        } else {
+            return None;
+        };
 
-        // let mut msg: signal::InnerMessage = message
-        //     .envelope
-        //     .sync_message
-        //     .take()
-        //     .map(|m| m.sent_message)
-        //     .or_else(|| message.envelope.data_message.take())?;
-
-        // // message text + attachments paths
-        // let text = msg.message.take();
-        // let attachments = msg.attachments.take().unwrap_or_default();
-        // if text.is_none() && attachments.is_empty() {
-        //     return None;
-        // }
+        // message text + attachments paths
+        let text = msg.body.take();
+        let attachments = msg.attachments;
+        if text.is_none() && attachments.is_empty() {
+            return None;
+        }
 
         // let channel_id = msg
         //     .group_info

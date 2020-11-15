@@ -3,7 +3,7 @@ use crate::config::Config;
 use anyhow::Context as _;
 use futures_util::{stream::Stream, StreamExt};
 use libsignal_protocol::{crypto::DefaultCrypto, Context};
-use libsignal_service::{content::ContentBody, content::Metadata};
+pub use libsignal_service::{content::ContentBody, content::Metadata};
 use serde::{Deserialize, Serialize};
 use signal_bot::{config::SledConfigStore, Manager};
 use thiserror::Error;
@@ -13,6 +13,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::str::FromStr;
 
+#[derive(Clone)]
 pub struct SignalClient {
     config: Config,
     manager: Manager<SledConfigStore>,
@@ -20,12 +21,12 @@ pub struct SignalClient {
 
 #[derive(Debug)]
 pub struct Message {
-    metadata: Metadata,
-    body: ContentBody,
+    pub metadata: Metadata,
+    pub body: ContentBody,
 }
 
 impl SignalClient {
-    pub fn from_config(config: Config) -> Self {
+    pub fn with_config(config: Config) -> Self {
         let config_store = SledConfigStore::new(config.db_path.clone()).unwrap();
         let signal_context = Context::new(DefaultCrypto::default()).unwrap();
 
