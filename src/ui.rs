@@ -211,10 +211,15 @@ fn displayed_name(name: &str, first_name_only: bool) -> &str {
 }
 
 fn displayed_message(msg: &app::Message) -> String {
-    let symlinks = symlink_attachments(&msg.attachments).unwrap();
-    let displayed_attachments = symlinks
-        .into_iter()
-        .map(|path| format!("[file://{}]", path.display()));
+    // TODO
+    // let symlinks = symlink_attachments(&msg.attachments).unwrap();
+    // let displayed_attachments = symlinks
+    //     .into_iter()
+    //     .map(|path| format!("[file://{}]", path.display()));
+    let displayed_attachments = msg
+        .attachments
+        .iter()
+        .map(|_| "[unimplemented attachment preview]".to_string());
     let message = msg.message.as_deref().unwrap_or_default();
     if !message.is_empty() {
         itertools::join(

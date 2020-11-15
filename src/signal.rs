@@ -3,7 +3,7 @@ use crate::config::Config;
 use anyhow::Context as _;
 use futures_util::{stream::Stream, StreamExt};
 use libsignal_protocol::{crypto::DefaultCrypto, Context};
-pub use libsignal_service::{content::ContentBody, content::Metadata};
+pub use libsignal_service::content::{AttachmentPointer, ContentBody, DataMessage, Metadata};
 use serde::{Deserialize, Serialize};
 use signal_bot::{config::SledConfigStore, Manager};
 use thiserror::Error;

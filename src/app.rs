@@ -5,7 +5,6 @@ use crate::util::StatefulList;
 use anyhow::Context;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use crossterm::event::KeyCode;
-use log::debug;
 use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthStr;
 
@@ -109,8 +108,8 @@ pub struct Message {
     pub from: String,
     #[serde(alias = "text")] // remove
     pub message: Option<String>,
-    #[serde(default)]
-    pub attachments: Vec<signal::Attachment>,
+    #[serde(skip)] // TODO: We need to serde to AttachmentPointer
+    pub attachments: Vec<signal::AttachmentPointer>,
     pub arrived_at: DateTime<Utc>,
 }
 
@@ -255,41 +254,6 @@ impl App {
     pub async fn on_message(&mut self, message: signal::Message) -> Option<()> {
         log::info!("incoming: {:?}", message);
 
-        // let x = Message {
-        //     metadata: Metadata {
-        //         sender: ServiceAddress {
-        //             uuid: Some("2f309a03-9349-431e-b802-f8e640da79d6"),
-        //             e164: Some("+491722669314"),
-        //             relay: None,
-        //         },
-        //         sender_device: 1,
-        //         timestamp: 1605445192497,
-        //         needs_receipt: false,
-        //     },
-        //     body: DataMessage(DataMessage {
-        //         body: Some("Fugudtf"),
-        //         attachments: [],
-        //         group: None,
-        //         group_v2: None,
-        //         flags: None,
-        //         expire_timer: None,
-        //         profile_key: Some([
-        //             129, 166, 181, 10, 125, 187, 216, 231, 239, 225, 255, 107, 108, 174, 100, 125,
-        //             31, 175, 157, 37, 207, 169, 133, 131, 49, 201, 87, 168, 54, 50, 23, 109,
-        //         ]),
-        //         timestamp: Some(1605445192497),
-        //         quote: None,
-        //         contact: [],
-        //         preview: [],
-        //         sticker: None,
-        //         required_protocol_version: None,
-        //         is_view_once: None,
-        //         reaction: None,
-        //         delete: None,
-        //         body_ranges: [],
-        //     }),
-        // };
-
         let mut msg = if let signal::ContentBody::DataMessage(msg) = message.body {
             msg
         } else {
@@ -298,76 +262,65 @@ impl App {
 
         // message text + attachments paths
         let text = msg.body.take();
-        let attachments = msg.attachments;
+        let attachments = std::mem::take(&mut msg.attachments);
         if text.is_none() && attachments.is_empty() {
             return None;
         }
 
-        // let channel_id = msg
-        //     .group_info
-        //     .as_ref()
-        //     .map(|g| g.group_id.as_str())
-        //     .or_else(|| {
-        //         if message.envelope.source == self.config.user.phone_number {
-        //             msg.destination.as_deref()
-        //         } else {
-        //             Some(message.envelope.source.as_str())
-        //         }
-        //     })?
-        //     .to_string();
-        // let is_group = msg.group_info.is_some();
+        let channel_id = get_channel_id(&message.metadata, &msg)?;
+        let is_group = msg.group.is_some() || msg.group_v2.is_some();
 
-        // let arrived_at = NaiveDateTime::from_timestamp(
-        //     message.envelope.timestamp as i64 / 1000,
-        //     (message.envelope.timestamp % 1000) as u32,
-        // );
-        // let arrived_at = Utc.from_utc_datetime(&arrived_at);
+        let arrived_at = NaiveDateTime::from_timestamp(
+            message.metadata.timestamp as i64 / 1000,
+            (message.metadata.timestamp % 1000) as u32,
+        );
+        let arrived_at = Utc.from_utc_datetime(&arrived_at);
 
-        // let name = self
-        //     .resolve_contact_name(message.envelope.source.clone())
-        //     .await;
+        let name = self
+            .resolve_contact_name(message.metadata.sender.e164?)
+            .await;
 
-        // let channel_idx = if let Some(channel_idx) = self
-        //     .data
-        //     .channels
-        //     .items
-        //     .iter_mut()
-        //     .position(|channel| channel.id == channel_id && channel.is_group == is_group)
-        // {
-        //     channel_idx
-        // } else {
-        //     let channel_name = if is_group {
-        //         let group_name = signal::SignalClient::get_group_name(&channel_id).await;
-        //         group_name.unwrap_or_else(|| channel_id.clone())
-        //     } else {
-        //         name.clone()
-        //     };
-        //     self.data.channels.items.push(Channel {
-        //         id: channel_id.clone(),
-        //         name: channel_name,
-        //         is_group,
-        //         messages: Vec::new(),
-        //         unread_messages: 0,
-        //     });
-        //     self.data.channels.items.len() - 1
-        // };
+        let channel_idx = if let Some(channel_idx) = self
+            .data
+            .channels
+            .items
+            .iter_mut()
+            .position(|channel| channel.id == channel_id && channel.is_group == is_group)
+        {
+            channel_idx
+        } else {
+            let channel_name = if is_group {
+                let group_name = signal::SignalClient::get_group_name(&channel_id).await;
+                group_name.unwrap_or_else(|| channel_id.clone())
+            } else {
+                name.clone()
+            };
+            self.data.channels.items.push(Channel {
+                id: channel_id.clone(),
+                name: channel_name,
+                is_group,
+                messages: Vec::new(),
+                unread_messages: 0,
+            });
+            self.data.channels.items.len() - 1
+        };
 
-        // self.data.channels.items[channel_idx]
-        //     .messages
-        //     .push(Message {
-        //         from: name,
-        //         message: text,
-        //         attachments,
-        //         arrived_at,
-        //     });
-        // if self.data.channels.state.selected() != Some(channel_idx) {
-        //     self.data.channels.items[channel_idx].unread_messages += 1;
-        // } else {
-        //     self.reset_unread_messages();
-        // }
+        self.data.channels.items[channel_idx]
+            .messages
+            .push(Message {
+                from: name,
+                message: text,
+                attachments,
+                arrived_at,
+            });
+        if self.data.channels.state.selected() != Some(channel_idx) {
+            self.data.channels.items[channel_idx].unread_messages += 1;
+        } else {
+            self.reset_unread_messages();
+        }
 
-        // self.bubble_up_channel(channel_idx);
-        // self.save().unwrap();
+        self.bubble_up_channel(channel_idx);
+        self.save().unwrap();
 
         Some(())
     }
@@ -433,4 +386,19 @@ impl App {
             _ => {}
         };
     }
+}
+
+fn get_channel_id(metadata: &signal::Metadata, msg: &signal::DataMessage) -> Option<String> {
+    let group_id = msg
+        .group
+        .as_ref()
+        .and_then(|g| g.id.as_ref())
+        .map(hex::encode);
+    let group_v2_id = group_id.or_else(|| {
+        msg.group_v2
+            .as_ref()
+            .and_then(|g| g.master_key.as_ref())
+            .map(hex::encode)
+    });
+    group_v2_id.or_else(|| metadata.sender.e164.clone())
 }
