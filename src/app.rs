@@ -733,6 +733,8 @@ impl App {
                             message: Some(String::from(payloads.get("body").unwrap())),
                             arrived_at,
                         });
+                    } else if payloads.get("type").unwrap() == "merge" {
+                        // Do not show merge commits
                     } else if payloads.get("type").unwrap() == "member" {
                         let body = String::from(payloads.get("body").unwrap());
                         if body.starts_with("Add member ") {
