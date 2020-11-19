@@ -1,6 +1,6 @@
 use crate::account::Account;
 use crate::util::StatefulList;
-use crate::jami::{ ImportType, Jami };
+use crate::jami::{ ImportType, Jami, ProfileManager };
 
 use chrono::{DateTime, TimeZone, Utc};
 use crossterm::event::KeyCode;
@@ -10,7 +10,6 @@ use app_dirs::{AppDataType, get_app_dir, AppInfo};
 
 use std::collections::HashMap;
 use std::fs::{copy, File};
-use ical;
 use std::io::{self, BufRead, BufReader, Write};
 use std::time::{Duration, UNIX_EPOCH, SystemTime};
 
@@ -23,8 +22,8 @@ pub struct App {
 #[derive(Serialize, Deserialize)]
 pub struct AppData {
     pub channels: StatefulList<Channel>,
-    pub hash2name: HashMap<String, String>,
     pub account: Account,
+    pub profile_manager: ProfileManager,
     #[serde(skip)]
     pub out_invite: Vec<OutgoingInvite>,
     #[serde(skip)]
@@ -140,7 +139,9 @@ impl AppData {
     fn init_from_jami() -> anyhow::Result<Self> {
         let account = AppData::select_jami_account(true);
         let mut channels = Vec::new();
+        let mut profile_manager = ProfileManager::new();
         if !account.id.is_empty() {
+            profile_manager.load_from_account(&account.id);
             channels = AppData::channels_for_account(&account);
         }
 
@@ -152,7 +153,7 @@ impl AppData {
         Ok(AppData {
             channels,
             input: String::new(),
-            hash2name: HashMap::new(),
+            profile_manager,
             out_invite: Vec::new(),
             pending_rm: Vec::new(),
             input_cursor: 0,
@@ -302,6 +303,7 @@ impl App {
                 });
                 return;
             }
+            self.data.profile_manager.load_from_account(&self.data.account.id);
             let channels = AppData::channels_for_account(&self.data.account);
             self.data.channels = StatefulList::with_items(channels);
             if !self.data.channels.items.is_empty() {
@@ -326,14 +328,8 @@ impl App {
         if result.is_err() {
             return;
         }
-        // TODO parse
-        // TODO add store system for vcards
-        // TODO improve lookup
-//        let buf = BufReader::new(File::open(dest).unwrap());
-//        let reader = ical::VcardParser::new(buf);
-//        for line in reader {
-//            println!("{:?}", line);
-//        }
+        self.data.profile_manager.load_profile(&dest);
+        Jami::lookup_name(&account_id, &String::new(), &from);
     }
 
     fn send_input(&mut self, channel_idx: usize) {
@@ -424,6 +420,7 @@ impl App {
                 } else {
                     //  TODO avoid duplicate code
                     self.data.account = account;
+                    self.data.profile_manager.load_from_account(&self.data.account.id);
                     let channels = AppData::channels_for_account(&self.data.account);
                     self.data.channels = StatefulList::with_items(channels);
                     if !self.data.channels.items.is_empty() {
@@ -716,10 +713,7 @@ impl App {
                     let arrived_at = Utc.timestamp(arrived_at.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64, 0);
                     // author
                     let author_str = payloads.get("author").unwrap_or(&String::new()).to_string();
-                    let mut author = self.data.hash2name.get(&author_str).unwrap_or(&author_str).to_string();
-                    if author.is_empty() {
-                        author = author_str;
-                    }
+                    let author =  self.data.profile_manager.display_name(&author_str);
                     // print message
                     if payloads.get("type").unwrap().is_empty() {
                         channel.messages.push(Message {
@@ -739,10 +733,7 @@ impl App {
                         let body = String::from(payloads.get("body").unwrap());
                         if body.starts_with("Add member ") {
                             let uri_str = body.strip_prefix("Add member ").unwrap().to_string();
-                            let mut uri = self.data.hash2name.get(&uri_str).unwrap_or(&uri_str).to_string();
-                            if uri.is_empty() {
-                                uri = uri_str;
-                            }
+                            let uri = self.data.profile_manager.display_name(&uri_str);
                             let enter = format!("--> | {} has been added", uri);
                             channel.messages.push(Message {
                                 from: author,
@@ -833,7 +824,7 @@ impl App {
         address: String,
         name: String,
     ) -> Option<()> {
-        self.data.hash2name.insert(address.clone(), name.clone());
+        self.data.profile_manager.username_found(&address, &name);
         // pending invite
         for i in 0..self.data.out_invite.len() {
             let out_invite = &self.data.out_invite[i];
@@ -880,12 +871,7 @@ impl App {
             let mut refresh_name = false;
             let mut name = String::new();
             for member in &*channel.members {
-                let uri = self.data.hash2name.get(&member.hash).unwrap_or(&member.hash);
-                if !uri.is_empty() {
-                    name += uri;
-                } else {
-                    name += &member.hash;
-                }
+                name +=  &*self.data.profile_manager.display_name(&member.hash);
                 name += ", ";
                 if member.hash == address {
                     refresh_name = true;

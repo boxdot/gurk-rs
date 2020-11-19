@@ -300,15 +300,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ical"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a9f7215ad0d77e69644570dee000c7678a47ba7441062c1b5f918adde0d73cf"
-dependencies = [
- "thiserror",
-]
-
-[[package]]
 name = "iovec"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -343,7 +334,6 @@ dependencies = [
  "crossterm",
  "dbus",
  "dirs",
- "ical",
  "itertools",
  "log",
  "scopeguard",
