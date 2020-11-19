@@ -10,7 +10,7 @@ use app_dirs::{AppDataType, get_app_dir, AppInfo};
 
 use std::collections::HashMap;
 use std::fs::{copy, File};
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, Write};
 use std::time::{Duration, UNIX_EPOCH, SystemTime};
 
 pub struct App {
@@ -735,6 +735,15 @@ impl App {
                             let uri_str = body.strip_prefix("Add member ").unwrap().to_string();
                             let uri = self.data.profile_manager.display_name(&uri_str);
                             let enter = format!("--> | {} has been added", uri);
+                            channel.messages.push(Message {
+                                from: author,
+                                message: Some(String::from(enter)),
+                                arrived_at,
+                            });
+                        } else if body.find(" joins the conversation") != None {
+                            let uri_str = body.strip_suffix(" joins the conversation").unwrap().to_string();
+                            let uri = self.data.profile_manager.display_name(&uri_str);
+                            let enter = format!("--> | {} joins the conversation", uri);
                             channel.messages.push(Message {
                                 from: author,
                                 message: Some(String::from(enter)),

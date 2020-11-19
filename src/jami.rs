@@ -6,9 +6,9 @@ use dbus::arg::{Array, Dict};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{ BufRead, BufReader };
 use std::fs;
-use std::fs::{copy, File};
+use std::fs::File;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
