@@ -602,7 +602,7 @@ impl App {
                 if !self.data.channels.items.is_empty() {
                     self.data.channels.state.select(Some(0));
                 }
-            } else if message.starts_with("/join") {
+            } else if message == "/join" {
                 Jami::accept_request(&account_id, &channel.id);
                 channel.messages.push(Message {
                     from: String::new(),
@@ -816,7 +816,7 @@ impl App {
                 id: conversation_id.clone(),
                 name: String::from(format!("r:{}", conversation_id)),
                 members: Vec::new(),
-                channel_type: ChannelType::Group,
+                channel_type: ChannelType::Invite,
                 messages: Vec::new(),
                 unread_messages: 0,
             });
