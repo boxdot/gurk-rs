@@ -1,54 +1,11 @@
-on: [push, pull_request]
-
-name: CI
-
-env:
-  CARGO_INCREMENTAL: 0
+on: [push]
 
 jobs:
-  build_and_test:
-    name: build
+  build:
     runs-on: ubuntu-latest
-    env:
-      RUSTFLAGS: -D warnings
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --all-targets
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
 
-  rustfmt:
-    name: rustfmt
-    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v1
+      - uses: icepuma/rust-action@master
         with:
-          profile: minimal
-          toolchain: stable
-          components: rustfmt
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: -- --check
-
-  clippy:
-    name: clippy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          components: clippy
-      - uses: actions-rs/cargo@v1
-        with:
-          command: clippy
+          args: cargo fmt -- --check && cargo clippy -- -Dwarnings && cargo build
