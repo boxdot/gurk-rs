@@ -1,17 +1,17 @@
 use crate::account::Account;
+use crate::jami::{ImportType, Jami, ProfileManager};
 use crate::util::StatefulList;
-use crate::jami::{ ImportType, Jami, ProfileManager };
 
+use app_dirs::{get_app_dir, AppDataType, AppInfo};
 use chrono::{DateTime, TimeZone, Utc};
 use crossterm::event::KeyCode;
 use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthStr;
-use app_dirs::{AppDataType, get_app_dir, AppInfo};
 
 use std::collections::HashMap;
 use std::fs::{copy, File};
 use std::io::{self, BufRead, Write};
-use std::time::{Duration, UNIX_EPOCH, SystemTime};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub struct App {
     pub should_quit: bool,
@@ -46,7 +46,6 @@ pub struct PendingRm {
 }
 
 impl AppData {
-
     // Move to jami namespace
     fn select_jami_account(create_if_not: bool) -> Account {
         let accounts = Jami::get_account_list();
@@ -96,7 +95,7 @@ impl AppData {
             messages,
             unread_messages: 0,
         });
-        
+
         for request in Jami::get_conversations_requests(&account.id) {
             channels.push(Channel {
                 id: request.get("id").unwrap().clone(),
@@ -107,22 +106,19 @@ impl AppData {
                 unread_messages: 0,
             });
         }
-        
+
         for conversation in Jami::get_conversations(&account.id) {
             let members_from_daemon = Jami::get_members(&account.id, &conversation);
             let mut members = Vec::new();
             for member in members_from_daemon {
-                let role : Role;
+                let role: Role;
                 if member["role"].to_string() == "admin" {
                     role = Role::Admin;
                 } else {
                     role = Role::Member;
                 }
                 let hash = member["uri"].to_string();
-                members.push(Member {
-                    hash,
-                    role,
-                })
+                members.push(Member { hash, role })
             }
             channels.push(Channel {
                 id: conversation.clone(),
@@ -165,7 +161,7 @@ impl AppData {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Role {
     Member,
-    Admin
+    Admin,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -208,7 +204,7 @@ pub enum Event<I> {
     Message {
         account_id: String,
         conversation_id: String,
-        payloads: HashMap<String, String>
+        payloads: HashMap<String, String>,
     },
     ConversationReady(String, String),
     ConversationRequest(String, String),
@@ -221,7 +217,6 @@ pub enum Event<I> {
 }
 
 impl App {
-
     pub fn try_new(verbose: bool) -> anyhow::Result<Self> {
         let log_file = if verbose {
             Some(File::create("jami-cli.log").unwrap())
@@ -240,7 +235,6 @@ impl App {
             log_file,
         })
     }
-
 
     pub fn on_key(&mut self, key: KeyCode) {
         match key {
@@ -276,7 +270,11 @@ impl App {
         }
     }
 
-    pub async fn on_registration_state_changed(&mut self, _account_id: &String, registration_state: &String) {
+    pub async fn on_registration_state_changed(
+        &mut self,
+        _account_id: &String,
+        registration_state: &String,
+    ) {
         if registration_state == "REGISTERED" && self.data.account == Account::null() {
             self.data.account = AppData::select_jami_account(false);
         }
@@ -295,7 +293,10 @@ impl App {
             self.data.account = AppData::select_jami_account(false);
             if self.data.account.id.is_empty() {
                 self.data.channels.state.select(Some(0));
-                self.data.channels.items.retain(|channel| channel.id.is_empty());
+                self.data
+                    .channels
+                    .items
+                    .retain(|channel| channel.id.is_empty());
                 self.data.channels.items[0].messages.push(Message {
                     from: String::new(),
                     message: Some(String::from("!!!! No more account left to use")),
@@ -303,7 +304,9 @@ impl App {
                 });
                 return;
             }
-            self.data.profile_manager.load_from_account(&self.data.account.id);
+            self.data
+                .profile_manager
+                .load_from_account(&self.data.account.id);
             let channels = AppData::channels_for_account(&self.data.account);
             self.data.channels = StatefulList::with_items(channels);
             if !self.data.channels.items.is_empty() {
@@ -315,15 +318,18 @@ impl App {
 
     pub async fn on_profile_received(&mut self, account_id: &String, from: &String, path: &String) {
         let dest = get_app_dir(
-                        AppDataType::UserData,
-                        &AppInfo{name: "jami", author: "SFL"},
-                        &*format!("{}/profiles", account_id)
-                    );
+            AppDataType::UserData,
+            &AppInfo {
+                name: "jami",
+                author: "SFL",
+            },
+            &*format!("{}/profiles", account_id),
+        );
         if dest.is_err() {
             return;
         }
         let dest = dest.unwrap().into_os_string().into_string();
-        let dest =  format!("{}/{}.vcf", dest.unwrap(), &base64::encode(&*from));
+        let dest = format!("{}/{}.vcf", dest.unwrap(), &base64::encode(&*from));
         let result = copy(path, dest.clone());
         if result.is_err() {
             return;
@@ -356,7 +362,7 @@ impl App {
                 let mut ns = String::new();
                 if member.find("@") != None {
                     let member_cloned = member.clone();
-                    let split : Vec<&str> = member_cloned.split("@").collect();
+                    let split: Vec<&str> = member_cloned.split("@").collect();
                     member = split[0].to_string();
                     ns = split[1].to_string();
                 }
@@ -380,7 +386,7 @@ impl App {
                     });
                 }
             } else if message == "/get" || message.starts_with("/get ") {
-                let parts : Vec<&str> = message.split(" ").collect();
+                let parts: Vec<&str> = message.split(" ").collect();
                 let filter = parts.get(1).unwrap_or(&"").to_string();
                 for (key, value) in Jami::get_account_details(&self.data.account.id) {
                     if filter.is_empty() || filter.to_lowercase() == key.to_lowercase() {
@@ -393,7 +399,7 @@ impl App {
                 }
                 show_msg = false;
             } else if message.starts_with("/set") {
-                let parts : Vec<&str> = message.split(" ").collect();
+                let parts: Vec<&str> = message.split(" ").collect();
                 let key = parts.get(1).unwrap_or(&"").to_string();
                 let value = parts.get(2).unwrap_or(&"").to_string();
                 let mut details = Jami::get_account_details(&self.data.account.id);
@@ -420,7 +426,9 @@ impl App {
                 } else {
                     //  TODO avoid duplicate code
                     self.data.account = account;
-                    self.data.profile_manager.load_from_account(&self.data.account.id);
+                    self.data
+                        .profile_manager
+                        .load_from_account(&self.data.account.id);
                     let channels = AppData::channels_for_account(&self.data.account);
                     self.data.channels = StatefulList::with_items(channels);
                     if !self.data.channels.items.is_empty() {
@@ -434,12 +442,12 @@ impl App {
                 let account_id = String::from(message.strip_prefix("/rm ").unwrap());
                 Jami::rm_account(&*account_id);
             } else if message.starts_with("/import ") {
-                let parts : Vec<&str> = message.split(" ").collect();
+                let parts: Vec<&str> = message.split(" ").collect();
                 let file = parts.get(1).unwrap_or(&"").to_string();
                 let password = parts.get(2).unwrap_or(&"").to_string();
                 Jami::add_account(&file, &password, ImportType::BACKUP);
             } else if message.starts_with("/link ") {
-                let parts : Vec<&str> = message.split(" ").collect();
+                let parts: Vec<&str> = message.split(" ").collect();
                 let pin = parts.get(1).unwrap_or(&"").to_string();
                 let password = parts.get(2).unwrap_or(&"").to_string();
                 Jami::add_account(&pin, &password, ImportType::NETWORK);
@@ -456,7 +464,9 @@ impl App {
                 });
                 channel.messages.push(Message {
                     from: String::new(),
-                    message: Some(String::from("/msg <id|username>: Start a conversation with someone")),
+                    message: Some(String::from(
+                        "/msg <id|username>: Start a conversation with someone",
+                    )),
                     arrived_at: Utc::now(),
                 });
                 channel.messages.push(Message {
@@ -481,17 +491,23 @@ impl App {
                 });
                 channel.messages.push(Message {
                     from: String::new(),
-                    message: Some(String::from("/link <pin> [password]: Link an account via a PIN")),
+                    message: Some(String::from(
+                        "/link <pin> [password]: Link an account via a PIN",
+                    )),
                     arrived_at: Utc::now(),
                 });
                 channel.messages.push(Message {
                     from: String::new(),
-                    message: Some(String::from("/import <file> [password]: Import an account from a backup")),
+                    message: Some(String::from(
+                        "/import <file> [password]: Import an account from a backup",
+                    )),
                     arrived_at: Utc::now(),
                 });
                 channel.messages.push(Message {
                     from: String::new(),
-                    message: Some(String::from("/get [key]: get account details (if key specified, only get key)")),
+                    message: Some(String::from(
+                        "/get [key]: get account details (if key specified, only get key)",
+                    )),
                     arrived_at: Utc::now(),
                 });
                 channel.messages.push(Message {
@@ -530,7 +546,7 @@ impl App {
                     let mut ns = String::new();
                     if member.find("@") != None {
                         let member_cloned = member.clone();
-                        let split : Vec<&str> = member_cloned.split("@").collect();
+                        let split: Vec<&str> = member_cloned.split("@").collect();
                         member = split[0].to_string();
                         ns = split[1].to_string();
                     }
@@ -542,7 +558,7 @@ impl App {
                     show_msg = false;
                     Jami::lookup_name(&account_id, &ns, &member);
                 }
-            }  else if message.starts_with("/kick") {
+            } else if message.starts_with("/kick") {
                 // TODO remove code duplication
                 let mut member = String::from(message.strip_prefix("/kick ").unwrap());
                 if Jami::is_hash(&member) {
@@ -551,7 +567,7 @@ impl App {
                     let mut ns = String::new();
                     if member.find("@") != None {
                         let member_cloned = member.clone();
-                        let split : Vec<&str> = member_cloned.split("@").collect();
+                        let split: Vec<&str> = member_cloned.split("@").collect();
                         member = split[0].to_string();
                         ns = split[1].to_string();
                     }
@@ -576,12 +592,16 @@ impl App {
                 });
                 channel.messages.push(Message {
                     from: String::new(),
-                    message: Some(String::from("/invite [hash|username]: Invite somebody to the conversation")),
+                    message: Some(String::from(
+                        "/invite [hash|username]: Invite somebody to the conversation",
+                    )),
                     arrived_at: Utc::now(),
                 });
                 channel.messages.push(Message {
                     from: String::new(),
-                    message: Some(String::from("/kick [hash|username]: Kick someone from the conversation")),
+                    message: Some(String::from(
+                        "/kick [hash|username]: Kick someone from the conversation",
+                    )),
                     arrived_at: Utc::now(),
                 });
                 channel.messages.push(Message {
@@ -648,8 +668,8 @@ impl App {
             let channel = &mut self.data.channels.items[idx];
             if channel.channel_type == ChannelType::Group {
                 channel.messages.clear();
-                Jami::load_conversation(&self.data.account.id, &channel.id, &String::new(), 0);            
-            }           
+                Jami::load_conversation(&self.data.account.id, &channel.id, &String::new(), 0);
+            }
         }
     }
 
@@ -660,7 +680,7 @@ impl App {
             let channel = &mut self.data.channels.items[idx];
             if channel.channel_type == ChannelType::Group {
                 channel.messages.clear();
-                Jami::load_conversation(&self.data.account.id, &channel.id, &String::new(), 0);            
+                Jami::load_conversation(&self.data.account.id, &channel.id, &String::new(), 0);
             }
         }
     }
@@ -704,16 +724,22 @@ impl App {
                 if channel.id == conversation_id {
                     // Parse timestamp
                     let mut arrived_at = SystemTime::UNIX_EPOCH;
-                    let tstr : String = payloads.get("timestamp").unwrap_or(&String::new()).to_string();
+                    let tstr: String = payloads
+                        .get("timestamp")
+                        .unwrap_or(&String::new())
+                        .to_string();
                     if tstr.is_empty() {
                         arrived_at = SystemTime::now();
                     } else {
                         arrived_at += Duration::from_secs(tstr.parse::<u64>().unwrap_or(0));
                     }
-                    let arrived_at = Utc.timestamp(arrived_at.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64, 0);
+                    let arrived_at = Utc.timestamp(
+                        arrived_at.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64,
+                        0,
+                    );
                     // author
                     let author_str = payloads.get("author").unwrap_or(&String::new()).to_string();
-                    let author =  self.data.profile_manager.display_name(&author_str);
+                    let author = self.data.profile_manager.display_name(&author_str);
                     // print message
                     if payloads.get("type").unwrap().is_empty() {
                         channel.messages.push(Message {
@@ -741,7 +767,10 @@ impl App {
                                 arrived_at,
                             });
                         } else if body.find(" joins the conversation") != None {
-                            let uri_str = body.strip_suffix(" joins the conversation").unwrap().to_string();
+                            let uri_str = body
+                                .strip_suffix(" joins the conversation")
+                                .unwrap()
+                                .to_string();
                             let uri = self.data.profile_manager.display_name(&uri_str);
                             let enter = format!("--> | {} joins the conversation", uri);
                             channel.messages.push(Message {
@@ -779,7 +808,9 @@ impl App {
         let messages: Vec<_> = messages.into_iter().rev().collect();
         for msg in messages {
             // TODO no need to clone
-            let _ = self.on_message(account_id.clone(), conversation_id.clone(), msg).await;
+            let _ = self
+                .on_message(account_id.clone(), conversation_id.clone(), msg)
+                .await;
         }
         Some(())
     }
@@ -791,7 +822,10 @@ impl App {
     ) -> Option<()> {
         if account_id == self.data.account.id {
             self.data.channels.state.select(Some(0));
-            self.data.channels.items.retain(|channel| channel.id != conversation_id);
+            self.data
+                .channels
+                .items
+                .retain(|channel| channel.id != conversation_id);
             self.data.channels.items.push(Channel {
                 id: conversation_id.clone(),
                 name: conversation_id,
@@ -839,7 +873,7 @@ impl App {
             let out_invite = &self.data.out_invite[i];
             if out_invite.account == account_id && out_invite.member == name {
                 if status == 0 {
-                    let conversation : String;
+                    let conversation: String;
                     if out_invite.channel.as_ref().is_none() {
                         conversation = Jami::start_conversation(&self.data.account.id);
                     } else {
@@ -868,7 +902,11 @@ impl App {
             let pending_rm = &self.data.pending_rm[i];
             if pending_rm.account == account_id && pending_rm.member == name {
                 if status == 0 {
-                    Jami::rm_conversation_member(&pending_rm.account, &pending_rm.channel, &address);
+                    Jami::rm_conversation_member(
+                        &pending_rm.account,
+                        &pending_rm.channel,
+                        &address,
+                    );
                 }
                 self.data.pending_rm.remove(i);
                 break;
@@ -880,7 +918,7 @@ impl App {
             let mut refresh_name = false;
             let mut name = String::new();
             for member in &*channel.members {
-                name +=  &*self.data.profile_manager.display_name(&member.hash);
+                name += &*self.data.profile_manager.display_name(&member.hash);
                 name += ", ";
                 if member.hash == address {
                     refresh_name = true;

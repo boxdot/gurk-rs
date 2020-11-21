@@ -1,11 +1,11 @@
-mod app;
 mod account;
+mod app;
+mod jami;
 mod ui;
 mod util;
-mod jami;
 
-use app::{App, Event};
 use crate::jami::Jami;
+use app::{App, Event};
 
 use crossterm::{
     event::{
@@ -64,7 +64,6 @@ async fn main() -> anyhow::Result<()> {
 
     let backend = CrosstermBackend::new(stdout);
 
-
     let mut terminal = Terminal::new(backend)?;
 
     terminal.clear()?;
@@ -83,33 +82,41 @@ async fn main() -> anyhow::Result<()> {
                 KeyCode::Down => app.on_down(),
                 code => app.on_key(code),
             },
-            Some(Event::Message { account_id, conversation_id, payloads }) => {
+            Some(Event::Message {
+                account_id,
+                conversation_id,
+                payloads,
+            }) => {
                 app.on_message(account_id, conversation_id, payloads).await;
             }
             Some(Event::Resize) => {
                 // will just redraw the app
-            },
+            }
             Some(Event::RegistrationStateChanged(account_id, registration_state)) => {
-                app.on_registration_state_changed(&account_id, &registration_state).await;
-            },
+                app.on_registration_state_changed(&account_id, &registration_state)
+                    .await;
+            }
             Some(Event::ConversationReady(account_id, conversation_id)) => {
                 app.on_conversation_ready(account_id, conversation_id).await;
-            },
+            }
             Some(Event::ConversationRequest(account_id, conversation_id)) => {
-                app.on_conversation_request(account_id, conversation_id).await;
-            },
+                app.on_conversation_request(account_id, conversation_id)
+                    .await;
+            }
             Some(Event::RegisteredNameFound(account_id, status, address, name)) => {
-                app.on_registered_name_found(account_id, status, address, name).await;
-            },
+                app.on_registered_name_found(account_id, status, address, name)
+                    .await;
+            }
             Some(Event::ConversationLoaded(id, account_id, conversation_id, messages)) => {
-                app.on_conversation_loaded(id, account_id, conversation_id, messages).await;
-            },
+                app.on_conversation_loaded(id, account_id, conversation_id, messages)
+                    .await;
+            }
             Some(Event::ProfileReceived(account_id, from, path)) => {
                 app.on_profile_received(&account_id, &from, &path).await;
-            },
+            }
             Some(Event::AccountsChanged()) => {
                 app.on_accounts_changed().await;
-            },
+            }
             None => {
                 break;
             }

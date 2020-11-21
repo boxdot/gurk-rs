@@ -1,16 +1,16 @@
-use crate::app::Event;
 use crate::account::Account;
-use app_dirs::{AppDataType, get_app_dir, AppInfo};
-use dbus::{Connection, ConnectionItem, BusType, Message};
+use crate::app::Event;
+use app_dirs::{get_app_dir, AppDataType, AppInfo};
 use dbus::arg::{Array, Dict};
+use dbus::{BusType, Connection, ConnectionItem, Message};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::{ BufRead, BufReader };
 use std::fs;
 use std::fs::File;
-use std::sync::Arc;
+use std::io::{BufRead, BufReader};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 #[derive(Serialize, Deserialize)]
 pub struct Profile {
@@ -53,10 +53,13 @@ impl ProfileManager {
 
     pub fn load_from_account(&mut self, account_id: &String) {
         let dest = get_app_dir(
-                        AppDataType::UserData,
-                        &AppInfo{name: "jami", author: "SFL"},
-                        &*format!("{}/profiles", account_id)
-                    );
+            AppDataType::UserData,
+            &AppInfo {
+                name: "jami",
+                author: "SFL",
+            },
+            &*format!("{}/profiles", account_id),
+        );
         if dest.is_err() {
             return;
         }
@@ -66,6 +69,13 @@ impl ProfileManager {
         for path in paths {
             self.load_profile(&path.unwrap().path().to_str().unwrap().to_string());
         }
+
+        let account = Jami::get_account(account_id);
+        let mut profile = Profile::new();
+        profile.uri = account.hash.clone();
+        profile.display_name = account.alias;
+        profile.username = account.registered_name;
+        self.profiles.insert(account.hash, profile);
     }
 
     pub fn load_profile(&mut self, path: &String) {
@@ -95,7 +105,6 @@ impl ProfileManager {
         if self.profiles.contains_key(uri) {
             let mut profile = self.profiles.get_mut(uri).unwrap();
             profile.username = username.to_string();
-            
         } else {
             let mut profile = Profile::new();
             profile.uri = uri.to_string();
@@ -120,7 +129,7 @@ pub struct Jami {}
 pub enum ImportType {
     None,
     BACKUP,
-    NETWORK
+    NETWORK,
 }
 
 impl Jami {
@@ -128,31 +137,61 @@ impl Jami {
         mut tx: tokio::sync::mpsc::Sender<crate::app::Event<T>>,
         stop: Arc<AtomicBool>,
     ) -> Result<(), std::io::Error> {
-        
         loop {
             // todo separate + doc
             let mut events = Vec::new();
             {
                 let dbus_listener = Connection::get_private(BusType::Session).unwrap();
-                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=incomingTrustRequest").unwrap();
-                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=accountsChanged").unwrap();
+                dbus_listener
+                    .add_match(
+                        "interface=cx.ring.Ring.ConfigurationManager,member=incomingTrustRequest",
+                    )
+                    .unwrap();
+                dbus_listener
+                    .add_match("interface=cx.ring.Ring.ConfigurationManager,member=accountsChanged")
+                    .unwrap();
                 dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=registrationStateChanged").unwrap();
-                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=messageReceived").unwrap();
-                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=conversationReady").unwrap();
-                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=registeredNameFound").unwrap();
+                dbus_listener
+                    .add_match("interface=cx.ring.Ring.ConfigurationManager,member=messageReceived")
+                    .unwrap();
+                dbus_listener
+                    .add_match(
+                        "interface=cx.ring.Ring.ConfigurationManager,member=conversationReady",
+                    )
+                    .unwrap();
+                dbus_listener
+                    .add_match(
+                        "interface=cx.ring.Ring.ConfigurationManager,member=registeredNameFound",
+                    )
+                    .unwrap();
                 dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=conversationRequestReceived").unwrap();
-                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=conversationLoaded").unwrap();
-                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=profileReceived").unwrap();
-                dbus_listener.add_match("interface=cx.ring.Ring.ConfigurationManager,member=accountsChanged").unwrap();
+                dbus_listener
+                    .add_match(
+                        "interface=cx.ring.Ring.ConfigurationManager,member=conversationLoaded",
+                    )
+                    .unwrap();
+                dbus_listener
+                    .add_match("interface=cx.ring.Ring.ConfigurationManager,member=profileReceived")
+                    .unwrap();
+                dbus_listener
+                    .add_match("interface=cx.ring.Ring.ConfigurationManager,member=accountsChanged")
+                    .unwrap();
                 // For each signals, call handlers.
                 for ci in dbus_listener.iter(100) {
                     if stop.load(Ordering::Relaxed) {
                         break;
                     }
-                    let msg = if let ConnectionItem::Signal(ref signal) = ci { signal } else { continue };
-                    if &*msg.interface().unwrap() != "cx.ring.Ring.ConfigurationManager" { continue };
+                    let msg = if let ConnectionItem::Signal(ref signal) = ci {
+                        signal
+                    } else {
+                        continue;
+                    };
+                    if &*msg.interface().unwrap() != "cx.ring.Ring.ConfigurationManager" {
+                        continue;
+                    };
                     if &*msg.member().unwrap() == "messageReceived" {
-                        let (account_id, conversation_id, payloads_dict) = msg.get3::<&str, &str, Dict<&str, &str, _>>();
+                        let (account_id, conversation_id, payloads_dict) =
+                            msg.get3::<&str, &str, Dict<&str, &str, _>>();
                         let mut payloads: HashMap<String, String> = HashMap::new();
                         for (key, value) in payloads_dict.unwrap() {
                             payloads.insert(String::from(key), String::from(value));
@@ -160,27 +199,49 @@ impl Jami {
                         events.push(Event::Message {
                             account_id: String::from(account_id.unwrap()),
                             conversation_id: String::from(conversation_id.unwrap()),
-                            payloads
+                            payloads,
                         });
-                    } else if &*msg.member().unwrap() == "registrationStateChanged" { 
-                        let (account_id, registration_state, _, _) = msg.get4::<&str, &str, u64, &str>();
-                        events.push(Event::RegistrationStateChanged(String::from(account_id.unwrap()), String::from(registration_state.unwrap())));
-                    } else if &*msg.member().unwrap() == "conversationReady" { 
+                    } else if &*msg.member().unwrap() == "registrationStateChanged" {
+                        let (account_id, registration_state, _, _) =
+                            msg.get4::<&str, &str, u64, &str>();
+                        events.push(Event::RegistrationStateChanged(
+                            String::from(account_id.unwrap()),
+                            String::from(registration_state.unwrap()),
+                        ));
+                    } else if &*msg.member().unwrap() == "conversationReady" {
                         let (account_id, conversation_id) = msg.get2::<&str, &str>();
-                        events.push(Event::ConversationReady(String::from(account_id.unwrap()), String::from(conversation_id.unwrap())));
-                    } else if &*msg.member().unwrap() == "registeredNameFound" { 
-                        let (account_id, status, address, name) = msg.get4::<&str, i32, &str, &str>();
-                        events.push(Event::RegisteredNameFound(String::from(account_id.unwrap()), status.unwrap() as u64, String::from(address.unwrap()), String::from(name.unwrap())));
-                    } else if &*msg.member().unwrap() == "conversationRequestReceived" { 
-                        let (account_id, conversation_id, _) = msg.get3::<&str, &str, Dict<&str, &str, _>>();
-                        events.push(Event::ConversationRequest(String::from(account_id.unwrap()), String::from(conversation_id.unwrap())));
-                    } else if &*msg.member().unwrap() == "profileReceived" { 
+                        events.push(Event::ConversationReady(
+                            String::from(account_id.unwrap()),
+                            String::from(conversation_id.unwrap()),
+                        ));
+                    } else if &*msg.member().unwrap() == "registeredNameFound" {
+                        let (account_id, status, address, name) =
+                            msg.get4::<&str, i32, &str, &str>();
+                        events.push(Event::RegisteredNameFound(
+                            String::from(account_id.unwrap()),
+                            status.unwrap() as u64,
+                            String::from(address.unwrap()),
+                            String::from(name.unwrap()),
+                        ));
+                    } else if &*msg.member().unwrap() == "conversationRequestReceived" {
+                        let (account_id, conversation_id, _) =
+                            msg.get3::<&str, &str, Dict<&str, &str, _>>();
+                        events.push(Event::ConversationRequest(
+                            String::from(account_id.unwrap()),
+                            String::from(conversation_id.unwrap()),
+                        ));
+                    } else if &*msg.member().unwrap() == "profileReceived" {
                         let (account_id, from, path) = msg.get3::<&str, &str, &str>();
-                        events.push(Event::ProfileReceived(String::from(account_id.unwrap()), String::from(from.unwrap()), String::from(path.unwrap())));
-                    } else if &*msg.member().unwrap() == "accountsChanged" { 
+                        events.push(Event::ProfileReceived(
+                            String::from(account_id.unwrap()),
+                            String::from(from.unwrap()),
+                            String::from(path.unwrap()),
+                        ));
+                    } else if &*msg.member().unwrap() == "accountsChanged" {
                         events.push(Event::AccountsChanged());
-                    } else if &*msg.member().unwrap() == "conversationLoaded" { 
-                        let (id, account_id, conversation_id, messages_dbus) = msg.get4::<u32, &str, &str, Array<Dict<&str, &str, _>, _>>();
+                    } else if &*msg.member().unwrap() == "conversationLoaded" {
+                        let (id, account_id, conversation_id, messages_dbus) =
+                            msg.get4::<u32, &str, &str, Array<Dict<&str, &str, _>, _>>();
                         let mut messages = Vec::new();
                         for message_dbus in messages_dbus.unwrap() {
                             let mut message: HashMap<String, String> = HashMap::new();
@@ -189,9 +250,14 @@ impl Jami {
                             }
                             messages.push(message);
                         }
-                        events.push(Event::ConversationLoaded(id.unwrap(), String::from(account_id.unwrap()), String::from(conversation_id.unwrap()), messages));
+                        events.push(Event::ConversationLoaded(
+                            id.unwrap(),
+                            String::from(account_id.unwrap()),
+                            String::from(conversation_id.unwrap()),
+                            messages,
+                        ));
                     }
-                    
+
                     // Send events
                     if !events.is_empty() {
                         break;
@@ -221,9 +287,12 @@ impl Jami {
      * @return if dbus is ok
      */
     pub fn lookup_name(account: &String, name_service: &String, name: &String) -> bool {
-        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
-                                                "cx.ring.Ring.ConfigurationManager",
-                                                "lookupName");
+        let dbus_msg = Message::new_method_call(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            "cx.ring.Ring.ConfigurationManager",
+            "lookupName",
+        );
         if !dbus_msg.is_ok() {
             error!("lookupName fails. Please verify daemon's API.");
             return false;
@@ -233,7 +302,12 @@ impl Jami {
             return false;
         }
         let dbus = conn.unwrap();
-        let _ = dbus.send_with_reply_and_block(dbus_msg.unwrap().append3(&*account, &*name_service, &*name), 2000).unwrap();
+        let _ = dbus
+            .send_with_reply_and_block(
+                dbus_msg.unwrap().append3(&*account, &*name_service, &*name),
+                2000,
+            )
+            .unwrap();
         true
     }
 
@@ -245,9 +319,12 @@ impl Jami {
      * @return if dbus is ok
      */
     pub fn lookup_address(account: &String, name_service: &String, address: &String) -> bool {
-        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
-                                                "cx.ring.Ring.ConfigurationManager",
-                                                "lookupAddress");
+        let dbus_msg = Message::new_method_call(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            "cx.ring.Ring.ConfigurationManager",
+            "lookupAddress",
+        );
         if !dbus_msg.is_ok() {
             error!("lookupAddress fails. Please verify daemon's API.");
             return false;
@@ -257,7 +334,14 @@ impl Jami {
             return false;
         }
         let dbus = conn.unwrap();
-        let _ = dbus.send_with_reply_and_block(dbus_msg.unwrap().append3(&*account, &*name_service, &*address), 2000).unwrap();
+        let _ = dbus
+            .send_with_reply_and_block(
+                dbus_msg
+                    .unwrap()
+                    .append3(&*account, &*name_service, &*address),
+                2000,
+            )
+            .unwrap();
         true
     }
 
@@ -293,9 +377,12 @@ impl Jami {
         details.insert("Account.type", "RING");
         details.insert("Account.archivePassword", password);
         let details = Dict::new(details.iter());
-        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
-                                                "cx.ring.Ring.ConfigurationManager",
-                                                "addAccount");
+        let dbus_msg = Message::new_method_call(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            "cx.ring.Ring.ConfigurationManager",
+            "addAccount",
+        );
         if !dbus_msg.is_ok() {
             error!("addAccount fails. Please verify daemon's API.");
             return String::new();
@@ -305,12 +392,13 @@ impl Jami {
             return String::new();
         }
         let dbus = conn.unwrap();
-        let response = dbus.send_with_reply_and_block(dbus_msg.unwrap()
-                                                                .append1(details), 2000).unwrap();
+        let response = dbus
+            .send_with_reply_and_block(dbus_msg.unwrap().append1(details), 2000)
+            .unwrap();
         // addAccount returns one argument, which is a string.
-        let account_added: &str  = match response.get1() {
+        let account_added: &str = match response.get1() {
             Some(account) => account,
-            None => ""
+            None => "",
         };
         info!("New account: {:?}", account_added);
         String::from(account_added)
@@ -322,9 +410,12 @@ impl Jami {
      */
     pub fn get_account_list() -> Vec<Account> {
         let mut account_list: Vec<Account> = Vec::new();
-        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
-                                                "cx.ring.Ring.ConfigurationManager",
-                                                "getAccountList");
+        let dbus_msg = Message::new_method_call(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            "cx.ring.Ring.ConfigurationManager",
+            "getAccountList",
+        );
         if !dbus_msg.is_ok() {
             error!("getAccountList fails. Please verify daemon's API.");
             return account_list;
@@ -334,11 +425,13 @@ impl Jami {
             return account_list;
         }
         let dbus = conn.unwrap();
-        let response = dbus.send_with_reply_and_block(dbus_msg.unwrap(), 2000).unwrap();
+        let response = dbus
+            .send_with_reply_and_block(dbus_msg.unwrap(), 2000)
+            .unwrap();
         // getAccountList returns one argument, which is an array of strings.
-        let accounts: Array<&str, _>  = match response.get1() {
+        let accounts: Array<&str, _> = match response.get1() {
             Some(array) => array,
-            None => return account_list
+            None => return account_list,
         };
         for account in accounts {
             account_list.push(Jami::get_account(account));
@@ -352,9 +445,12 @@ impl Jami {
      * @return the account retrieven
      */
     pub fn get_account(id: &str) -> Account {
-        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
-                                                "cx.ring.Ring.ConfigurationManager",
-                                                "getAccountDetails");
+        let dbus_msg = Message::new_method_call(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            "cx.ring.Ring.ConfigurationManager",
+            "getAccountDetails",
+        );
         if !dbus_msg.is_ok() {
             error!("getAccountDetails fails. Please verify daemon's API.");
             return Account::null();
@@ -365,9 +461,10 @@ impl Jami {
             return Account::null();
         }
         let dbus = conn.unwrap();
-        let response = dbus.send_with_reply_and_block(
-                                           dbus_msg.unwrap().append1(id), 2000
-                                       ).ok().expect("Is the ring-daemon launched?");
+        let response = dbus
+            .send_with_reply_and_block(dbus_msg.unwrap().append1(id), 2000)
+            .ok()
+            .expect("Is the ring-daemon launched?");
         let details: Dict<&str, &str, _> = match response.get1() {
             Some(details) => details,
             None => {
@@ -389,6 +486,9 @@ impl Jami {
                     if key == "Account.username" {
                         account.hash = String::from(value).replace("ring:", "");
                     }
+                    if key == "Account.registeredName" {
+                        account.registered_name = String::from(value);
+                    }
                 }
             }
         }
@@ -400,9 +500,12 @@ impl Jami {
      * @param id the account id to remove
      */
     pub fn rm_account(id: &str) {
-        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
-                                                "cx.ring.Ring.ConfigurationManager",
-                                                "removeAccount");
+        let dbus_msg = Message::new_method_call(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            "cx.ring.Ring.ConfigurationManager",
+            "removeAccount",
+        );
         if !dbus_msg.is_ok() {
             error!("removeAccount fails. Please verify daemon's API.");
             return;
@@ -413,9 +516,10 @@ impl Jami {
             return;
         }
         let dbus = conn.unwrap();
-        let _ = dbus.send_with_reply_and_block(
-                                           dbus_msg.unwrap().append1(id), 2000
-                                       ).ok().expect("Is the ring-daemon launched?");
+        let _ = dbus
+            .send_with_reply_and_block(dbus_msg.unwrap().append1(id), 2000)
+            .ok()
+            .expect("Is the ring-daemon launched?");
     }
 
     /**
@@ -425,9 +529,12 @@ impl Jami {
      */
     pub fn get_account_details(id: &str) -> HashMap<String, String> {
         let mut result = HashMap::new();
-        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
-                                                "cx.ring.Ring.ConfigurationManager",
-                                                "getAccountDetails");
+        let dbus_msg = Message::new_method_call(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            "cx.ring.Ring.ConfigurationManager",
+            "getAccountDetails",
+        );
         if !dbus_msg.is_ok() {
             error!("getAccountDetails fails. Please verify daemon's API.");
             return result;
@@ -438,9 +545,10 @@ impl Jami {
             return result;
         }
         let dbus = conn.unwrap();
-        let response = dbus.send_with_reply_and_block(
-                                           dbus_msg.unwrap().append1(id), 2000
-                                       ).ok().expect("Is the ring-daemon launched?");
+        let response = dbus
+            .send_with_reply_and_block(dbus_msg.unwrap().append1(id), 2000)
+            .ok()
+            .expect("Is the ring-daemon launched?");
         let details: Dict<&str, &str, _> = match response.get1() {
             Some(details) => details,
             None => {
@@ -459,10 +567,13 @@ impl Jami {
      * @param id the account id to build
      * @return the account details
      */
-    pub fn set_account_details(id: &str, details: HashMap<String, String>)  {
-        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
-                                                "cx.ring.Ring.ConfigurationManager",
-                                                "setAccountDetails");
+    pub fn set_account_details(id: &str, details: HashMap<String, String>) {
+        let dbus_msg = Message::new_method_call(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            "cx.ring.Ring.ConfigurationManager",
+            "setAccountDetails",
+        );
         if !dbus_msg.is_ok() {
             error!("setAccountDetails fails. Please verify daemon's API.");
             return;
@@ -473,9 +584,10 @@ impl Jami {
             return;
         }
         let dbus = conn.unwrap();
-        let _ = dbus.send_with_reply_and_block(
-                                           dbus_msg.unwrap().append2(id, details), 2000
-                                       ).ok().expect("Is the ring-daemon launched?");
+        let _ = dbus
+            .send_with_reply_and_block(dbus_msg.unwrap().append2(id, details), 2000)
+            .ok()
+            .expect("Is the ring-daemon launched?");
     }
 
     /**
@@ -486,9 +598,12 @@ impl Jami {
      */
     pub fn get_members(id: &String, convid: &String) -> Vec<HashMap<String, String>> {
         let mut members: Vec<HashMap<String, String>> = Vec::new();
-        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
-                                                "cx.ring.Ring.ConfigurationManager",
-                                                "getConversationMembers");
+        let dbus_msg = Message::new_method_call(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            "cx.ring.Ring.ConfigurationManager",
+            "getConversationMembers",
+        );
         if !dbus_msg.is_ok() {
             error!("getConversationMembers fails. Please verify daemon's API.");
             return members;
@@ -498,11 +613,13 @@ impl Jami {
             return members;
         }
         let dbus = conn.unwrap();
-        let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append2(&*id, &*convid), 2000).unwrap();
+        let response = dbus
+            .send_with_reply_and_block(dbus_msg.unwrap().append2(&*id, &*convid), 2000)
+            .unwrap();
         // getAccountList returns one argument, which is an array of strings.
         let contacts: Array<Dict<&str, &str, _>, _> = match response.get1() {
             Some(contacts) => contacts,
-            None => return members
+            None => return members,
         };
         for contact in contacts {
             let mut details = HashMap::new();
@@ -519,9 +636,12 @@ impl Jami {
      * @param id        Id of the account
      */
     pub fn start_conversation(id: &String) -> String {
-        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
-                                                "cx.ring.Ring.ConfigurationManager",
-                                                "startConversation");
+        let dbus_msg = Message::new_method_call(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            "cx.ring.Ring.ConfigurationManager",
+            "startConversation",
+        );
         if !dbus_msg.is_ok() {
             error!("startConversation fails. Please verify daemon's API.");
             return String::new();
@@ -531,7 +651,9 @@ impl Jami {
             return String::new();
         }
         let dbus = conn.unwrap();
-        let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append1(&*id), 2000).unwrap();
+        let response = dbus
+            .send_with_reply_and_block(dbus_msg.unwrap().append1(&*id), 2000)
+            .unwrap();
         response.get1().unwrap_or(String::new())
     }
 
@@ -542,9 +664,12 @@ impl Jami {
      */
     pub fn get_conversations(id: &String) -> Vec<String> {
         let mut conversations: Vec<String> = Vec::new();
-        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
-                                                "cx.ring.Ring.ConfigurationManager",
-                                                "getConversations");
+        let dbus_msg = Message::new_method_call(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            "cx.ring.Ring.ConfigurationManager",
+            "getConversations",
+        );
         if !dbus_msg.is_ok() {
             error!("getConversations fails. Please verify daemon's API.");
             return conversations;
@@ -554,11 +679,13 @@ impl Jami {
             return conversations;
         }
         let dbus = conn.unwrap();
-        let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append1(&*id), 2000).unwrap();
+        let response = dbus
+            .send_with_reply_and_block(dbus_msg.unwrap().append1(&*id), 2000)
+            .unwrap();
         // getAccountList returns one argument, which is an array of strings.
         let conv_resp: Array<&str, _> = match response.get1() {
             Some(conversations) => conversations,
-            None => return conversations
+            None => return conversations,
         };
         for conv in conv_resp {
             conversations.push(String::from(conv));
@@ -573,9 +700,12 @@ impl Jami {
      */
     pub fn get_conversations_requests(id: &String) -> Vec<HashMap<String, String>> {
         let mut requests: Vec<HashMap<String, String>> = Vec::new();
-        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
-                                                "cx.ring.Ring.ConfigurationManager",
-                                                "getConversationRequests");
+        let dbus_msg = Message::new_method_call(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            "cx.ring.Ring.ConfigurationManager",
+            "getConversationRequests",
+        );
         if !dbus_msg.is_ok() {
             error!("getConversationRequests fails. Please verify daemon's API.");
             return requests;
@@ -585,11 +715,13 @@ impl Jami {
             return requests;
         }
         let dbus = conn.unwrap();
-        let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append1(&*id), 2000).unwrap();
+        let response = dbus
+            .send_with_reply_and_block(dbus_msg.unwrap().append1(&*id), 2000)
+            .unwrap();
         // getAccountList returns one argument, which is an array of strings.
         let requests_rep: Array<Dict<&str, &str, _>, _> = match response.get1() {
             Some(requests) => requests,
-            None => return requests
+            None => return requests,
         };
         for req in requests_rep {
             let mut request = HashMap::new();
@@ -607,9 +739,12 @@ impl Jami {
      * @param conv_id   Id of the conversation
      */
     pub fn decline_request(id: &String, conv_id: &String) {
-        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
-                                                "cx.ring.Ring.ConfigurationManager",
-                                                "declineConversationRequest");
+        let dbus_msg = Message::new_method_call(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            "cx.ring.Ring.ConfigurationManager",
+            "declineConversationRequest",
+        );
         if !dbus_msg.is_ok() {
             error!("declineConversationRequest fails. Please verify daemon's API.");
             return;
@@ -619,7 +754,9 @@ impl Jami {
             return;
         }
         let dbus = conn.unwrap();
-        let _ = dbus.send_with_reply_and_block(dbus_msg.unwrap().append2(&*id, &*conv_id), 2000).unwrap();
+        let _ = dbus
+            .send_with_reply_and_block(dbus_msg.unwrap().append2(&*id, &*conv_id), 2000)
+            .unwrap();
     }
 
     /**
@@ -628,9 +765,12 @@ impl Jami {
      * @param conv_id   Id of the conversation
      */
     pub fn accept_request(id: &String, conv_id: &String) {
-        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
-                                                "cx.ring.Ring.ConfigurationManager",
-                                                "acceptConversationRequest");
+        let dbus_msg = Message::new_method_call(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            "cx.ring.Ring.ConfigurationManager",
+            "acceptConversationRequest",
+        );
         if !dbus_msg.is_ok() {
             error!("acceptConversationRequest fails. Please verify daemon's API.");
             return;
@@ -640,7 +780,9 @@ impl Jami {
             return;
         }
         let dbus = conn.unwrap();
-        let _ = dbus.send_with_reply_and_block(dbus_msg.unwrap().append2(&*id, &*conv_id), 2000).unwrap();
+        let _ = dbus
+            .send_with_reply_and_block(dbus_msg.unwrap().append2(&*id, &*conv_id), 2000)
+            .unwrap();
     }
 
     /**
@@ -651,10 +793,18 @@ impl Jami {
      * @param size              0 if all else max number of messages to get
      * @return the id of the request
      */
-    pub fn load_conversation(account: &String, conversation: &String, from: &String, size: u32) -> u32 {
-        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
-                                                "cx.ring.Ring.ConfigurationManager",
-                                                "loadConversationMessages");
+    pub fn load_conversation(
+        account: &String,
+        conversation: &String,
+        from: &String,
+        size: u32,
+    ) -> u32 {
+        let dbus_msg = Message::new_method_call(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            "cx.ring.Ring.ConfigurationManager",
+            "loadConversationMessages",
+        );
         if !dbus_msg.is_ok() {
             error!("loadConversationMessages fails. Please verify daemon's API.");
             return 0;
@@ -664,10 +814,17 @@ impl Jami {
             return 0;
         }
         let dbus = conn.unwrap();
-        let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append3(&*account, &*conversation, &*from).append1(size), 2000).unwrap();
+        let response = dbus
+            .send_with_reply_and_block(
+                dbus_msg
+                    .unwrap()
+                    .append3(&*account, &*conversation, &*from)
+                    .append1(size),
+                2000,
+            )
+            .unwrap();
         response.get1().unwrap_or(0)
     }
-
 
     /**
      * Remove a conversation for an account
@@ -676,9 +833,12 @@ impl Jami {
      * @return if the conversation is removed
      */
     pub fn rm_conversation(id: &String, conv_id: &String) -> bool {
-        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
-                                                "cx.ring.Ring.ConfigurationManager",
-                                                "removeConversation");
+        let dbus_msg = Message::new_method_call(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            "cx.ring.Ring.ConfigurationManager",
+            "removeConversation",
+        );
         if !dbus_msg.is_ok() {
             error!("getAccountList fails. Please verify daemon's API.");
             return false;
@@ -688,11 +848,13 @@ impl Jami {
             return false;
         }
         let dbus = conn.unwrap();
-        let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append2(&*id, &*conv_id), 2000).unwrap();
+        let response = dbus
+            .send_with_reply_and_block(dbus_msg.unwrap().append2(&*id, &*conv_id), 2000)
+            .unwrap();
 
         let removed: bool = match response.get1() {
             Some(removed) => removed,
-            None => false
+            None => false,
         };
         removed
     }
@@ -704,9 +866,12 @@ impl Jami {
      * @param hash      Id of the member to invite
      */
     pub fn add_conversation_member(id: &String, conv_id: &String, hash: &String) {
-        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
-                                                "cx.ring.Ring.ConfigurationManager",
-                                                "addConversationMember");
+        let dbus_msg = Message::new_method_call(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            "cx.ring.Ring.ConfigurationManager",
+            "addConversationMember",
+        );
         if !dbus_msg.is_ok() {
             error!("addConversationMember fails. Please verify daemon's API.");
             return;
@@ -716,7 +881,9 @@ impl Jami {
             return;
         }
         let dbus = conn.unwrap();
-        let _ = dbus.send_with_reply_and_block(dbus_msg.unwrap().append3(&*id, &*conv_id, &*hash), 2000).unwrap();
+        let _ = dbus
+            .send_with_reply_and_block(dbus_msg.unwrap().append3(&*id, &*conv_id, &*hash), 2000)
+            .unwrap();
     }
 
     /**
@@ -726,9 +893,12 @@ impl Jami {
      * @param hash      Id of the member to invite
      */
     pub fn rm_conversation_member(id: &String, conv_id: &String, hash: &String) {
-        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
-                                                "cx.ring.Ring.ConfigurationManager",
-                                                "rmConversationMember");
+        let dbus_msg = Message::new_method_call(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            "cx.ring.Ring.ConfigurationManager",
+            "rmConversationMember",
+        );
         if !dbus_msg.is_ok() {
             error!("rmConversationMember fails. Please verify daemon's API.");
             return;
@@ -738,7 +908,9 @@ impl Jami {
             return;
         }
         let dbus = conn.unwrap();
-        let _ = dbus.send_with_reply_and_block(dbus_msg.unwrap().append3(&*id, &*conv_id, &*hash), 2000).unwrap();
+        let _ = dbus
+            .send_with_reply_and_block(dbus_msg.unwrap().append3(&*id, &*conv_id, &*hash), 2000)
+            .unwrap();
     }
 
     /**
@@ -748,10 +920,18 @@ impl Jami {
      * @param hash      Id of the member to invite
      * @param hash      Id of the member to invite
      */
-    pub fn send_conversation_message(id: &String, conv_id: &String, message: &String, parent: &String) -> u64 {
-        let dbus_msg = Message::new_method_call("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager",
-                                                "cx.ring.Ring.ConfigurationManager",
-                                                "sendMessage");
+    pub fn send_conversation_message(
+        id: &String,
+        conv_id: &String,
+        message: &String,
+        parent: &String,
+    ) -> u64 {
+        let dbus_msg = Message::new_method_call(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            "cx.ring.Ring.ConfigurationManager",
+            "sendMessage",
+        );
         if !dbus_msg.is_ok() {
             error!("getAccountList fails. Please verify daemon's API.");
             return 0;
@@ -761,8 +941,15 @@ impl Jami {
             return 0;
         }
         let dbus = conn.unwrap();
-        let response = dbus.send_with_reply_and_block(dbus_msg.unwrap().append3(&*id, &*conv_id, &*message).append1(&*parent), 2000).unwrap();
+        let response = dbus
+            .send_with_reply_and_block(
+                dbus_msg
+                    .unwrap()
+                    .append3(&*id, &*conv_id, &*message)
+                    .append1(&*parent),
+                2000,
+            )
+            .unwrap();
         response.get1().unwrap_or(0) as u64
     }
-
 }

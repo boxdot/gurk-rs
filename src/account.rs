@@ -1,5 +1,5 @@
+use serde::{Deserialize, Serialize};
 use std::fmt;
-use serde::{Serialize, Deserialize};
 
 /**
  * Represent a Jami account, just here to store informations.
@@ -9,13 +9,18 @@ pub struct Account {
     pub id: String,
     pub hash: String,
     pub alias: String,
+    pub registered_name: String,
     pub enabled: bool,
 }
 
 // Used for println!
 impl fmt::Display for Account {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "[{}]: {} ({}) - Active: {}", self.id, self.hash, self.alias, self.enabled)
+        write!(
+            f,
+            "[{}]: {} ({}) - Active: {}",
+            self.id, self.hash, self.alias, self.enabled
+        )
     }
 }
 
@@ -25,6 +30,7 @@ impl Account {
             id: String::new(),
             hash: String::new(),
             alias: String::new(),
+            registered_name: String::new(),
             enabled: false,
         }
     }
@@ -32,6 +38,9 @@ impl Account {
     pub fn get_display_name(&self) -> String {
         if !self.alias.is_empty() {
             return self.alias.clone();
+        }
+        if !self.registered_name.is_empty() {
+            return self.registered_name.clone();
         }
         return self.hash.clone();
     }
