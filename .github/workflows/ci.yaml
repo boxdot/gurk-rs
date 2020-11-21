@@ -5,6 +5,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Install dbus
+        run: sudo apt-get install dbus libdbus-1-dev -y
       - uses: actions/checkout@v1
       - uses: icepuma/rust-action@master
         with:
