@@ -117,7 +117,8 @@ pub struct Message {
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
-pub enum Event<I> {
+pub enum Event<I, C> {
+    Click(C),
     Input(I),
     Message {
         /// used for debugging

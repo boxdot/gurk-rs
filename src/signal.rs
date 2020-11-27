@@ -56,9 +56,9 @@ impl SignalClient {
         res
     }
 
-    pub async fn stream_messages<T: std::fmt::Debug>(
+    pub async fn stream_messages<T: std::fmt::Debug, C: std::fmt::Debug>(
         self,
-        mut tx: tokio::sync::mpsc::Sender<crate::app::Event<T>>,
+        mut tx: tokio::sync::mpsc::Sender<crate::app::Event<T, C>>,
     ) -> Result<(), std::io::Error> {
         use std::process::Stdio;
         use tokio::io::{AsyncBufReadExt, BufReader};

@@ -52,6 +52,7 @@ async fn main() -> anyhow::Result<()> {
                 match event {
                     Ok(CEvent::Key(key)) => tx.send(Event::Input(key)).await.unwrap(),
                     Ok(CEvent::Resize(_, _)) => tx.send(Event::Resize).await.unwrap(),
+                    Ok(CEvent::Mouse(button)) => tx.send(Event::Click(button)).await.unwrap(),
                     _ => (),
                 }
             }
@@ -70,6 +71,9 @@ async fn main() -> anyhow::Result<()> {
     loop {
         terminal.draw(|f| ui::draw(f, &mut app))?;
         match rx.recv().await {
+            Some(Event::Click(event)) => match event {
+                _ => {}
+            },
             Some(Event::Input(event)) => match event.code {
                 KeyCode::Char('c') if event.modifiers.contains(KeyModifiers::CONTROL) => {
                     break;
