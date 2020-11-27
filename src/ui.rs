@@ -56,18 +56,35 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
 
 fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let text_width = area.width.saturating_sub(2) as usize;
-    let lines = app
-        .data
-        .input
-        .chars()
-        .enumerate()
-        .fold(Vec::new(), |mut lines, (idx, c)| {
-            if idx % text_width == 0 {
-                lines.push(String::new())
-            }
-            lines.last_mut().unwrap().push(c);
-            lines
-        });
+    let lines: Vec<String> =
+        app.data
+            .input
+            .chars()
+            .enumerate()
+            .fold(Vec::new(), |mut lines, (idx, c)| {
+                if idx % text_width == 0 {
+                    lines.push(String::new());
+                }
+                match c {
+                    '\n' => {
+                        lines.last_mut().unwrap().push('\n');
+                        lines.push(String::new())
+                    }
+                    _ => lines.last_mut().unwrap().push(c),
+                }
+                lines
+            });
+    // chars since newline on `cursor_y` line
+    let mut cursor_x = app.data.input_cursor;
+    // line selected by `app.data.input_cursor`
+    let mut cursor_y = 0;
+    for string in &lines {
+        cursor_y += 1;
+        match string.len().cmp(&cursor_x) {
+            std::cmp::Ordering::Less => cursor_x -= string.len(),
+            _ => break,
+        };
+    }
     let num_input_lines = lines.len().max(1);
     let input: Vec<Spans> = lines.into_iter().map(Spans::from).collect();
     let extra_cursor_line = if app.data.input_cursor > 0 && app.data.input_cursor % text_width == 0
@@ -76,7 +93,6 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     } else {
         0
     };
-
     let chunks = Layout::default()
         .constraints(
             [
@@ -95,9 +111,9 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     f.render_widget(input, chunks[1]);
     f.set_cursor(
         // Put cursor past the end of the input text
-        chunks[1].x + ((app.data.input_cursor as u16) % text_width as u16) + 1,
+        chunks[1].x + ((cursor_x as u16) % text_width as u16) + 1,
         // Move one line down, from the border to the input line
-        chunks[1].y + (app.data.input_cursor as u16 / (text_width as u16)) + 1,
+        chunks[1].y + (cursor_x as u16 / (text_width as u16)) + cursor_y.max(1) as u16,
     );
 }
 
