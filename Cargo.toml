@@ -19,6 +19,7 @@ chrono = { version = "0.4.13", features = ["serde"] }
 crossterm = { version = "0.17.7", features = ["event-stream"] }
 dirs = "3.0.1"
 itertools = "0.9.0"
+notify-rust = { version = "4", optional = true }
 scopeguard = "1.1.0"
 serde = { version = "1.0.114", features = ["derive"] }
 serde_json = "1.0.57"
@@ -29,3 +30,6 @@ tokio = { version = "0.2.22", features = ["full"] }
 toml = "0.5.6"
 tui = { version = "0.10.0", default-features = false, features = ["crossterm"] }
 unicode-width = "0.1.8"
+
+[features]
+notifications = ["notify-rust"]

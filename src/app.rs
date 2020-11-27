@@ -8,6 +8,9 @@ use crossterm::event::KeyCode;
 use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthStr;
 
+#[cfg(feature = "notifications")]
+use notify_rust::Notification;
+
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
@@ -352,6 +355,13 @@ impl App {
         } else {
             self.reset_unread_messages();
         }
+
+        #[cfg(feature = "notifications")]
+        Notification::new()
+            .summary("Gurk")
+            .body("New Signal message received")
+            .show()
+            .expect("Was not able to send message notification.");
 
         self.bubble_up_channel(channel_idx);
         self.save().unwrap();
