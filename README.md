@@ -13,7 +13,8 @@ You need to download and install [`signal-cli`], such that it is found in your `
 2. Follow the instructions at
    https://github.com/AsamK/signal-cli/wiki/Linking-other-devices-(Provisioning) to link
    `signal-cli` to your phone/device.
-3. Install gurk with `cargo install gurk`
+3. Install gurk with `cargo install gurk`  
+   To enable D-Bus notifications for new messages, run `cargo install --feature notifications gurk` instead.
 4. Drop a config file with the following context
     ```
     [user]

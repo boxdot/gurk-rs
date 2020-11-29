@@ -202,7 +202,6 @@ pub struct Envelope {
     // pub relay: Option<?>,
     pub timestamp: u64,
     pub message: Option<String>,
-    pub is_receipt: bool,
     pub is_read: Option<bool>,
     pub is_delivery: Option<bool>,
     pub data_message: Option<InnerMessage>,
@@ -318,4 +317,38 @@ impl FromStr for ContactInfo {
 pub enum ParseInfoError {
     #[error("unexpected char at: {0}")]
     UnexpectedCharAt(usize),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_message_deser() {
+        let value = serde_json::json!({
+            "envelope": {
+                "source": "+010000000000",
+                "sourceDevice": 1,
+                "relay": null,
+                "timestamp": 1606502956755_u64,
+                "dataMessage": null,
+                "syncMessage": {
+                    "sentMessage": {
+                        "timestamp": 1606502956755_u64,
+                        "message": "foobar",
+                        "expiresInSeconds": 0,
+                        "attachments": [],
+                        "groupInfo": null,
+                        "destination": "+010000000000"
+                    },
+                    "blockedNumbers": null,
+                    "readMessages": null,
+                    "type": null
+                },
+                "callMessage": null,
+                "receiptMessage": null
+            }
+        });
+        let _: Message = serde_json::from_value(value).expect("failed to deserialize message");
+    }
 }
