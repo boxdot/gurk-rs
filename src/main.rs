@@ -11,7 +11,7 @@ use app::{App, Event};
 use crossterm::{
     event::{
         DisableMouseCapture, EnableMouseCapture, Event as CEvent, EventStream, KeyCode,
-        KeyModifiers,
+        KeyModifiers, MouseEvent,
     },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -51,7 +51,9 @@ async fn main() -> anyhow::Result<()> {
             while let Some(event) = reader.next().await {
                 match event {
                     Ok(CEvent::Key(key)) => tx.send(Event::Input(key)).await.unwrap(),
-                    Ok(CEvent::Resize(_, _)) => tx.send(Event::Resize).await.unwrap(),
+                    Ok(CEvent::Resize(cols, rows)) => {
+                        tx.send(Event::Resize { cols, rows }).await.unwrap()
+                    }
                     Ok(CEvent::Mouse(button)) => tx.send(Event::Click(button)).await.unwrap(),
                     _ => (),
                 }
@@ -63,6 +65,8 @@ async fn main() -> anyhow::Result<()> {
 
     let mut terminal = Terminal::new(backend)?;
 
+    app.data.chanpos.downside = terminal.get_frame().size().height - 3;
+
     let signal_client = signal::SignalClient::from_config(app.config.clone());
     tokio::spawn(async move { signal_client.stream_messages(tx).await });
 
@@ -72,6 +76,17 @@ async fn main() -> anyhow::Result<()> {
         terminal.draw(|f| ui::draw(f, &mut app))?;
         match rx.recv().await {
             Some(Event::Click(event)) => match event {
+                MouseEvent::Down(_, col, row, _) => match row {
+                    row if row <= 0 => {}
+                    row if row >= terminal.get_frame().size().height - 1 => {}
+                    _ => {
+                        let jump = row as usize - 1;
+                        app.data
+                            .channels
+                            .state
+                            .select(Some(app.data.chanpos.top + jump));
+                    }
+                },
                 _ => {}
             },
             Some(Event::Input(event)) => match event.code {
@@ -87,9 +102,25 @@ async fn main() -> anyhow::Result<()> {
             Some(Event::Message { payload, message }) => {
                 app.on_message(message, payload).await;
             }
-            Some(Event::Resize) => {
+            Some(Event::Resize { cols, rows }) => match rows {
+                // terminal height decreased
+                rows if rows < terminal.get_frame().size().height => {
+                    // viewport shrinks at the top
+                    if app.data.chanpos.downside == 0 {
+                        app.data.chanpos.top += 1;
+                        app.data.chanpos.upside -= 1;
+                    // viewport shrinks at the bottom
+                    } else {
+                        app.data.chanpos.downside -= 1;
+                    }
+                }
+                // terminal height increased, viewport grows at the bottom
+                rows if rows > terminal.get_frame().size().height => {
+                    app.data.chanpos.downside += 1;
+                }
                 // will just redraw the app
-            }
+                _ => {}
+            },
             None => {
                 break;
             }

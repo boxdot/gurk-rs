@@ -29,6 +29,8 @@ impl App {
 #[derive(Serialize, Deserialize)]
 pub struct AppData {
     pub channels: StatefulList<Channel>,
+    #[serde(skip)]
+    pub chanpos: ChannelPosition,
     pub input: String,
     #[serde(skip)]
     pub input_cursor: usize,
@@ -86,8 +88,16 @@ impl AppData {
             channels.state.select(Some(0));
         }
 
+        let chanpos = ChannelPosition {
+            top: 0,
+            upside: 0,
+            // value will be initialized in main.rs
+            downside: 0,
+        };
+
         Ok(AppData {
             channels,
+            chanpos,
             input: String::new(),
             input_cursor: 0,
         })
@@ -126,7 +136,27 @@ pub enum Event<I, C> {
         /// some message if deserialized successfully
         message: Option<signal::Message>,
     },
-    Resize,
+    Resize {
+        cols: u16,
+        rows: u16,
+    },
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChannelPosition {
+    pub top: usize,
+    pub upside: u16,
+    pub downside: u16,
+}
+
+impl Default for ChannelPosition {
+    fn default() -> ChannelPosition {
+        ChannelPosition {
+            top: 0,
+            upside: 0,
+            downside: 0,
+        }
+    }
 }
 
 impl App {
@@ -232,6 +262,22 @@ impl App {
         if self.reset_unread_messages() {
             self.save().unwrap();
         }
+
+        // list scrolls up in viewport
+        if self.data.chanpos.upside == 0 {
+            self.data.chanpos.top -= 1;
+        // select scrolls up in viewport
+        } else {
+            self.data.chanpos.upside -= 1;
+            self.data.chanpos.downside += 1;
+        }
+
+        // when list is about to cycle from top to bottom
+        if self.data.channels.state.selected() == Some(0) {
+            self.data.chanpos.top =
+                self.data.channels.items.len() - self.data.chanpos.upside as usize;
+        }
+
         self.data.channels.previous();
     }
 
@@ -239,7 +285,22 @@ impl App {
         if self.reset_unread_messages() {
             self.save().unwrap();
         }
+
+        // list scrolls down in viewport
+        if self.data.chanpos.downside == 0 {
+            self.data.chanpos.top += 1;
+        // select scrolls down in viewport
+        } else {
+            self.data.chanpos.upside += 1;
+            self.data.chanpos.downside -= 1;
+        }
+
         self.data.channels.next();
+
+        // when list has just cycled from bottom to top
+        if self.data.channels.state.selected() == Some(0) {
+            self.data.chanpos.top = 0;
+        }
     }
 
     fn reset_unread_messages(&mut self) -> bool {
