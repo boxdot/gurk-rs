@@ -1,4 +1,4 @@
-use crate::account::Account;
+use crate::jami::account::Account;
 use crate::jami::{ImportType, Jami, ProfileManager};
 use crate::util::StatefulList;
 
@@ -622,6 +622,7 @@ impl App {
                 if !self.data.channels.items.is_empty() {
                     self.data.channels.state.select(Some(0));
                 }
+                show_msg = false;
             } else if message == "/join" {
                 Jami::accept_request(&account_id, &channel.id);
                 channel.messages.push(Message {
@@ -931,6 +932,10 @@ impl App {
         Some(())
     }
 
+    /**
+     * Move a channel to the top (note that "Welcome" will be at the start even after a bubble up)
+     * @param channel_idx        Id of the channel to move
+     */
     fn bubble_up_channel(&mut self, channel_idx: usize) {
         // bubble up channel to the beginning of the list
         let channels = &mut self.data.channels;

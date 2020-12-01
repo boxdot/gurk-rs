@@ -1,125 +1,34 @@
-use crate::account::Account;
+pub mod account;
+pub mod profile;
+pub mod profilemanager;
+
+pub use profile::Profile;
+pub use profilemanager::ProfileManager;
+
+
+
+
+
+
+
+
+
+
+
+
+
 use crate::app::Event;
-use app_dirs::{get_app_dir, AppDataType, AppInfo};
+use account::Account;
+use dbus::{Connection, ConnectionItem, BusType, Message};
 use dbus::arg::{Array, Dict};
-use dbus::{BusType, Connection, ConnectionItem, Message};
 use log::{error, info};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-#[derive(Serialize, Deserialize)]
-pub struct Profile {
-    pub uri: String,
-    pub username: String,
-    pub display_name: String,
-}
 
-impl Profile {
-    pub fn new() -> Self {
-        Self {
-            uri: String::new(),
-            username: String::new(),
-            display_name: String::new(),
-        }
-    }
 
-    pub fn bestname(&self) -> String {
-        if !self.display_name.is_empty() {
-            return self.display_name.clone();
-        }
-        if !self.username.is_empty() {
-            return self.username.clone();
-        }
-        return self.uri.clone();
-    }
-}
 
-#[derive(Serialize, Deserialize)]
-pub struct ProfileManager {
-    pub profiles: HashMap<String, Profile>,
-}
-
-impl ProfileManager {
-    pub fn new() -> Self {
-        Self {
-            profiles: HashMap::new(),
-        }
-    }
-
-    pub fn load_from_account(&mut self, account_id: &String) {
-        let dest = get_app_dir(
-            AppDataType::UserData,
-            &AppInfo {
-                name: "jami",
-                author: "SFL",
-            },
-            &*format!("{}/profiles", account_id),
-        );
-        if dest.is_err() {
-            return;
-        }
-
-        let paths = fs::read_dir(dest.unwrap()).unwrap();
-
-        for path in paths {
-            self.load_profile(&path.unwrap().path().to_str().unwrap().to_string());
-        }
-
-        let account = Jami::get_account(account_id);
-        let mut profile = Profile::new();
-        profile.uri = account.hash.clone();
-        profile.display_name = account.alias;
-        profile.username = account.registered_name;
-        self.profiles.insert(account.hash, profile);
-    }
-
-    pub fn load_profile(&mut self, path: &String) {
-        // TODO better parsing?
-        let buf = BufReader::new(File::open(path).unwrap());
-        let mut profile = Profile::new();
-
-        for line in buf.lines() {
-            let line = line.unwrap();
-            if line.starts_with("FN:") {
-                profile.display_name = String::from(line.strip_prefix("FN:").unwrap());
-            } else if line.starts_with("TEL") {
-                profile.uri = line[(line.len() - 40)..].to_string();
-            }
-        }
-
-        if self.profiles.contains_key(&profile.uri) {
-            profile.username = self.profiles.get(&profile.uri).unwrap().username.clone();
-        }
-
-        if !profile.uri.is_empty() {
-            self.profiles.insert(profile.uri.clone(), profile);
-        }
-    }
-
-    pub fn username_found(&mut self, uri: &String, username: &String) {
-        if self.profiles.contains_key(uri) {
-            let mut profile = self.profiles.get_mut(uri).unwrap();
-            profile.username = username.to_string();
-        } else {
-            let mut profile = Profile::new();
-            profile.uri = uri.to_string();
-            profile.username = username.to_string();
-            self.profiles.insert(uri.to_string(), profile);
-        }
-    }
-
-    pub fn display_name(&self, uri: &String) -> String {
-        if self.profiles.contains_key(uri) {
-            return self.profiles.get(uri).unwrap().bestname();
-        }
-        uri.to_string()
-    }
-}
 
 /**TODO
  */

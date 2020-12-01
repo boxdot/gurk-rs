@@ -1,4 +1,3 @@
-mod account;
 mod app;
 mod jami;
 mod ui;
@@ -25,7 +24,6 @@ use std::sync::Arc;
 
 #[derive(Debug, StructOpt)]
 struct Args {
-    /// Enable logging to `gurg.log` in the current working directory.
     #[structopt(short, long)]
     verbose: bool,
 }
