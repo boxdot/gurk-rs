@@ -24,7 +24,7 @@ pub struct App {
 }
 
 impl App {
-    fn save(&self) -> anyhow::Result<()> {
+    pub fn save(&self) -> anyhow::Result<()> {
         self.data.save(&self.config.data_path)
     }
 }
@@ -312,7 +312,7 @@ impl App {
         }
     }
 
-    fn reset_unread_messages(&mut self) -> bool {
+    pub fn reset_unread_messages(&mut self) -> bool {
         if let Some(selected_idx) = self.data.channels.state.selected() {
             if self.data.channels.items[selected_idx].unread_messages > 0 {
                 self.data.channels.items[selected_idx].unread_messages = 0;

@@ -83,6 +83,9 @@ async fn main() -> anyhow::Result<()> {
                         if col < terminal.get_frame().size().width / 4 {
                             let target = app.data.chanpos.top + row as usize - 1;
                             if target < app.data.channels.items.len() {
+                                if app.reset_unread_messages() {
+                                    app.save().unwrap();
+                                }
                                 app.data.channels.state.select(Some(target));
                                 app.data.chanpos.upside =
                                     target as u16 - app.data.chanpos.top as u16;
