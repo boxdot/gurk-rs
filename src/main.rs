@@ -77,7 +77,7 @@ async fn main() -> anyhow::Result<()> {
         match rx.recv().await {
             Some(Event::Click(event)) => match event {
                 MouseEvent::Down(_, col, row, _) => match row {
-                    row if row <= 0 => {}
+                    row if row == 0 => {}
                     row if row >= terminal.get_frame().size().height - 1 => {}
                     _ => {
                         if col < terminal.get_frame().size().width / 4 {
