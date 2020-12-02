@@ -147,9 +147,9 @@ pub enum Event<I, C> {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChannelPosition {
-    pub top: usize,
-    pub upside: u16,
-    pub downside: u16,
+    pub top: usize,    // list index of channel at top of viewport
+    pub upside: u16,   // number of rows between selected channel and top of viewport
+    pub downside: u16, // number of rows between selected channel and bottom of viewport
 }
 
 impl Default for ChannelPosition {
@@ -266,19 +266,23 @@ impl App {
             self.save().unwrap();
         }
 
-        // list scrolls up in viewport
-        if self.data.chanpos.upside == 0 {
-            self.data.chanpos.top -= 1;
-        // select scrolls up in viewport
-        } else {
-            self.data.chanpos.upside -= 1;
-            self.data.chanpos.downside += 1;
-        }
-
         // when list is about to cycle from top to bottom
         if self.data.channels.state.selected() == Some(0) {
             self.data.chanpos.top =
-                self.data.channels.items.len() - self.data.chanpos.upside as usize;
+                self.data.channels.items.len() - self.data.chanpos.downside as usize - 1;
+            self.data.chanpos.upside = self.data.chanpos.downside;
+            self.data.chanpos.downside = 0;
+        } else {
+            // viewport scrolls up in list
+            if self.data.chanpos.upside == 0 {
+                if self.data.chanpos.top > 0 {
+                    self.data.chanpos.top -= 1;
+                }
+            // select scrolls up in viewport
+            } else {
+                self.data.chanpos.upside -= 1;
+                self.data.chanpos.downside += 1;
+            }
         }
 
         self.data.channels.previous();
@@ -289,7 +293,7 @@ impl App {
             self.save().unwrap();
         }
 
-        // list scrolls down in viewport
+        // viewport scrolls down in list
         if self.data.chanpos.downside == 0 {
             self.data.chanpos.top += 1;
         // select scrolls down in viewport
@@ -303,6 +307,8 @@ impl App {
         // when list has just cycled from bottom to top
         if self.data.channels.state.selected() == Some(0) {
             self.data.chanpos.top = 0;
+            self.data.chanpos.downside = self.data.chanpos.upside;
+            self.data.chanpos.upside = 0;
         }
     }
 

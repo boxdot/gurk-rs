@@ -80,12 +80,26 @@ async fn main() -> anyhow::Result<()> {
                     row if row <= 0 => {}
                     row if row >= terminal.get_frame().size().height - 1 => {}
                     _ => {
-                        let jump = row as usize - 1;
-                        app.data
-                            .channels
-                            .state
-                            .select(Some(app.data.chanpos.top + jump));
+                        if col < terminal.get_frame().size().width / 4 {
+                            let target = app.data.chanpos.top + row as usize - 1;
+                            if target < app.data.channels.items.len() {
+                                app.data.channels.state.select(Some(target));
+                                app.data.chanpos.upside =
+                                    target as u16 - app.data.chanpos.top as u16;
+                                app.data.chanpos.downside = terminal.get_frame().size().height
+                                    - app.data.chanpos.upside
+                                    - 3;
+                            }
+                        }
                     }
+                },
+                MouseEvent::ScrollUp(col, _, _) => match col {
+                    col if col < terminal.get_frame().size().width / 4 => app.on_up(),
+                    _ => {}
+                },
+                MouseEvent::ScrollDown(col, _, _) => match col {
+                    col if col < terminal.get_frame().size().width / 4 => app.on_down(),
+                    _ => {}
                 },
                 _ => {}
             },
@@ -102,21 +116,44 @@ async fn main() -> anyhow::Result<()> {
             Some(Event::Message { payload, message }) => {
                 app.on_message(message, payload).await;
             }
-            Some(Event::Resize { cols, rows }) => match rows {
+            Some(Event::Resize { cols: _, rows }) => match rows {
+                // terminal too narrow for mouse navigation
+                rows if rows < 3 => {}
                 // terminal height decreased
                 rows if rows < terminal.get_frame().size().height => {
-                    // viewport shrinks at the top
-                    if app.data.chanpos.downside == 0 {
-                        app.data.chanpos.top += 1;
-                        app.data.chanpos.upside -= 1;
-                    // viewport shrinks at the bottom
+                    let diff = terminal.get_frame().size().height - rows;
+                    // decrease of one row
+                    if diff == 1 {
+                        // viewport shrinks at the top
+                        if app.data.chanpos.downside == 0 {
+                            app.data.chanpos.top += diff as usize;
+                            if app.data.chanpos.upside > 0 {
+                                app.data.chanpos.upside -= diff;
+                            }
+                        // viewport shrinks at the bottom
+                        } else {
+                            app.data.chanpos.downside -= diff;
+                        }
+                    // decrease of more than one row
                     } else {
-                        app.data.chanpos.downside -= 1;
+                        // viewport shrinks at the bottom
+                        if app.data.chanpos.downside >= diff {
+                            app.data.chanpos.downside -= diff;
+                        // viewport shrinks at the (bottom and then) top
+                        } else {
+                            let shorten = diff - app.data.chanpos.downside;
+                            app.data.chanpos.downside = 0;
+                            if app.data.chanpos.upside as i16 - shorten as i16 >= 0 {
+                                app.data.chanpos.upside -= shorten;
+                            }
+                            app.data.chanpos.top += shorten as usize;
+                        }
                     }
                 }
                 // terminal height increased, viewport grows at the bottom
                 rows if rows > terminal.get_frame().size().height => {
-                    app.data.chanpos.downside += 1;
+                    let diff = rows - terminal.get_frame().size().height;
+                    app.data.chanpos.downside += diff;
                 }
                 // will just redraw the app
                 _ => {}
