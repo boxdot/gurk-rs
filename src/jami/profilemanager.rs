@@ -40,7 +40,11 @@ impl ProfileManager {
             return;
         }
 
-        let paths = fs::read_dir(dest.unwrap()).unwrap();
+        let paths = fs::read_dir(dest.unwrap());
+        if paths.is_err() {
+            return;
+        }
+        let paths = paths.unwrap();
 
         for path in paths {
             self.load_profile(&path.unwrap().path().to_str().unwrap().to_string());

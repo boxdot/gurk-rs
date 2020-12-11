@@ -757,32 +757,35 @@ impl App {
                     } else if payloads.get("type").unwrap() == "merge" {
                         // Do not show merge commits
                     } else if payloads.get("type").unwrap() == "member" {
-                        let body = String::from(payloads.get("body").unwrap());
-                        if body.starts_with("Add member ") {
-                            let uri_str = body.strip_prefix("Add member ").unwrap().to_string();
-                            let uri = self.data.profile_manager.display_name(&uri_str);
+                        let action = String::from(payloads.get("action").unwrap());
+                        let uri = String::from(payloads.get("uri").unwrap());
+                        let uri = self.data.profile_manager.display_name(&uri);
+                        if action == "add" {
                             let enter = format!("--> | {} has been added", uri);
                             channel.messages.push(Message {
                                 from: author,
                                 message: Some(String::from(enter)),
                                 arrived_at,
                             });
-                        } else if body.find(" joins the conversation") != None {
-                            let uri_str = body
-                                .strip_suffix(" joins the conversation")
-                                .unwrap()
-                                .to_string();
-                            let uri = self.data.profile_manager.display_name(&uri_str);
+                        } else if action == "join" {
                             let enter = format!("--> | {} joins the conversation", uri);
                             channel.messages.push(Message {
                                 from: author,
                                 message: Some(String::from(enter)),
                                 arrived_at,
                             });
-                        } else {
+                        } else if action == "ban" {
+                            let enter = format!("<-- | {} was banned from the conversation", uri);
                             channel.messages.push(Message {
                                 from: author,
-                                message: Some(String::from(payloads.get("body").unwrap())),
+                                message: Some(String::from(enter)),
+                                arrived_at,
+                            });
+                        } else if action == "remove" {
+                            let enter = format!("<-- | {} leaves the conversation", uri);
+                            channel.messages.push(Message {
+                                from: author,
+                                message: Some(String::from(enter)),
                                 arrived_at,
                             });
                         }
