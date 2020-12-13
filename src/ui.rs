@@ -138,7 +138,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &App, area: Rect) {
 
             let prefix_width = (time.width() + from.width() + delimeter.width()) as u16;
             let indent = " ".repeat(prefix_width.into());
-            let message = msg.message.clone().unwrap_or(String::new());
+            let message = msg.message.clone();
             let lines =
                 textwrap::wrap_iter(message.as_str(), width.saturating_sub(prefix_width).into());
 

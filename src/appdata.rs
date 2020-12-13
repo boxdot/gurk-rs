@@ -49,17 +49,13 @@ impl AppData {
         let file = File::open("rsc/welcome-art");
         if file.is_ok() {
             for line in io::BufReader::new(file.unwrap()).lines() {
-                messages.push(Message {
-                    from: String::new(),
-                    message: Some(String::from(line.unwrap())),
-                    arrived_at: Utc::now(),
-                });
+                messages.push(Message::new(String::new(), String::from(line.unwrap()), Utc::now()));
             }
         }
 
         channels.push(Channel {
-            id: String::from("Welcome"),
-            name: String::from("Welcome"),
+            id: String::from("⚙️ Jami-cli"),
+            name: String::from("⚙️ Jami-cli"),
             members: Vec::new(),
             channel_type: ChannelType::Generated,
             messages,

@@ -52,12 +52,47 @@ pub struct Channel {
     pub unread_messages: usize,
 }
 
+impl Channel {
+    pub fn new(id: &String, channel_type: ChannelType) -> Channel {
+        let mut name = id.clone();
+        if channel_type == ChannelType::Invite {
+            name = String::from(format!("🔵 {}", id));
+        }
+        Channel {
+            id: id.clone(),
+            name: name,
+            members: Vec::new(),
+            channel_type,
+            messages: Vec::new(),
+            unread_messages: 0,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Message {
     pub from: String,
     #[serde(alias = "text")] // remove
-    pub message: Option<String>,
+    pub message: String,
     pub arrived_at: DateTime<Utc>,
+}
+
+impl Message {
+    pub fn info(message: String) -> Message {
+        Message {
+            from: String::new(),
+            message,
+            arrived_at: Utc::now()
+        }
+    }
+
+    pub fn new(from: String, message: String, arrived_at: DateTime<Utc>) -> Message {
+        Message {
+            from,
+            message,
+            arrived_at
+        }
+    }
 }
 
 #[allow(clippy::large_enum_variant)]

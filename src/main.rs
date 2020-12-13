@@ -85,7 +85,7 @@ async fn main() -> anyhow::Result<()> {
                 conversation_id,
                 payloads,
             }) => {
-                app.on_message(account_id, conversation_id, payloads).await;
+                app.on_message(&account_id, &conversation_id, payloads).await;
             }
             Some(Event::Resize) => {
                 // will just redraw the app
