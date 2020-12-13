@@ -345,8 +345,13 @@ impl App {
                     } else if payloads.get("type").unwrap() == "merge" {
                         // Do not show merge commits
                     } else if payloads.get("type").unwrap() == "member" {
-                        let action = String::from(payloads.get("action").unwrap());
-                        let uri = String::from(payloads.get("uri").unwrap());
+                        let action = payloads.get("action");
+                        let uri = payloads.get("uri");
+                        if action.is_none() || uri.is_none() {
+                            return Some(());
+                        }
+                        let action = String::from(action.unwrap());
+                        let uri = String::from(uri.unwrap());
                         let uri = self.data.profile_manager.display_name(&uri);
                         if action == "add" {
                             let msg = format!("--> | {} has been added", uri);

@@ -1,72 +1,53 @@
-# gurk 🥒
-![CI](https://github.com/boxdot/gurk-rs/workflows/CI/badge.svg)
+# Jami-Cli
 
-[Signal Messenger] client for terminal.
+[Jami](https://jami.net) client for terminal.
 
-![screenshot](screenshot.png)
+![Conversation](rsc/conversation.jpg)
+![Welcome](rsc/welcome.jpg)
 
 ## Usage
 
-You need to download and install [`signal-cli`], such that it is found in your `PATH`.
+This is a jami client done in Rust based on [Gurk](https://github.com/boxdot/gurk-rs). I did it to test swarm chat while developping this feature for Jami, so it's a client that will support Swarm chat, but will not support old conversations API. This feature doesn't exists yet in Jami, so just a few people will be able to use this client, but it can be modified for your needs and has account management. But if still interested, this is the current Epic related: https://git.jami.net/groups/savoirfairelinux/-/boards?scope=all&utf8=%E2%9C%93&state=opened&milestone_title=Swarm-chat
 
-1. Download and install `signal-cli`
-2. Follow the instructions at
-   https://github.com/AsamK/signal-cli/wiki/Linking-other-devices-(Provisioning) to link
-   `signal-cli` to your phone/device.
-3. Install gurk with `cargo install gurk`
-4. Drop a config file with the following context
-    ```
-    [user]
-    name = "Your user name"
-    phone_number = "Your phone number used in Signal"
-    ```
+To run this project you will need:
 
-  in one of the following locations:
++ The Jami daemon (cf https://jami.net) and install Jami. (Current status: you will need this stack: https://review.jami.net/q/topic:%22swarm%22+(status:open%20OR%20status:merged)) as the swarm feature is not available for now. This instructions can be useful (https://git.jami.net/savoirfairelinux/ring-project/wikis/technical/Build-instructions)
++ Install libdbus
++ `cargo install jami-cli`
++ Run `dring`
++ Run `jami-cli`
++ Enjoy!
 
-1. `$XDG_CONFIG_HOME/gurk/gurk.toml`
-2. `$XDG_CONFIG_HOME/gurk.yml`
-3. `$HOME/.config/gurk/gurk.toml`
-4. `$HOME/.gurk.toml`
+## Features
 
-  For more config options, see [`src/config.rs`].
++ Manage accounts (add/remove/link/import/change settings)
++ Contact lookups and profile receptions
++ Swarm:
+  + Start a swarm
+  + Invite someone to join a swarm
+  + Receive invites for swarms
+  + Join or decline an invite
+  + Remove members
+  + Send text messages
+  + Show synchronized call messages and file transfers
 
-5. Run `gurk`
+## Missing features but wanted
 
-At the first run, `gurk` will sync groups and contacts.
-
-## Missing features / known issues
-
-* Use a simple database (like sqlite, sled, leveldb) for storing messages, contacts, etc... instead
-  of a JSON file.
-* Add optional Gnome notifications over dbus.
-* Add scrolling of messages.
-* Add reply functionality to a single message.
-* Add mouse navigation.
-* Add search of messages/chats. Add quick switch between chats by name.
-* It is not possible to send multiline messages, since the `Enter` key sends the messages. Add a
-  shortcut or a mode for typing multiline messages.
-* Add sending of attachments.
-* Add support for blocked contacts/groups.
-
-The communication with the Signal backend is implemented via [`signal-cli`]. It provides some
-functionality like lookup of group/contact name only over the dbus interface. Therefore, `gurk` only
-works on Linux. We should evaluate if it is possible to switch to the [`libsignal-service-rs`]
-crate.
++ Support swarm modes (1:1, admin invites only, invites only, public)
++ Room titles
++ Calls (without image, maybe in the future)
+  + Start a call
+  + Stop a call
+  + Invite members
++ Scroll for messages
++ Auto-completion
 
 ## License
 
+From gurk (original project):
  * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
    http://www.apache.org/licenses/LICENSE-2.0)
  * MIT License ([LICENSE-MIT](LICENSE-MIT) or
    http://opensource.org/licenses/MIT)
 
-### Contribution
-
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in this document by you, as defined in the Apache-2.0 license,
-shall be dual licensed as above, without any additional terms or conditions.
-
-[Signal Messenger]: https://signal.org
-[`signal-cli`]: https://github.com/AsamK/signal-cli
-[`libsignal-service-rs`]: https://github.com/Michael-F-Bryan/libsignal-service-rs
-[`src/config.rs`]: https://github.com/boxdot/gurk-rs/blob/master/src/config.rs
+Jami is a GPLv3 project
