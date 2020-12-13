@@ -332,6 +332,16 @@ impl App {
                         channel.messages.push(Message::new(author, String::from("--> started the conversation"), arrived_at));
                     } else if payloads.get("type").unwrap() == "text/plain" {
                         channel.messages.push(Message::new(author, String::from(payloads.get("body").unwrap()), arrived_at));
+                    } else if payloads.get("type").unwrap() == "application/call-history+json" {
+                        let duration = payloads.get("duration").unwrap_or(&String::from("0")).clone();
+                        let mut message = format!("Call with duration: {}", duration);
+                        if duration == "0" {
+                            message = format!("Call missed");
+                        }
+                        channel.messages.push(Message::new(author, String::from(message), arrived_at));
+                    } else if payloads.get("type").unwrap() == "application/data-transfer+json" {
+                        let message = format!("New file transfer with id: {}", payloads.get("id").unwrap_or(&String::new())).clone();
+                        channel.messages.push(Message::new(author, String::from(message), arrived_at));
                     } else if payloads.get("type").unwrap() == "merge" {
                         // Do not show merge commits
                     } else if payloads.get("type").unwrap() == "member" {
