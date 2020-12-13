@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{self, BufRead};
 
-
 #[derive(Serialize, Deserialize)]
 pub struct AppData {
     pub channels: StatefulList<Channel>,
@@ -23,7 +22,6 @@ pub struct AppData {
 }
 
 impl AppData {
-    
     /**
      * Lookup on nameserver all members
      */
@@ -49,7 +47,11 @@ impl AppData {
         let file = File::open("rsc/welcome-art");
         if file.is_ok() {
             for line in io::BufReader::new(file.unwrap()).lines() {
-                messages.push(Message::new(String::new(), String::from(line.unwrap()), Utc::now()));
+                messages.push(Message::new(
+                    String::new(),
+                    String::from(line.unwrap()),
+                    Utc::now(),
+                ));
             }
         }
 

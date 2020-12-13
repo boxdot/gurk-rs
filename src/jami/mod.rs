@@ -13,11 +13,10 @@ use dbus::message::MatchRule;
 use dbus_tokio::connection;
 use log::info;
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::{thread, time};
+use std::sync::Arc;
 use std::time::Duration;
-
+use std::{thread, time};
 
 /**
  * Connect to the jami daemon
@@ -32,7 +31,6 @@ pub enum ImportType {
 }
 
 impl Jami {
-
     /**
      * Retrieve account or create one if necessary.
      * @param   create_if_not   Create if no account found
@@ -53,7 +51,6 @@ impl Jami {
         return Account::null();
     }
 
-
     /**
      * Listen to daemon's signals
      */
@@ -61,7 +58,9 @@ impl Jami {
         tx: tokio::sync::mpsc::Sender<Event<T>>,
         stop: Arc<AtomicBool>,
     ) -> Result<(), std::io::Error> {
-        let (resource, conn) = connection::new_session_sync().ok().expect("Lost connection");
+        let (resource, conn) = connection::new_session_sync()
+            .ok()
+            .expect("Lost connection");
         tokio::spawn(async {
             let err = resource.await;
             panic!("Lost connection to D-Bus: {}", err);
@@ -69,94 +68,141 @@ impl Jami {
 
         let mr = MatchRule::new_signal("cx.ring.Ring.ConfigurationManager", "accountsChanged");
         let txs = tx.clone();
-        let _ic = conn.add_match(mr).await.ok().expect("Lost connection").cb(move |_, (): ()| {
-            let mut txs = txs.clone();
-            tokio::spawn(async move { txs.send(Event::AccountsChanged()).await });
-            true
-        });
+        let _ic = conn
+            .add_match(mr)
+            .await
+            .ok()
+            .expect("Lost connection")
+            .cb(move |_, (): ()| {
+                let mut txs = txs.clone();
+                tokio::spawn(async move { txs.send(Event::AccountsChanged()).await });
+                true
+            });
 
         let mr = MatchRule::new_signal("cx.ring.Ring.ConfigurationManager", "messageReceived");
         let txs = tx.clone();
-        let _ic = conn.add_match(mr).await.ok().expect("Lost connection").cb(move |_, (account_id, conversation_id, payloads): (String, String, HashMap<String, String>)| {
-            let mut txs = txs.clone();
-            tokio::spawn(async move { txs.send(Event::Message {
-                account_id,
-                conversation_id,
-                payloads,
-            }).await });
-            true
-        });
+        let _ic = conn.add_match(mr).await.ok().expect("Lost connection").cb(
+            move |_,
+                  (account_id, conversation_id, payloads): (
+                String,
+                String,
+                HashMap<String, String>,
+            )| {
+                let mut txs = txs.clone();
+                tokio::spawn(async move {
+                    txs.send(Event::Message {
+                        account_id,
+                        conversation_id,
+                        payloads,
+                    })
+                    .await
+                });
+                true
+            },
+        );
 
-        let mr = MatchRule::new_signal("cx.ring.Ring.ConfigurationManager", "registrationStateChanged");
+        let mr = MatchRule::new_signal(
+            "cx.ring.Ring.ConfigurationManager",
+            "registrationStateChanged",
+        );
         let txs = tx.clone();
-        let _ic = conn.add_match(mr).await.ok().expect("Lost connection").cb(move |_, (account_id, registration_state, _, _): (String, String, u64, String)| {
-            let mut txs = txs.clone();
-            tokio::spawn(async move { txs.send(Event::RegistrationStateChanged(
-                account_id,
-                registration_state,
-            )).await });
-            true
-        });
+        let _ic = conn.add_match(mr).await.ok().expect("Lost connection").cb(
+            move |_, (account_id, registration_state, _, _): (String, String, u64, String)| {
+                let mut txs = txs.clone();
+                tokio::spawn(async move {
+                    txs.send(Event::RegistrationStateChanged(
+                        account_id,
+                        registration_state,
+                    ))
+                    .await
+                });
+                true
+            },
+        );
 
         let mr = MatchRule::new_signal("cx.ring.Ring.ConfigurationManager", "conversationReady");
         let txs = tx.clone();
-        let _ic = conn.add_match(mr).await.ok().expect("Lost connection").cb(move |_, (account_id, conversation_id): (String, String)| {
-            let mut txs = txs.clone();
-            tokio::spawn(async move { txs.send(Event::ConversationReady(
-                account_id,
-                conversation_id,
-            )).await });
-            true
-        });
+        let _ic = conn.add_match(mr).await.ok().expect("Lost connection").cb(
+            move |_, (account_id, conversation_id): (String, String)| {
+                let mut txs = txs.clone();
+                tokio::spawn(async move {
+                    txs.send(Event::ConversationReady(account_id, conversation_id))
+                        .await
+                });
+                true
+            },
+        );
 
-        let mr = MatchRule::new_signal("cx.ring.Ring.ConfigurationManager", "conversationRequestReceived");
+        let mr = MatchRule::new_signal(
+            "cx.ring.Ring.ConfigurationManager",
+            "conversationRequestReceived",
+        );
         let txs = tx.clone();
-        let _ic = conn.add_match(mr).await.ok().expect("Lost connection").cb(move |_, (account_id, conversation_id): (String, String)| {
-            let mut txs = txs.clone();
-            tokio::spawn(async move { txs.send(Event::ConversationRequest(
-                account_id,
-                conversation_id,
-            )).await });
-            true
-        });
+        let _ic = conn.add_match(mr).await.ok().expect("Lost connection").cb(
+            move |_, (account_id, conversation_id): (String, String)| {
+                let mut txs = txs.clone();
+                tokio::spawn(async move {
+                    txs.send(Event::ConversationRequest(account_id, conversation_id))
+                        .await
+                });
+                true
+            },
+        );
 
         let mr = MatchRule::new_signal("cx.ring.Ring.ConfigurationManager", "registeredNameFound");
         let txs = tx.clone();
-        let _ic = conn.add_match(mr).await.ok().expect("Lost connection").cb(move |_, (account_id, status, address, name): (String, i32, String, String)| {
-            let mut txs = txs.clone();
-            tokio::spawn(async move { txs.send(Event::RegisteredNameFound(
-                    account_id,
-                    status as u64,
-                    address,
-                    name,
-                )).await });
-            true
-        });
+        let _ic = conn.add_match(mr).await.ok().expect("Lost connection").cb(
+            move |_, (account_id, status, address, name): (String, i32, String, String)| {
+                let mut txs = txs.clone();
+                tokio::spawn(async move {
+                    txs.send(Event::RegisteredNameFound(
+                        account_id,
+                        status as u64,
+                        address,
+                        name,
+                    ))
+                    .await
+                });
+                true
+            },
+        );
 
         let mr = MatchRule::new_signal("cx.ring.Ring.ConfigurationManager", "profileReceived");
         let txs = tx.clone();
-        let _ic = conn.add_match(mr).await.ok().expect("Lost connection").cb(move |_, (account_id, from, path): (String, String, String)| {
-            let mut txs = txs.clone();
-            tokio::spawn(async move { txs.send(Event::ProfileReceived(
-                    account_id,
-                    from,
-                    path,
-                )).await });
-            true
-        });
+        let _ic = conn.add_match(mr).await.ok().expect("Lost connection").cb(
+            move |_, (account_id, from, path): (String, String, String)| {
+                let mut txs = txs.clone();
+                tokio::spawn(async move {
+                    txs.send(Event::ProfileReceived(account_id, from, path))
+                        .await
+                });
+                true
+            },
+        );
 
         let mr = MatchRule::new_signal("cx.ring.Ring.ConfigurationManager", "conversationLoaded");
         let txs = tx.clone();
-        let _ic = conn.add_match(mr).await.ok().expect("Lost connection").cb(move |_, (id, account_id, conversation_id, messages): (u32, String, String, Vec<HashMap<String, String>>)| {
-            let mut txs = txs.clone();
-            tokio::spawn(async move { txs.send(Event::ConversationLoaded(
-                    id,
-                    account_id,
-                    conversation_id,
-                    messages,
-                )).await });
-            true
-        });
+        let _ic = conn.add_match(mr).await.ok().expect("Lost connection").cb(
+            move |_,
+                  (id, account_id, conversation_id, messages): (
+                u32,
+                String,
+                String,
+                Vec<HashMap<String, String>>,
+            )| {
+                let mut txs = txs.clone();
+                tokio::spawn(async move {
+                    txs.send(Event::ConversationLoaded(
+                        id,
+                        account_id,
+                        conversation_id,
+                        messages,
+                    ))
+                    .await
+                });
+                true
+            },
+        );
 
         let ten_millis = time::Duration::from_millis(10);
         loop {
@@ -178,8 +224,16 @@ impl Jami {
      */
     pub fn lookup_name(account: &String, name_service: &String, name: &String) -> bool {
         let conn = Connection::new_session().unwrap();
-        let proxy = conn.with_proxy("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager", Duration::from_millis(5000));
-        let result : Result<(bool,), _> = proxy.method_call("cx.ring.Ring.ConfigurationManager", "lookupName", (account, name_service, name));
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let result: Result<(bool,), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "lookupName",
+            (account, name_service, name),
+        );
         if result.is_ok() {
             let result = result.unwrap().0;
             return result;
@@ -196,8 +250,16 @@ impl Jami {
      */
     pub fn lookup_address(account: &String, name_service: &String, address: &String) -> bool {
         let conn = Connection::new_session().unwrap();
-        let proxy = conn.with_proxy("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager", Duration::from_millis(5000));
-        let result : Result<(bool,), _> = proxy.method_call("cx.ring.Ring.ConfigurationManager", "lookupAddress", (account, name_service, address));
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let result: Result<(bool,), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "lookupAddress",
+            (account, name_service, address),
+        );
         if result.is_ok() {
             let result = result.unwrap().0;
             return result;
@@ -237,8 +299,16 @@ impl Jami {
         details.insert("Account.type", "RING");
         details.insert("Account.archivePassword", password);
         let conn = Connection::new_session().unwrap();
-        let proxy = conn.with_proxy("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager", Duration::from_millis(5000));
-        let result : Result<(String,), _> = proxy.method_call("cx.ring.Ring.ConfigurationManager", "addAccount", (details,));
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let result: Result<(String,), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "addAccount",
+            (details,),
+        );
         if result.is_ok() {
             let result = result.unwrap().0;
             info!("New account: {:?}", result);
@@ -255,8 +325,13 @@ impl Jami {
     pub fn get_account_list() -> Vec<Account> {
         let mut account_list: Vec<Account> = Vec::new();
         let conn = Connection::new_session().unwrap();
-        let proxy = conn.with_proxy("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager", Duration::from_millis(5000));
-        let result : Result<(Vec<String>,), _> = proxy.method_call("cx.ring.Ring.ConfigurationManager", "getAccountList", ());
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let result: Result<(Vec<String>,), _> =
+            proxy.method_call("cx.ring.Ring.ConfigurationManager", "getAccountList", ());
         if result.is_err() {
             return account_list;
         }
@@ -274,8 +349,16 @@ impl Jami {
      */
     pub fn get_account(id: &str) -> Account {
         let conn = Connection::new_session().unwrap();
-        let proxy = conn.with_proxy("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager", Duration::from_millis(5000));
-        let result : Result<(HashMap<String, String>,), _> = proxy.method_call("cx.ring.Ring.ConfigurationManager", "getAccountDetails", (id,));
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let result: Result<(HashMap<String, String>,), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "getAccountDetails",
+            (id,),
+        );
         if result.is_err() {
             return Account::null();
         }
@@ -310,8 +393,13 @@ impl Jami {
      */
     pub fn rm_account(id: &str) {
         let conn = Connection::new_session().unwrap();
-        let proxy = conn.with_proxy("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager", Duration::from_millis(5000));
-        let _ : Result<(), _> = proxy.method_call("cx.ring.Ring.ConfigurationManager", "removeAccount", (id,));
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let _: Result<(), _> =
+            proxy.method_call("cx.ring.Ring.ConfigurationManager", "removeAccount", (id,));
     }
 
     /**
@@ -321,8 +409,16 @@ impl Jami {
      */
     pub fn get_account_details(id: &str) -> HashMap<String, String> {
         let conn = Connection::new_session().unwrap();
-        let proxy = conn.with_proxy("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager", Duration::from_millis(5000));
-        let result : Result<(HashMap<String, String>,), _> = proxy.method_call("cx.ring.Ring.ConfigurationManager", "getAccountDetails", (id,));
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let result: Result<(HashMap<String, String>,), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "getAccountDetails",
+            (id,),
+        );
         if result.is_ok() {
             let result = result.unwrap().0;
             return result;
@@ -338,8 +434,16 @@ impl Jami {
      */
     pub fn set_account_details(id: &str, details: HashMap<String, String>) {
         let conn = Connection::new_session().unwrap();
-        let proxy = conn.with_proxy("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager", Duration::from_millis(5000));
-        let _ : Result<(), _> = proxy.method_call("cx.ring.Ring.ConfigurationManager", "setAccountDetails", (id, details));
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let _: Result<(), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "setAccountDetails",
+            (id, details),
+        );
     }
 
     /**
@@ -350,8 +454,16 @@ impl Jami {
      */
     pub fn get_members(id: &String, convid: &String) -> Vec<HashMap<String, String>> {
         let conn = Connection::new_session().unwrap();
-        let proxy = conn.with_proxy("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager", Duration::from_millis(5000));
-        let result : Result<(Vec<HashMap<String, String>>,), _> = proxy.method_call("cx.ring.Ring.ConfigurationManager", "getConversationMembers", (id, convid,));
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let result: Result<(Vec<HashMap<String, String>>,), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "getConversationMembers",
+            (id, convid),
+        );
         if result.is_ok() {
             let result = result.unwrap().0;
             return result;
@@ -366,8 +478,16 @@ impl Jami {
      */
     pub fn start_conversation(id: &String) -> String {
         let conn = Connection::new_session().unwrap();
-        let proxy = conn.with_proxy("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager", Duration::from_millis(5000));
-        let result : Result<(String,), _> = proxy.method_call("cx.ring.Ring.ConfigurationManager", "startConversation", (id,));
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let result: Result<(String,), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "startConversation",
+            (id,),
+        );
         if result.is_ok() {
             let result = result.unwrap().0;
             return result;
@@ -383,8 +503,16 @@ impl Jami {
      */
     pub fn get_conversations(id: &String) -> Vec<String> {
         let conn = Connection::new_session().unwrap();
-        let proxy = conn.with_proxy("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager", Duration::from_millis(5000));
-        let result : Result<(Vec<String>,), _> = proxy.method_call("cx.ring.Ring.ConfigurationManager", "getConversations", (id,));
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let result: Result<(Vec<String>,), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "getConversations",
+            (id,),
+        );
         if result.is_ok() {
             let result = result.unwrap().0;
             return result;
@@ -400,8 +528,16 @@ impl Jami {
      */
     pub fn get_conversations_requests(id: &String) -> Vec<HashMap<String, String>> {
         let conn = Connection::new_session().unwrap();
-        let proxy = conn.with_proxy("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager", Duration::from_millis(5000));
-        let result : Result<(Vec<HashMap<String, String>>,), _> = proxy.method_call("cx.ring.Ring.ConfigurationManager", "getConversationRequests", (id,));
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let result: Result<(Vec<HashMap<String, String>>,), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "getConversationRequests",
+            (id,),
+        );
         if result.is_ok() {
             let result = result.unwrap().0;
             return result;
@@ -417,8 +553,16 @@ impl Jami {
      */
     pub fn decline_request(id: &String, conv_id: &String) {
         let conn = Connection::new_session().unwrap();
-        let proxy = conn.with_proxy("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager", Duration::from_millis(5000));
-        let _ : Result<(), _> = proxy.method_call("cx.ring.Ring.ConfigurationManager", "declineConversationRequest", (id, conv_id));
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let _: Result<(), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "declineConversationRequest",
+            (id, conv_id),
+        );
     }
 
     /**
@@ -428,8 +572,16 @@ impl Jami {
      */
     pub fn accept_request(id: &String, conv_id: &String) {
         let conn = Connection::new_session().unwrap();
-        let proxy = conn.with_proxy("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager", Duration::from_millis(5000));
-        let _ : Result<(), _> = proxy.method_call("cx.ring.Ring.ConfigurationManager", "acceptConversationRequest", (id, conv_id));
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let _: Result<(), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "acceptConversationRequest",
+            (id, conv_id),
+        );
     }
 
     /**
@@ -447,8 +599,16 @@ impl Jami {
         size: u32,
     ) -> u32 {
         let conn = Connection::new_session().unwrap();
-        let proxy = conn.with_proxy("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager", Duration::from_millis(5000));
-        let result : Result<(u32,), _> = proxy.method_call("cx.ring.Ring.ConfigurationManager", "loadConversationMessages", (account, conversation, from, size));
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let result: Result<(u32,), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "loadConversationMessages",
+            (account, conversation, from, size),
+        );
         if result.is_ok() {
             let result = result.unwrap().0;
             return result;
@@ -464,8 +624,16 @@ impl Jami {
      */
     pub fn rm_conversation(id: &String, conv_id: &String) -> bool {
         let conn = Connection::new_session().unwrap();
-        let proxy = conn.with_proxy("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager", Duration::from_millis(5000));
-        let result : Result<(bool,), _> = proxy.method_call("cx.ring.Ring.ConfigurationManager", "removeConversation", (id, conv_id));
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let result: Result<(bool,), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "removeConversation",
+            (id, conv_id),
+        );
         if result.is_ok() {
             let result = result.unwrap().0;
             return result;
@@ -481,8 +649,16 @@ impl Jami {
      */
     pub fn add_conversation_member(id: &String, conv_id: &String, hash: &String) {
         let conn = Connection::new_session().unwrap();
-        let proxy = conn.with_proxy("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager", Duration::from_millis(5000));
-        let _ : Result<(), _> = proxy.method_call("cx.ring.Ring.ConfigurationManager", "addConversationMember", (id, conv_id, hash));
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let _: Result<(), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "addConversationMember",
+            (id, conv_id, hash),
+        );
     }
 
     /**
@@ -493,8 +669,16 @@ impl Jami {
      */
     pub fn rm_conversation_member(id: &String, conv_id: &String, hash: &String) {
         let conn = Connection::new_session().unwrap();
-        let proxy = conn.with_proxy("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager", Duration::from_millis(5000));
-        let _ : Result<(), _> = proxy.method_call("cx.ring.Ring.ConfigurationManager", "rmConversationMember", (id, conv_id, hash));
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let _: Result<(), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "rmConversationMember",
+            (id, conv_id, hash),
+        );
     }
 
     /**
@@ -511,8 +695,16 @@ impl Jami {
         parent: &String,
     ) -> u64 {
         let conn = Connection::new_session().unwrap();
-        let proxy = conn.with_proxy("cx.ring.Ring", "/cx/ring/Ring/ConfigurationManager", Duration::from_millis(5000));
-        let result : Result<(u64,), _> = proxy.method_call("cx.ring.Ring.ConfigurationManager", "sendMessage", (id, conv_id, message, parent));
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let result: Result<(u64,), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "sendMessage",
+            (id, conv_id, message, parent),
+        );
         if result.is_ok() {
             return result.unwrap().0;
         }

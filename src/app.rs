@@ -126,14 +126,18 @@ impl App {
                 Jami::start_conversation(&self.data.account.id);
             } else if message == "/list" {
                 for account in Jami::get_account_list() {
-                    channel.messages.push(Message::info(String::from(format!("{}", account))));
+                    channel
+                        .messages
+                        .push(Message::info(String::from(format!("{}", account))));
                 }
             } else if message == "/get" || message.starts_with("/get ") {
                 let parts: Vec<&str> = message.split(" ").collect();
                 let filter = parts.get(1).unwrap_or(&"").to_string();
                 for (key, value) in Jami::get_account_details(&self.data.account.id) {
                     if filter.is_empty() || filter.to_lowercase() == key.to_lowercase() {
-                        channel.messages.push(Message::info(String::from(format!("{}: {}", key, value))));
+                        channel
+                            .messages
+                            .push(Message::info(String::from(format!("{}: {}", key, value))));
                     }
                 }
                 show_msg = false;
@@ -157,7 +161,9 @@ impl App {
                 let account_id = String::from(message.strip_prefix("/switch ").unwrap());
                 let account = Jami::get_account(&*account_id);
                 if account.id.is_empty() {
-                    channel.messages.push(Message::info(String::from("Invalid account id.")));
+                    channel
+                        .messages
+                        .push(Message::info(String::from("Invalid account id.")));
                 } else {
                     //  TODO avoid duplicate code
                     self.data.account = account;
@@ -187,18 +193,42 @@ impl App {
                 let password = parts.get(2).unwrap_or(&"").to_string();
                 Jami::add_account(&pin, &password, ImportType::NETWORK);
             } else if message == "/help" {
-                channel.messages.push(Message::info(String::from("/help: Show this help")));
-                channel.messages.push(Message::info(String::from("/new: Start a new conversation")));
-                channel.messages.push(Message::info(String::from("/msg <id|username>: Start a conversation with someone")));
-                channel.messages.push(Message::info(String::from("/list: list accounts")));
-                channel.messages.push(Message::info(String::from("/switch <id>: switch to an account")));
-                channel.messages.push(Message::info(String::from("/add: Add a new account")));
-                channel.messages.push(Message::info(String::from("/rm <id>: Remove an account")));
-                channel.messages.push(Message::info(String::from("/link <pin> [password]: Link an account via a PIN")));
-                channel.messages.push(Message::info(String::from("/import <file> [password]: Import an account from a backup")));
-                channel.messages.push(Message::info(String::from("/get [key]: get account details (if key specified, only get key)")));
-                channel.messages.push(Message::info(String::from("/set <key> <value>: set account detail")));
-                channel.messages.push(Message::info(String::from("/exit: quit")));
+                channel
+                    .messages
+                    .push(Message::info(String::from("/help: Show this help")));
+                channel.messages.push(Message::info(String::from(
+                    "/new: Start a new conversation",
+                )));
+                channel.messages.push(Message::info(String::from(
+                    "/msg <id|username>: Start a conversation with someone",
+                )));
+                channel
+                    .messages
+                    .push(Message::info(String::from("/list: list accounts")));
+                channel.messages.push(Message::info(String::from(
+                    "/switch <id>: switch to an account",
+                )));
+                channel
+                    .messages
+                    .push(Message::info(String::from("/add: Add a new account")));
+                channel
+                    .messages
+                    .push(Message::info(String::from("/rm <id>: Remove an account")));
+                channel.messages.push(Message::info(String::from(
+                    "/link <pin> [password]: Link an account via a PIN",
+                )));
+                channel.messages.push(Message::info(String::from(
+                    "/import <file> [password]: Import an account from a backup",
+                )));
+                channel.messages.push(Message::info(String::from(
+                    "/get [key]: get account details (if key specified, only get key)",
+                )));
+                channel.messages.push(Message::info(String::from(
+                    "/set <key> <value>: set account detail",
+                )));
+                channel
+                    .messages
+                    .push(Message::info(String::from("/exit: quit")));
             }
         } else if channel.channel_type == ChannelType::Group {
             // TODO simplify
@@ -211,7 +241,9 @@ impl App {
                     }
                     return;
                 } else {
-                    channel.messages.push(Message::info(String::from("Cannot remove conversation")));
+                    channel
+                        .messages
+                        .push(Message::info(String::from("Cannot remove conversation")));
                 }
             } else if message.starts_with("/invite") {
                 let mut member = String::from(message.strip_prefix("/invite ").unwrap());
@@ -254,11 +286,21 @@ impl App {
                     Jami::lookup_name(&account_id, &ns, &member);
                 }
             } else if message == "/help" {
-                channel.messages.push(Message::info(String::from("/help: Show this help")));
-                channel.messages.push(Message::info(String::from("/leave: Leave this conversation")));
-                channel.messages.push(Message::info(String::from("/invite [hash|username]: Invite somebody to the conversation")));
-                channel.messages.push(Message::info(String::from("/kick [hash|username]: Kick someone from the conversation")));
-                channel.messages.push(Message::info(String::from("/exit: quit")));
+                channel
+                    .messages
+                    .push(Message::info(String::from("/help: Show this help")));
+                channel.messages.push(Message::info(String::from(
+                    "/leave: Leave this conversation",
+                )));
+                channel.messages.push(Message::info(String::from(
+                    "/invite [hash|username]: Invite somebody to the conversation",
+                )));
+                channel.messages.push(Message::info(String::from(
+                    "/kick [hash|username]: Kick someone from the conversation",
+                )));
+                channel
+                    .messages
+                    .push(Message::info(String::from("/exit: quit")));
             } else {
                 show_msg = false;
                 Jami::send_conversation_message(&account_id, &channel.id, &message, &String::new());
@@ -274,17 +316,29 @@ impl App {
                 show_msg = false;
             } else if message == "/join" {
                 Jami::accept_request(&account_id, &channel.id);
-                channel.messages.push(Message::info(String::from("Syncing… the view will update")));
+                channel
+                    .messages
+                    .push(Message::info(String::from("Syncing… the view will update")));
             } else {
-                channel.messages.push(Message::info(String::from("/help: Show this help")));
-                channel.messages.push(Message::info(String::from("/leave: Decline this request")));
-                channel.messages.push(Message::info(String::from("/join: Accepts the request")));
+                channel
+                    .messages
+                    .push(Message::info(String::from("/help: Show this help")));
+                channel
+                    .messages
+                    .push(Message::info(String::from("/leave: Decline this request")));
+                channel
+                    .messages
+                    .push(Message::info(String::from("/join: Accepts the request")));
             }
         }
 
         if show_msg {
             let channel = &mut self.data.channels.items[channel_idx];
-            channel.messages.push(Message::new(self.data.account.get_display_name(), message.clone(), Utc::now()));
+            channel.messages.push(Message::new(
+                self.data.account.get_display_name(),
+                message.clone(),
+                Utc::now(),
+            ));
         }
 
         self.reset_unread_messages();
@@ -329,19 +383,42 @@ impl App {
                     let author = self.data.profile_manager.display_name(&author_str);
                     // print message
                     if payloads.get("type").unwrap() == "initial" {
-                        channel.messages.push(Message::new(author, String::from("--> started the conversation"), arrived_at));
+                        channel.messages.push(Message::new(
+                            author,
+                            String::from("--> started the conversation"),
+                            arrived_at,
+                        ));
                     } else if payloads.get("type").unwrap() == "text/plain" {
-                        channel.messages.push(Message::new(author, String::from(payloads.get("body").unwrap()), arrived_at));
+                        channel.messages.push(Message::new(
+                            author,
+                            String::from(payloads.get("body").unwrap()),
+                            arrived_at,
+                        ));
                     } else if payloads.get("type").unwrap() == "application/call-history+json" {
-                        let duration = payloads.get("duration").unwrap_or(&String::from("0")).clone();
+                        let duration = payloads
+                            .get("duration")
+                            .unwrap_or(&String::from("0"))
+                            .clone();
                         let mut message = format!("Call with duration: {}", duration);
                         if duration == "0" {
                             message = format!("Call missed");
                         }
-                        channel.messages.push(Message::new(author, String::from(message), arrived_at));
+                        channel.messages.push(Message::new(
+                            author,
+                            String::from(message),
+                            arrived_at,
+                        ));
                     } else if payloads.get("type").unwrap() == "application/data-transfer+json" {
-                        let message = format!("New file transfer with id: {}", payloads.get("id").unwrap_or(&String::new())).clone();
-                        channel.messages.push(Message::new(author, String::from(message), arrived_at));
+                        let message = format!(
+                            "New file transfer with id: {}",
+                            payloads.get("id").unwrap_or(&String::new())
+                        )
+                        .clone();
+                        channel.messages.push(Message::new(
+                            author,
+                            String::from(message),
+                            arrived_at,
+                        ));
                     } else if payloads.get("type").unwrap() == "merge" {
                         // Do not show merge commits
                     } else if payloads.get("type").unwrap() == "member" {
@@ -355,19 +432,39 @@ impl App {
                         let uri = self.data.profile_manager.display_name(&uri);
                         if action == "add" {
                             let msg = format!("--> | {} has been added", uri);
-                            channel.messages.push(Message::new(author, String::from(msg), arrived_at));
+                            channel.messages.push(Message::new(
+                                author,
+                                String::from(msg),
+                                arrived_at,
+                            ));
                         } else if action == "join" {
                             let msg = format!("--> | {} joins the conversation", uri);
-                            channel.messages.push(Message::new(author, String::from(msg), arrived_at));
+                            channel.messages.push(Message::new(
+                                author,
+                                String::from(msg),
+                                arrived_at,
+                            ));
                         } else if action == "ban" {
                             let msg = format!("<-- | {} was banned from the conversation", uri);
-                            channel.messages.push(Message::new(author, String::from(msg), arrived_at));
+                            channel.messages.push(Message::new(
+                                author,
+                                String::from(msg),
+                                arrived_at,
+                            ));
                         } else if action == "remove" {
                             let msg = format!("<-- | {} leaves the conversation", uri);
-                            channel.messages.push(Message::new(author, String::from(msg), arrived_at));
+                            channel.messages.push(Message::new(
+                                author,
+                                String::from(msg),
+                                arrived_at,
+                            ));
                         }
                     } else {
-                        channel.messages.push(Message::new(author, String::from(format!("{:?}", payloads)), arrived_at));
+                        channel.messages.push(Message::new(
+                            author,
+                            String::from(format!("{:?}", payloads)),
+                            arrived_at,
+                        ));
                     }
                 }
             }
@@ -411,7 +508,11 @@ impl App {
                     .channels
                     .items
                     .retain(|channel| channel.id.is_empty());
-                self.data.channels.items[0].messages.push(Message::info(String::from("!!!! No more account left to use")));
+                self.data.channels.items[0]
+                    .messages
+                    .push(Message::info(String::from(
+                        "!!!! No more account left to use",
+                    )));
                 return;
             }
             self.data
@@ -473,9 +574,7 @@ impl App {
     ) -> Option<()> {
         let messages: Vec<_> = messages.into_iter().rev().collect();
         for msg in messages {
-            let _ = self
-                .on_message(&account_id, &conversation_id, msg)
-                .await;
+            let _ = self.on_message(&account_id, &conversation_id, msg).await;
         }
         Some(())
     }
@@ -498,7 +597,10 @@ impl App {
                 .channels
                 .items
                 .retain(|channel| channel.id != conversation_id);
-            self.data.channels.items.push(Channel::new(&conversation_id, ChannelType::Group));
+            self.data
+                .channels
+                .items
+                .push(Channel::new(&conversation_id, ChannelType::Group));
             self.bubble_up_channel(self.data.channels.items.len() - 1);
             self.data.channels.state.select(Some(0));
         }
@@ -519,7 +621,10 @@ impl App {
         conversation_id: String,
     ) -> Option<()> {
         if account_id == self.data.account.id {
-            self.data.channels.items.push(Channel::new(&conversation_id, ChannelType::Invite));
+            self.data
+                .channels
+                .items
+                .push(Channel::new(&conversation_id, ChannelType::Invite));
             self.bubble_up_channel(self.data.channels.items.len() - 1);
             self.data.channels.state.select(Some(0));
         }
@@ -558,7 +663,9 @@ impl App {
                     let channels = &mut self.data.channels.items;
                     for channel in &mut *channels {
                         if channel.id == out_invite.channel.clone().unwrap_or(String::new()) {
-                            channel.messages.push(Message::info(String::from("Cannot invite member")));
+                            channel
+                                .messages
+                                .push(Message::info(String::from("Cannot invite member")));
                         }
                     }
                 }

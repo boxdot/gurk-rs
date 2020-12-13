@@ -1,11 +1,11 @@
 use super::profile::Profile;
 
-use app_dirs::{AppDataType, get_app_dir, AppInfo};
+use app_dirs::{get_app_dir, AppDataType, AppInfo};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader};
 use std::fs;
 use std::fs::File;
+use std::io::{BufRead, BufReader};
 
 /**
  * A class used to share user profiles for all Jami accounts
@@ -32,10 +32,13 @@ impl ProfileManager {
      */
     pub fn load_from_account(&mut self, account_id: &String) {
         let dest = get_app_dir(
-                        AppDataType::UserData,
-                        &AppInfo{name: "jami", author: "SFL"},
-                        &*format!("{}/profiles", account_id)
-                    );
+            AppDataType::UserData,
+            &AppInfo {
+                name: "jami",
+                author: "SFL",
+            },
+            &*format!("{}/profiles", account_id),
+        );
         if dest.is_err() {
             return;
         }

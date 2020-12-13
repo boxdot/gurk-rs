@@ -82,7 +82,7 @@ impl Message {
         Message {
             from: String::new(),
             message,
-            arrived_at: Utc::now()
+            arrived_at: Utc::now(),
         }
     }
 
@@ -90,7 +90,7 @@ impl Message {
         Message {
             from,
             message,
-            arrived_at
+            arrived_at,
         }
     }
 }
