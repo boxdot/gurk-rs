@@ -5,7 +5,7 @@ pub mod profilemanager;
 pub use profile::Profile;
 pub use profilemanager::ProfileManager;
 
-use crate::app::Event;
+use crate::util::Event;
 use account::Account;
 
 use dbus::blocking::Connection;
@@ -34,10 +34,31 @@ pub enum ImportType {
 impl Jami {
 
     /**
+     * Retrieve account or create one if necessary.
+     * @param   create_if_not   Create if no account found
+     * @return the account
+     */
+    pub fn select_jami_account(create_if_not: bool) -> Account {
+        let accounts = Jami::get_account_list();
+        // Select first enabled account
+        for account in &accounts {
+            if account.enabled {
+                return account.clone();
+            }
+        }
+        if create_if_not {
+            // No valid account found, generate a new one
+            Jami::add_account("", "", ImportType::None);
+        }
+        return Account::null();
+    }
+
+
+    /**
      * Listen to daemon's signals
      */
     pub async fn handle_events<T: 'static + std::fmt::Debug + std::marker::Send>(
-        tx: tokio::sync::mpsc::Sender<crate::app::Event<T>>,
+        tx: tokio::sync::mpsc::Sender<Event<T>>,
         stop: Arc<AtomicBool>,
     ) -> Result<(), std::io::Error> {
         let (resource, conn) = connection::new_session_sync().ok().expect("Lost connection");

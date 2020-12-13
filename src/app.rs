@@ -1,219 +1,22 @@
+use crate::appdata::AppData;
 use crate::jami::account::Account;
-use crate::jami::{ImportType, Jami, ProfileManager};
-use crate::util::StatefulList;
+use crate::jami::{ImportType, Jami};
+use crate::util::*;
 
 use app_dirs::{get_app_dir, AppDataType, AppInfo};
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{TimeZone, Utc};
 use crossterm::event::KeyCode;
-use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthStr;
 
 use std::collections::HashMap;
 use std::fs::{copy, File};
-use std::io::{self, BufRead, Write};
+use std::io::Write;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub struct App {
     pub should_quit: bool,
     pub log_file: Option<File>,
     pub data: AppData,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct AppData {
-    pub channels: StatefulList<Channel>,
-    pub account: Account,
-    pub profile_manager: ProfileManager,
-    #[serde(skip)]
-    pub out_invite: Vec<OutgoingInvite>,
-    #[serde(skip)]
-    pub pending_rm: Vec<PendingRm>,
-    pub input: String,
-    #[serde(skip)]
-    pub input_cursor: usize,
-}
-
-pub struct OutgoingInvite {
-    pub account: String,
-    pub channel: Option<String>,
-    pub member: String,
-}
-
-pub struct PendingRm {
-    pub account: String,
-    pub channel: String,
-    pub member: String,
-}
-
-impl AppData {
-    // Move to jami namespace
-    fn select_jami_account(create_if_not: bool) -> Account {
-        let accounts = Jami::get_account_list();
-        // Select first enabled account
-        for account in &accounts {
-            if account.enabled {
-                return account.clone();
-            }
-        }
-        if create_if_not {
-            // No valid account found, generate a new one
-            Jami::add_account("", "", ImportType::None);
-        }
-        return Account::null();
-    }
-
-    fn lookup_members(&mut self) {
-        // Refresh titles for channel
-        for channel in &mut *self.channels.items {
-            for member in &*channel.members {
-                Jami::lookup_address(&self.account.id, &String::new(), &member.hash);
-            }
-        }
-    }
-
-    fn channels_for_account(account: &Account) -> Vec<Channel> {
-        let mut channels = Vec::new();
-        let mut messages = Vec::new();
-
-        // TODO move out welcome
-        let file = File::open("rsc/welcome-art");
-        if file.is_ok() {
-            for line in io::BufReader::new(file.unwrap()).lines() {
-                messages.push(Message {
-                    from: String::new(),
-                    message: Some(String::from(line.unwrap())),
-                    arrived_at: Utc::now(),
-                });
-            }
-        }
-
-        channels.push(Channel {
-            id: String::from("Welcome"),
-            name: String::from("Welcome"),
-            members: Vec::new(),
-            channel_type: ChannelType::Generated,
-            messages,
-            unread_messages: 0,
-        });
-
-        for request in Jami::get_conversations_requests(&account.id) {
-            channels.push(Channel {
-                id: request.get("id").unwrap().clone(),
-                name: String::from(format!("r:{}", request.get("id").unwrap())),
-                members: Vec::new(),
-                channel_type: ChannelType::Invite,
-                messages: Vec::new(),
-                unread_messages: 0,
-            });
-        }
-
-        for conversation in Jami::get_conversations(&account.id) {
-            let members_from_daemon = Jami::get_members(&account.id, &conversation);
-            let mut members = Vec::new();
-            for member in members_from_daemon {
-                let role: Role;
-                if member["role"].to_string() == "admin" {
-                    role = Role::Admin;
-                } else {
-                    role = Role::Member;
-                }
-                let hash = member["uri"].to_string();
-                members.push(Member { hash, role })
-            }
-            channels.push(Channel {
-                id: conversation.clone(),
-                name: conversation,
-                members,
-                channel_type: ChannelType::Group,
-                messages: Vec::new(),
-                unread_messages: 0,
-            });
-        }
-        channels
-    }
-
-    fn init_from_jami() -> anyhow::Result<Self> {
-        let account = AppData::select_jami_account(true);
-        let mut channels = Vec::new();
-        let mut profile_manager = ProfileManager::new();
-        if !account.id.is_empty() {
-            profile_manager.load_from_account(&account.id);
-            channels = AppData::channels_for_account(&account);
-        }
-
-        let mut channels = StatefulList::with_items(channels);
-        if !channels.items.is_empty() {
-            channels.state.select(Some(0));
-        }
-
-        Ok(AppData {
-            channels,
-            input: String::new(),
-            profile_manager,
-            out_invite: Vec::new(),
-            pending_rm: Vec::new(),
-            input_cursor: 0,
-            account,
-        })
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum Role {
-    Member,
-    Admin,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Member {
-    hash: String,
-    role: Role, // TODO enum
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub enum ChannelType {
-    Generated,
-    Group,
-    Invite,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Channel {
-    /// Either phone number or group id
-    pub id: String,
-    pub name: String,
-    pub channel_type: ChannelType,
-    pub members: Vec<Member>,
-    pub messages: Vec<Message>,
-    #[serde(default)]
-    pub unread_messages: usize,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Message {
-    pub from: String,
-    #[serde(alias = "text")] // remove
-    pub message: Option<String>,
-    pub arrived_at: DateTime<Utc>,
-}
-
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug)]
-pub enum Event<I> {
-    Input(I),
-    Message {
-        account_id: String,
-        conversation_id: String,
-        payloads: HashMap<String, String>,
-    },
-    ConversationReady(String, String),
-    ConversationRequest(String, String),
-    RegistrationStateChanged(String, String),
-    ProfileReceived(String, String, String),
-    RegisteredNameFound(String, u64, String, String),
-    AccountsChanged(),
-    ConversationLoaded(u32, String, String, Vec<HashMap<String, String>>),
-    Resize,
 }
 
 impl App {
@@ -276,7 +79,7 @@ impl App {
         registration_state: &String,
     ) {
         if registration_state == "REGISTERED" && self.data.account == Account::null() {
-            self.data.account = AppData::select_jami_account(false);
+            self.data.account = Jami::select_jami_account(false);
         }
     }
 
@@ -290,7 +93,7 @@ impl App {
         }
         if !still_there {
             // Reselect an account
-            self.data.account = AppData::select_jami_account(false);
+            self.data.account = Jami::select_jami_account(false);
             if self.data.account.id.is_empty() {
                 self.data.channels.state.select(Some(0));
                 self.data

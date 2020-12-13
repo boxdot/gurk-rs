@@ -1,10 +1,12 @@
 mod app;
+mod appdata;
 mod jami;
 mod ui;
 mod util;
 
 use crate::jami::Jami;
-use app::{App, Event};
+use app::App;
+use crate::util::*;
 
 use crossterm::{
     event::{
@@ -61,9 +63,7 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(async move { Jami::handle_events(tx, stop_cloned).await });
 
     let backend = CrosstermBackend::new(stdout);
-
     let mut terminal = Terminal::new(backend)?;
-
     terminal.clear()?;
 
     let mut app = App::try_new(args.verbose)?;
@@ -124,6 +124,7 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    // Stop handle_events
     stop.store(true, Ordering::Relaxed);
 
     execute!(
