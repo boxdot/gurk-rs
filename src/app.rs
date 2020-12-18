@@ -399,9 +399,14 @@ impl App {
                             .get("duration")
                             .unwrap_or(&String::from("0"))
                             .clone();
-                        let mut message = format!("Call with duration: {}", duration);
-                        if duration == "0" {
-                            message = format!("Call missed");
+                        let duration = duration.parse::<i32>();
+                        if duration.is_err() {
+                            return Some(());
+                        }
+                        let duration = duration.unwrap();
+                        let mut message = format!("📞 Call with duration: {}", duration);
+                        if duration == 0 {
+                            message = format!("❌ Call missed");
                         }
                         channel.messages.push(Message::new(
                             author,
@@ -411,7 +416,7 @@ impl App {
                     } else if payloads.get("type").unwrap() == "application/data-transfer+json" {
                         let message = format!(
                             "New file transfer with id: {}",
-                            payloads.get("id").unwrap_or(&String::new())
+                            payloads.get("tid").unwrap_or(&String::new())
                         )
                         .clone();
                         channel.messages.push(Message::new(
