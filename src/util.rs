@@ -38,6 +38,7 @@ pub enum ChannelType {
     Generated,
     Group,
     Invite,
+    TrustRequest(String),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -55,8 +56,14 @@ pub struct Channel {
 impl Channel {
     pub fn new(id: &String, channel_type: ChannelType) -> Channel {
         let mut name = id.clone();
-        if channel_type == ChannelType::Invite {
-            name = String::from(format!("🔵 {}", id));
+        match channel_type.clone() {
+            ChannelType::Invite => {
+                name = String::from(format!("🔵 {}", id));
+            }
+            ChannelType::TrustRequest(_) => {
+                name = String::from(format!("🟠 {}", id));
+            }
+            _ => {}
         }
         Channel {
             id: id.clone(),
@@ -111,6 +118,7 @@ pub enum Event<I> {
     RegisteredNameFound(String, u64, String, String),
     AccountsChanged(),
     ConversationLoaded(u32, String, String, Vec<HashMap<String, String>>),
+    IncomingTrustRequest(String, String, Vec<u8>, u64),
     Resize,
 }
 

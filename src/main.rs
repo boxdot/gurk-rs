@@ -113,6 +113,10 @@ async fn main() -> anyhow::Result<()> {
             Some(Event::ProfileReceived(account_id, from, path)) => {
                 app.on_profile_received(&account_id, &from, &path).await;
             }
+            Some(Event::IncomingTrustRequest(account_id, from, payload, receive_time)) => {
+                app.on_incoming_trust_request(&account_id, &from, payload, receive_time)
+                    .await;
+            }
             Some(Event::AccountsChanged()) => {
                 app.on_accounts_changed().await;
             }

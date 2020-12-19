@@ -98,13 +98,26 @@ impl App {
         }
 
         let mut show_msg = true;
+        let mut is_invite = false;
+        let mut is_trust_request = false;
+        let mut from_request = String::new();
+        match channel.channel_type.clone() {
+            ChannelType::Invite => {
+                is_invite = true;
+            }
+            ChannelType::TrustRequest(contact) => {
+                is_trust_request = true;
+                from_request = contact;
+            }
+            _ => {}
+        }
 
         if message.starts_with("/msg ") {
             let account_id = &self.data.account.id;
             let mut member = String::from(message.strip_prefix("/msg ").unwrap());
             if Jami::is_hash(&member) {
-                let conversation = Jami::start_conversation(&account_id);
-                Jami::add_conversation_member(&account_id, &conversation, &member);
+                Jami::add_contact(&account_id, &member);
+                Jami::send_trust_request(&account_id, &member, Vec::new() /* TODO */);
             } else {
                 let mut ns = String::new();
                 if member.find("@") != None {
@@ -305,20 +318,33 @@ impl App {
                 show_msg = false;
                 Jami::send_conversation_message(&account_id, &channel.id, &message, &String::new());
             }
-        } else if channel.channel_type == ChannelType::Invite {
+        } else if is_invite || is_trust_request {
             let account_id = &self.data.account.id;
             if message == "/leave" {
-                Jami::decline_request(&account_id, &channel.id);
+                if is_invite {
+                    Jami::decline_request(&account_id, &channel.id);
+                } else {
+                    Jami::discard_trust_request(&account_id, &from_request);
+                }
                 self.data.channels.items.remove(channel_idx);
                 if !self.data.channels.items.is_empty() {
                     self.data.channels.state.select(Some(0));
                 }
                 show_msg = false;
             } else if message == "/join" {
-                Jami::accept_request(&account_id, &channel.id);
-                channel
-                    .messages
-                    .push(Message::info(String::from("Syncing… the view will update")));
+                if is_invite {
+                    Jami::accept_request(&account_id, &channel.id);
+                    channel
+                        .messages
+                        .push(Message::info(String::from("Syncing… the view will update")));
+                } else {
+                    Jami::accept_trust_request(&account_id, &from_request);
+                    self.data.channels.items.remove(channel_idx);
+                    if !self.data.channels.items.is_empty() {
+                        self.data.channels.state.select(Some(0));
+                    }
+                    show_msg = false;
+                }
             } else {
                 channel
                     .messages
@@ -383,11 +409,20 @@ impl App {
                     let author = self.data.profile_manager.display_name(&author_str);
                     // print message
                     if payloads.get("type").unwrap() == "initial" {
-                        channel.messages.push(Message::new(
-                            author,
-                            String::from("--> started the conversation"),
-                            arrived_at,
-                        ));
+                        let mut initial_message = String::from("--> started the conversation");
+                        if payloads.get("mode").unwrap_or(&String::new()) == "0" {
+                            let uri = self
+                                .data
+                                .profile_manager
+                                .display_name(&payloads.get("invited").unwrap_or(&String::new()));
+                            initial_message = String::from(format!(
+                                "--> started a private conversation with {}",
+                                uri
+                            ));
+                        }
+                        channel
+                            .messages
+                            .push(Message::new(author, initial_message, arrived_at));
                     } else if payloads.get("type").unwrap() == "text/plain" {
                         channel.messages.push(Message::new(
                             author,
@@ -404,7 +439,7 @@ impl App {
                             return Some(());
                         }
                         let duration = duration.unwrap();
-                        let mut message = format!("📞 Call with duration: {}", duration);
+                        let mut message = format!("📞 Call with duration: {} secs", duration);
                         if duration == 0 {
                             message = format!("❌ Call missed");
                         }
@@ -637,6 +672,32 @@ impl App {
     }
 
     /**
+     * When receiving a new trust request
+     * @param self
+     * @param account_id
+     * @param conversation_id
+     * @todo other parameters?
+     * @return if ok
+     */
+    pub async fn on_incoming_trust_request(
+        &mut self,
+        account_id: &String,
+        from: &String,
+        _payloads: Vec<u8>,
+        _receive_time: u64,
+    ) -> Option<()> {
+        if account_id == &self.data.account.id {
+            self.data
+                .channels
+                .items
+                .push(Channel::new(&from, ChannelType::TrustRequest(from.clone())));
+            self.bubble_up_channel(self.data.channels.items.len() - 1);
+            self.data.channels.state.select(Some(0));
+        }
+        Some(())
+    }
+
+    /**
      * When a name is found, refresh UI if necessary and profile manager
      * @param self
      * @param account_id
@@ -657,13 +718,17 @@ impl App {
             let out_invite = &self.data.out_invite[i];
             if out_invite.account == account_id && out_invite.member == name {
                 if status == 0 {
-                    let conversation: String;
                     if out_invite.channel.as_ref().is_none() {
-                        conversation = Jami::start_conversation(&self.data.account.id);
+                        Jami::add_contact(&self.data.account.id, &address);
+                        Jami::send_trust_request(
+                            &out_invite.account,
+                            &address,
+                            Vec::new(), /* TODO */
+                        );
                     } else {
-                        conversation = out_invite.channel.clone().unwrap();
+                        let conversation = out_invite.channel.clone().unwrap();
+                        Jami::add_conversation_member(&out_invite.account, &conversation, &address);
                     }
-                    Jami::add_conversation_member(&out_invite.account, &conversation, &address);
                 } else {
                     let channels = &mut self.data.channels.items;
                     for channel in &mut *channels {

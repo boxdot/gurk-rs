@@ -64,16 +64,20 @@ impl AppData {
             unread_messages: 0,
         });
 
+        // Get trust requests
+        for request in Jami::get_trust_requests(&account.id) {
+            channels.push(Channel::new(
+                &request,
+                ChannelType::TrustRequest(request.clone()),
+            ));
+        }
+
         // Get requests
         for request in Jami::get_conversations_requests(&account.id) {
-            channels.push(Channel {
-                id: request.get("id").unwrap().clone(),
-                name: String::from(format!("r:{}", request.get("id").unwrap())),
-                members: Vec::new(),
-                channel_type: ChannelType::Invite,
-                messages: Vec::new(),
-                unread_messages: 0,
-            });
+            channels.push(Channel::new(
+                &request.get("id").unwrap().clone(),
+                ChannelType::Invite,
+            ));
         }
 
         // Get conversations
@@ -90,14 +94,7 @@ impl AppData {
                 let hash = member["uri"].to_string();
                 members.push(Member { hash, role })
             }
-            channels.push(Channel {
-                id: conversation.clone(),
-                name: conversation,
-                members,
-                channel_type: ChannelType::Group,
-                messages: Vec::new(),
-                unread_messages: 0,
-            });
+            channels.push(Channel::new(&conversation, ChannelType::Group));
         }
         channels
     }

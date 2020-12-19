@@ -30,10 +30,10 @@ To run this project you will need:
   + Remove members
   + Send text messages
   + Show synchronized call messages and file transfers
+  + Support swarm modes (1:1, admin invites only, invites only, public)
 
 ## Missing features but wanted
 
-+ Support swarm modes (1:1, admin invites only, invites only, public)
 + Room titles
 + Calls (without image, maybe in the future)
   + Start a call

@@ -180,6 +180,24 @@ impl Jami {
             },
         );
 
+        let mr = MatchRule::new_signal("cx.ring.Ring.ConfigurationManager", "incomingTrustRequest");
+        let txs = tx.clone();
+        let _ic = conn.add_match(mr).await.ok().expect("Lost connection").cb(
+            move |_, (account_id, from, payloads, receive_time): (String, String, Vec<u8>, u64)| {
+                let mut txs = txs.clone();
+                tokio::spawn(async move {
+                    txs.send(Event::IncomingTrustRequest(
+                        account_id,
+                        from,
+                        payloads,
+                        receive_time,
+                    ))
+                    .await
+                });
+                true
+            },
+        );
+
         let mr = MatchRule::new_signal("cx.ring.Ring.ConfigurationManager", "conversationLoaded");
         let txs = tx.clone();
         let _ic = conn.add_match(mr).await.ok().expect("Lost connection").cb(
@@ -444,6 +462,121 @@ impl Jami {
             "setAccountDetails",
             (id, details),
         );
+    }
+
+    /**
+     * Add a new contact
+     * @param id        Account id
+     * @param uri       Uri of the contact
+     */
+    pub fn add_contact(id: &String, uri: &String) {
+        let conn = Connection::new_session().unwrap();
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let _: Result<(), _> =
+            proxy.method_call("cx.ring.Ring.ConfigurationManager", "addContact", (id, uri));
+    }
+
+    /**
+     * Get trusts requests from an account
+     * @param id        Account id
+     * @return the list of trusts requests senders
+     */
+    pub fn get_trust_requests(id: &String) -> Vec<String> {
+        let mut res = Vec::new();
+        let conn = Connection::new_session().unwrap();
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let result: Result<(Vec<HashMap<String, String>>,), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "getTrustRequests",
+            (id,),
+        );
+        if result.is_ok() {
+            let result = result.unwrap().0;
+            for tr in result {
+                if tr.contains_key("from") {
+                    res.push(tr.get("from").unwrap().clone());
+                }
+            }
+        }
+        return res;
+    }
+
+    /**
+     * Send a trust request to someone
+     * @param id        Account id
+     * @param to        Contact uri
+     * @param payloads  VCard
+     */
+    pub fn send_trust_request(id: &String, to: &String, payloads: Vec<u8>) {
+        let conn = Connection::new_session().unwrap();
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let _: Result<(), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "sendTrustRequest",
+            (id, to, payloads),
+        );
+    }
+
+    /**
+     * Accept a trust request
+     * @param id        Account id
+     * @param from      Contact uri
+     * @return if successful
+     */
+    pub fn accept_trust_request(id: &String, from: &String) -> bool {
+        let conn = Connection::new_session().unwrap();
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let result: Result<(bool,), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "acceptTrustRequest",
+            (id, from),
+        );
+        if result.is_ok() {
+            let result = result.unwrap().0;
+            return result;
+        }
+        false
+    }
+
+    /**
+     * Discard a trust request
+     * @param id        Account id
+     * @param from      Contact uri
+     * @return if successful
+     */
+    pub fn discard_trust_request(id: &String, from: &String) -> bool {
+        let conn = Connection::new_session().unwrap();
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let result: Result<(bool,), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "discardTrustRequest",
+            (id, from),
+        );
+        if result.is_ok() {
+            let result = result.unwrap().0;
+            return result;
+        }
+        false
     }
 
     /**
