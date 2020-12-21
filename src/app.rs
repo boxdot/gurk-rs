@@ -438,7 +438,7 @@ impl App {
                         if duration.is_err() {
                             return Some(());
                         }
-                        let duration = duration.unwrap();
+                        let duration = duration.unwrap() / 1000;
                         let mut message = format!("📞 Call with duration: {} secs", duration);
                         if duration == 0 {
                             message = format!("❌ Call missed");
