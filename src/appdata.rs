@@ -57,7 +57,8 @@ impl AppData {
 
         channels.push(Channel {
             id: String::from("⚙️ Jami-cli"),
-            name: String::from("⚙️ Jami-cli"),
+            title: String::from("⚙️ Jami-cli"),
+            description: String::new(),
             members: Vec::new(),
             channel_type: ChannelType::Generated,
             messages,
@@ -94,7 +95,10 @@ impl AppData {
                 let hash = member["uri"].to_string();
                 members.push(Member { hash, role })
             }
-            channels.push(Channel::new(&conversation, ChannelType::Group));
+            let mut channel = Channel::new(&conversation, ChannelType::Group);
+            let new_infos = Jami::get_conversation_infos(&account.id, &conversation);
+            channel.update_infos(new_infos);
+            channels.push(channel);
         }
         channels
     }

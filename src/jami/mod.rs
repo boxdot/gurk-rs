@@ -606,6 +606,52 @@ impl Jami {
     }
 
     /**
+     * Get conversation's infos
+     * @param id        Id of the account
+     * @param convid    Id of the conversation
+     * @return current infos
+     */
+    pub fn get_conversation_infos(id: &String, convid: &String) -> HashMap<String, String> {
+        let conn = Connection::new_session().unwrap();
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let result: Result<(HashMap<String, String>,), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "conversationInfos",
+            (id, convid),
+        );
+        if result.is_ok() {
+            let result = result.unwrap().0;
+            return result;
+        }
+
+        HashMap::new()
+    }
+
+    /**
+     * Update conversation's i nfos
+     * @param id        Id of the account
+     * @param convid    Id of the conversation
+     * @param infos     New infos
+     */
+    pub fn update_conversation_infos(id: &String, convid: &String, infos: HashMap<String, String>) {
+        let conn = Connection::new_session().unwrap();
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let _: Result<(), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "updateConversationInfos",
+            (id, convid, infos),
+        );
+    }
+
+    /**
      * Start conversation
      * @param id        Id of the account
      */

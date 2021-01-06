@@ -50,10 +50,13 @@ impl App {
     pub fn on_key(&mut self, key: KeyCode) {
         match key {
             KeyCode::Char(c) => {
-                let mut idx = self.data.input_cursor;
-                while !self.data.input.is_char_boundary(idx) {
-                    idx += 1;
-                }
+                let idx = self
+                    .data
+                    .input
+                    .chars()
+                    .take(self.data.input_cursor)
+                    .map(|c| c.len_utf8())
+                    .sum();
                 self.data.input.insert(idx, c);
                 self.data.input_cursor += 1;
             }
@@ -278,6 +281,18 @@ impl App {
                     show_msg = false;
                     Jami::lookup_name(&account_id, &ns, &member);
                 }
+            } else if message.starts_with("/title") {
+                let title = String::from(message.strip_prefix("/title ").unwrap());
+                let mut infos = HashMap::new();
+                infos.insert(String::from("title"), title);
+                Jami::update_conversation_infos(&account_id, &channel.id, infos);
+                show_msg = false;
+            } else if message.starts_with("/description") {
+                let description = String::from(message.strip_prefix("/description ").unwrap());
+                let mut infos = HashMap::new();
+                infos.insert(String::from("description"), description);
+                Jami::update_conversation_infos(&account_id, &channel.id, infos);
+                show_msg = false;
             } else if message.starts_with("/kick") {
                 let mut member = String::from(message.strip_prefix("/kick ").unwrap());
                 if Jami::is_hash(&member) {
@@ -310,6 +325,12 @@ impl App {
                 )));
                 channel.messages.push(Message::info(String::from(
                     "/kick [hash|username]: Kick someone from the conversation",
+                )));
+                channel.messages.push(Message::info(String::from(
+                    "/title [title]: Change the title of the room",
+                )));
+                channel.messages.push(Message::info(String::from(
+                    "/description [description]: Change the description of the room",
                 )));
                 channel
                     .messages
@@ -459,6 +480,10 @@ impl App {
                             String::from(message),
                             arrived_at,
                         ));
+                    } else if payloads.get("type").unwrap() == "application/update-profile" {
+                        // Do not show update infos commits
+                        let new_infos = Jami::get_conversation_infos(account_id, conversation_id);
+                        channel.update_infos(new_infos);
                     } else if payloads.get("type").unwrap() == "merge" {
                         // Do not show merge commits
                     } else if payloads.get("type").unwrap() == "member" {
@@ -760,21 +785,6 @@ impl App {
             }
         }
 
-        // Refresh titles for channel
-        for channel in &mut *self.data.channels.items {
-            let mut refresh_name = false;
-            let mut name = String::new();
-            for member in &*channel.members {
-                name += &*self.data.profile_manager.display_name(&member.hash);
-                name += ", ";
-                if member.hash == address {
-                    refresh_name = true;
-                }
-            }
-            if refresh_name {
-                channel.name = name;
-            }
-        }
         Some(())
     }
 

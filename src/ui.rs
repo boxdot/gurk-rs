@@ -27,17 +27,18 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
             } else {
                 String::new()
             };
-            let label = format!("{}{}", channel.name, unread_messages_label);
+            let channel_name = channel.bestname();
+            let label = format!("{}{}", channel_name, unread_messages_label);
             let label_width = label.width();
             let label = if label.width() <= channel_list_width || unread_messages_label.is_empty() {
                 label
             } else {
                 let diff = label_width - channel_list_width;
-                let mut end = channel.name.width().saturating_sub(diff);
-                while !channel.name.is_char_boundary(end) {
+                let mut end = channel_name.width().saturating_sub(diff);
+                while !channel_name.is_char_boundary(end) {
                     end += 1;
                 }
-                format!("{}{}", &channel.name[0..end], unread_messages_label)
+                format!("{}{}", &channel_name[0..end], unread_messages_label)
             };
             ListItem::new(vec![Spans::from(Span::raw(label))])
         })
@@ -113,6 +114,19 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &App, area: Rect) {
         .max()
         .unwrap_or(0);
 
+    let description = app
+        .data
+        .channels
+        .state
+        .selected()
+        .and_then(|idx| app.data.channels.items.get(idx))
+        .map(|channel| &*channel.description)
+        .unwrap_or("Messages");
+    let room_description = match description {
+        "" => "Messages",
+        d => d,
+    };
+
     let width = area.width - 2; // without borders
     let max_lines = area.height;
 
@@ -176,7 +190,11 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &App, area: Rect) {
     }
 
     let list = List::new(items)
-        .block(Block::default().title("Messages").borders(Borders::ALL))
+        .block(
+            Block::default()
+                .title(room_description)
+                .borders(Borders::ALL),
+        )
         .style(Style::default().fg(Color::White))
         .start_corner(Corner::BottomLeft);
     f.render_widget(list, area);

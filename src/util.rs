@@ -45,7 +45,8 @@ pub enum ChannelType {
 pub struct Channel {
     /// Either phone number or group id
     pub id: String,
-    pub name: String,
+    pub title: String,
+    pub description: String,
     pub channel_type: ChannelType,
     pub members: Vec<Member>,
     pub messages: Vec<Message>,
@@ -55,23 +56,49 @@ pub struct Channel {
 
 impl Channel {
     pub fn new(id: &String, channel_type: ChannelType) -> Channel {
-        let mut name = id.clone();
-        match channel_type.clone() {
-            ChannelType::Invite => {
-                name = String::from(format!("🔵 {}", id));
-            }
-            ChannelType::TrustRequest(_) => {
-                name = String::from(format!("🟠 {}", id));
-            }
-            _ => {}
-        }
         Channel {
             id: id.clone(),
-            name: name,
+            title: String::new(),
+            description: String::new(),
             members: Vec::new(),
             channel_type,
             messages: Vec::new(),
             unread_messages: 0,
+        }
+    }
+
+    /**
+     * Get best name for a channel
+     * @param self
+     */
+    pub fn bestname(&self) -> String {
+        if !self.title.is_empty() {
+            return self.title.clone();
+        }
+        let mut name = self.id.clone();
+        match self.channel_type.clone() {
+            ChannelType::Invite => {
+                name = String::from(format!("🔵 {}", self.id));
+            }
+            ChannelType::TrustRequest(_) => {
+                name = String::from(format!("🟠 {}", self.id));
+            }
+            _ => {}
+        }
+        return name;
+    }
+
+    /**
+     * Update infos from map retrieven from the daemon
+     * @param self
+     * @param infos
+     */
+    pub fn update_infos(&mut self, infos: HashMap<String, String>) {
+        if infos.get("title") != None {
+            self.title = infos.get("title").unwrap().to_string();
+        }
+        if infos.get("description") != None {
+            self.description = infos.get("description").unwrap().to_string();
         }
     }
 }

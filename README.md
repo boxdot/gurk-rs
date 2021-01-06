@@ -31,10 +31,10 @@ To run this project you will need:
   + Send text messages
   + Show synchronized call messages and file transfers
   + Support swarm modes (1:1, admin invites only, invites only, public)
++ Room titles
 
 ## Missing features but wanted
 
-+ Room titles
 + Calls (without image, maybe in the future)
   + Start a call
   + Stop a call
