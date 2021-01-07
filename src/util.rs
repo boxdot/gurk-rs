@@ -139,6 +139,7 @@ pub enum Event<I> {
         payloads: HashMap<String, String>,
     },
     ConversationReady(String, String),
+    ConversationRemoved(String, String),
     ConversationRequest(String, String),
     RegistrationStateChanged(String, String),
     ProfileReceived(String, String, String),

@@ -133,6 +133,19 @@ impl Jami {
             },
         );
 
+        let mr = MatchRule::new_signal("cx.ring.Ring.ConfigurationManager", "conversationRemoved");
+        let txs = tx.clone();
+        let _ic = conn.add_match(mr).await.ok().expect("Lost connection").cb(
+            move |_, (account_id, conversation_id): (String, String)| {
+                let mut txs = txs.clone();
+                tokio::spawn(async move {
+                    txs.send(Event::ConversationRemoved(account_id, conversation_id))
+                        .await
+                });
+                true
+            },
+        );
+
         let mr = MatchRule::new_signal(
             "cx.ring.Ring.ConfigurationManager",
             "conversationRequestReceived",

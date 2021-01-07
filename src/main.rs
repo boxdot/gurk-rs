@@ -98,6 +98,9 @@ async fn main() -> anyhow::Result<()> {
             Some(Event::ConversationReady(account_id, conversation_id)) => {
                 app.on_conversation_ready(account_id, conversation_id).await;
             }
+            Some(Event::ConversationRemoved(account_id, conversation_id)) => {
+                app.on_conversation_removed(account_id, conversation_id).await;
+            }
             Some(Event::ConversationRequest(account_id, conversation_id)) => {
                 app.on_conversation_request(account_id, conversation_id)
                     .await;

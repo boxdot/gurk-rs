@@ -247,14 +247,9 @@ impl App {
                     .push(Message::info(String::from("/exit: quit")));
             }
         } else if channel.channel_type == ChannelType::Group {
-            // TODO simplify
             let account_id = &self.data.account.id;
             if message == "/leave" {
                 if Jami::rm_conversation(&account_id, &channel.id) {
-                    self.data.channels.items.remove(channel_idx);
-                    if !self.data.channels.items.is_empty() {
-                        self.data.channels.state.select(Some(0));
-                    }
                     return;
                 } else {
                     channel
@@ -668,6 +663,33 @@ impl App {
                 .push(Channel::new(&conversation_id, ChannelType::Group));
             self.bubble_up_channel(self.data.channels.items.len() - 1);
             self.data.channels.state.select(Some(0));
+        }
+        Some(())
+    }
+
+    /**
+     * When a conversation is removed
+     * @param self
+     * @param account_id
+     * @param conversation_id
+     * @return if 
+     */
+    pub async fn on_conversation_removed(
+        &mut self,
+        account_id: String,
+        conversation_id: String,
+    ) -> Option<()> {
+        if account_id == self.data.account.id {
+            if let Some(idx) = self.data.channels.state.selected() {
+                let channel = &mut self.data.channels.items[idx];
+                if channel.id == conversation_id {
+                    self.data.channels.state.select(Some(0));
+                }
+            }
+            self.data
+                .channels
+                .items
+                .retain(|channel| channel.id != conversation_id);
         }
         Some(())
     }
