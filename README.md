@@ -24,6 +24,7 @@ To run this project you will need:
 + Contact lookups and profile receptions
 + Swarm:
   + Start a swarm
+  + Remove a swarm
   + Invite someone to join a swarm
   + Receive invites for swarms
   + Join or decline an invite

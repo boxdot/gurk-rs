@@ -672,7 +672,7 @@ impl App {
      * @param self
      * @param account_id
      * @param conversation_id
-     * @return if 
+     * @return if ok
      */
     pub async fn on_conversation_removed(
         &mut self,
