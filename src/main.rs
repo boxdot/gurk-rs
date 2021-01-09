@@ -82,7 +82,7 @@ async fn main() -> anyhow::Result<()> {
 
     let backend = CrosstermBackend::new(stdout);
 
-    let mut terminal = Terminal::new(backend)?;
+    let mut terminal = RestoreGuard(Terminal::new(backend)?);
 
     let signal_client = app.signal_client.clone();
     tokio::task::spawn_local(async move {
@@ -111,7 +111,7 @@ async fn main() -> anyhow::Result<()> {
                 code => app.on_key(code),
             },
             Some(Event::Message(message)) => {
-                app.on_message(message).await;
+                app.on_message(message?).await;
             }
             Some(Event::Resize) => {
                 // will just redraw the app
@@ -125,13 +125,33 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )
-    .unwrap();
-    terminal.show_cursor().unwrap();
-
     Ok(())
+}
+
+struct RestoreGuard(Terminal<CrosstermBackend<std::io::Stdout>>);
+
+impl std::ops::Deref for RestoreGuard {
+    type Target = Terminal<CrosstermBackend<std::io::Stdout>>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for RestoreGuard {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl Drop for RestoreGuard {
+    fn drop(&mut self) {
+        if let Err(e) = execute!(
+            self.0.backend_mut(),
+            LeaveAlternateScreen,
+            DisableMouseCapture
+        ) {
+            eprintln!("failed to restore screen: {}", e);
+        }
+        self.0.show_cursor().unwrap();
+    }
 }

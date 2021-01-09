@@ -1,7 +1,10 @@
 use crate::config::Config;
 
-use anyhow::Context as _;
-use futures_util::{stream::Stream, StreamExt};
+use anyhow::{anyhow, Context as _};
+use futures_util::{
+    stream::{self, Stream},
+    FutureExt, StreamExt,
+};
 use libsignal_protocol::{crypto::DefaultCrypto, Context};
 pub use libsignal_service::content::{AttachmentPointer, ContentBody, DataMessage, Metadata};
 use serde::{Deserialize, Serialize};
@@ -36,53 +39,60 @@ impl SignalClient {
     }
 
     pub fn get_groups(&self) -> anyhow::Result<Vec<GroupInfo>> {
-        let output = Command::new(self.config.signal_cli.path.as_os_str())
-            .arg("--username")
-            .arg(&self.config.user.phone_number)
-            .arg("listGroups")
-            .output()?;
+        // let output = Command::new(self.config.signal_cli.path.as_os_str())
+        //     .arg("--username")
+        //     .arg(&self.config.user.phone_number)
+        //     .arg("listGroups")
+        //     .output()?;
 
-        let res: Result<Vec<_>, anyhow::Error> = output
-            .stdout
-            .lines()
-            .map(|s| {
-                let s = s?;
-                let info = GroupInfo::from_str(&s)?;
-                Ok(info)
-            })
-            .collect();
-        res
+        // let res: Result<Vec<_>, anyhow::Error> = output
+        //     .stdout
+        //     .lines()
+        //     .map(|s| {
+        //         let s = s?;
+        //         let info = GroupInfo::from_str(&s)?;
+        //         Ok(info)
+        //     })
+        //     .collect();
+        // res
+        Ok(Vec::new())
     }
 
     pub fn get_contacts(&self) -> anyhow::Result<Vec<ContactInfo>> {
-        let output = Command::new(self.config.signal_cli.path.as_os_str())
-            .arg("--username")
-            .arg(&self.config.user.phone_number)
-            .arg("listContacts")
-            .output()?;
+        // let output = Command::new(self.config.signal_cli.path.as_os_str())
+        //     .arg("--username")
+        //     .arg(&self.config.user.phone_number)
+        //     .arg("listContacts")
+        //     .output()?;
 
-        let res: Result<Vec<_>, anyhow::Error> = output
-            .stdout
-            .lines()
-            .map(|s| {
-                let s = s?;
-                let info = ContactInfo::from_str(&s)?;
-                Ok(info)
-            })
-            .collect();
-        res
+        // let res: Result<Vec<_>, anyhow::Error> = output
+        //     .stdout
+        //     .lines()
+        //     .map(|s| {
+        //         let s = s?;
+        //         let info = ContactInfo::from_str(&s)?;
+        //         Ok(info)
+        //     })
+        //     .collect();
+        // res
+        Ok(Vec::new())
     }
 
-    pub fn stream_messages(self) -> impl Stream<Item = Message> {
+    pub fn stream_messages(self) -> impl Stream<Item = anyhow::Result<Message>> {
         let (tx, rx) = futures::channel::mpsc::channel(32);
+        let (stopped_tx, stopped_rx) = tokio::sync::oneshot::channel();
         tokio::task::spawn_local(async move {
-            self.manager
-                .receive_messages(tx)
-                .await
-                .context("stopped receiving messages from signal")
-                .unwrap();
+            let res = match self.manager.receive_messages(tx).await {
+                Ok(()) => Err(anyhow!("stopped receiving messages from Signal")),
+                Err(e) => Err(e.into()),
+            }
+            .context("failed to receive a message from Signal");
+            stopped_tx.send(res).expect("logic: stopped channel closed");
         });
-        rx.map(|(metadata, body)| Message { metadata, body })
+        stream::select(
+            rx.map(|(metadata, body)| Ok(Message { metadata, body })),
+            stopped_rx.into_stream().map(|rx_res| rx_res?),
+        )
     }
 
     pub fn send_message(message: &str, phone_number: &str) {

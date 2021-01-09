@@ -117,7 +117,7 @@ pub struct Message {
 #[derive(Debug)]
 pub enum Event<I> {
     Input(I),
-    Message(signal::Message),
+    Message(anyhow::Result<signal::Message>),
     Resize,
 }
 
