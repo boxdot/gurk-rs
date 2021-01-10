@@ -203,26 +203,19 @@ impl App {
         let message: String = self.data.input.drain(..).collect();
         self.data.input_cursor = 0;
 
-        let signal_client = self.signal_client.clone();
-        let mut events_tx = self.events_tx.clone();
-        let channel_id = channel.id.clone();
-        let signal_message = message.clone();
-        let is_group = channel.is_group;
-        tokio::task::spawn_local(async move {
-            let send_res = if !is_group {
-                signal_client.send_message(signal_message, channel_id).await
-            } else {
-                signal_client
-                    .send_group_message(signal_message, channel_id)
-                    .await
-            };
-            if let Err(e) = send_res {
-                events_tx
-                    .send(Event::Error(e))
-                    .await
-                    .expect("logic: events channel closed");
-            }
-        });
+        if !channel.is_group {
+            self.signal_client.send_message(
+                channel.id.clone(),
+                message.clone(),
+                self.events_tx.clone(),
+            );
+        } else {
+            self.signal_client.send_group_message(
+                channel.id.clone(),
+                message.clone(),
+                self.events_tx.clone(),
+            );
+        };
 
         channel.messages.push(Message {
             from: self.config.user.name.clone(),

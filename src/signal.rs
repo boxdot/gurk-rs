@@ -1,4 +1,5 @@
 use crate::config::Config;
+use crate::Event;
 
 use anyhow::{anyhow, Context as _};
 use futures_util::{
@@ -9,6 +10,7 @@ use libsignal_protocol::{crypto::DefaultCrypto, Context};
 pub use libsignal_service::content::{AttachmentPointer, ContentBody, DataMessage, Metadata};
 use serde::{Deserialize, Serialize};
 use signal_bot::{config::SledConfigStore, Manager};
+use tokio::sync::mpsc::Sender;
 
 use std::path::PathBuf;
 
@@ -91,50 +93,36 @@ impl SignalClient {
         )
     }
 
-    pub async fn send_message(&self, message: String, phone_number: String) -> anyhow::Result<()> {
-        Ok(self.manager.send_message(phone_number, message).await?)
-        // let child = tokio::process::Command::new("dbus-send")
-        //     .args(&[
-        //         "--session",
-        //         "--type=method_call",
-        //         "--dest=org.asamk.Signal",
-        //         "/org/asamk/Signal",
-        //         "org.asamk.Signal.sendMessage",
-        //     ])
-        //     .arg(format!("string:{}", message))
-        //     .arg("array:string:")
-        //     .arg(format!("string:{}", phone_number))
-        //     .spawn()
-        //     .unwrap();
-
-        // tokio::spawn(child);
+    pub fn send_message(&self, phone_number: String, message: String, mut error_tx: Sender<Event>) {
+        let manager = self.manager.clone();
+        tokio::task::spawn_local(async move {
+            if let Err(e) = manager
+                .send_message(None, Some(phone_number), message)
+                .await
+            {
+                error_tx
+                    .send(Event::Error(e.into()))
+                    .await
+                    .expect("logic: error channel closed");
+            }
+        });
     }
 
-    pub async fn send_group_message(
+    pub fn send_group_message(
         &self,
-        _message: String,
-        _group_id: String,
-    ) -> anyhow::Result<()> {
-        log::info!("unimplemented");
-        Ok(())
-        // let child = tokio::process::Command::new("dbus-send")
-        //     .args(&[
-        //         "--session",
-        //         "--type=method_call",
-        //         "--dest=org.asamk.Signal",
-        //         "/org/asamk/Signal",
-        //         "org.asamk.Signal.sendGroupMessage",
-        //     ])
-        //     .arg(format!("string:{}", message))
-        //     .arg("array:string:")
-        //     .arg(format!(
-        //         "array:byte:{}",
-        //         bytes_to_decimal_list(&base64::decode(&group_id).unwrap())
-        //     ))
-        //     .spawn()
-        //     .unwrap();
-
-        // tokio::spawn(child);
+        group_id: String,
+        message: String,
+        mut events_tx: Sender<Event>,
+    ) {
+        let manager = self.manager.clone();
+        tokio::task::spawn_local(async move {
+            if let Err(e) = manager.send_message(Some(group_id), None, message).await {
+                events_tx
+                    .send(Event::Error(e.into()))
+                    .await
+                    .expect("logic: error channel closed");
+            }
+        });
     }
 
     pub async fn get_contact_name(_phone_number: &str) -> Option<String> {
