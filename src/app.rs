@@ -2,10 +2,11 @@ use crate::config::{self, Config};
 use crate::signal;
 use crate::util::StatefulList;
 
-use anyhow::Context;
+use anyhow::{anyhow, bail, Context as _};
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent};
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc::Sender;
 use unicode_width::UnicodeWidthStr;
 
 use std::fs::File;
@@ -16,6 +17,7 @@ pub struct App {
     pub should_quit: bool,
     pub signal_client: signal::SignalClient,
     pub data: AppData,
+    events_tx: Sender<Event>,
 }
 
 impl App {
@@ -54,7 +56,7 @@ impl AppData {
             let name = group_info
                 .name
                 .as_ref()
-                .unwrap_or_else(|| &group_info.group_id)
+                .unwrap_or(&group_info.group_id)
                 .to_string();
             Channel {
                 id: group_info.group_id,
@@ -115,14 +117,15 @@ pub struct Message {
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
-pub enum Event<I> {
-    Input(I),
+pub enum Event {
+    Input(KeyEvent),
     Message(anyhow::Result<signal::Message>),
     Resize,
+    Error(anyhow::Error),
 }
 
 impl App {
-    pub fn try_new() -> anyhow::Result<Self> {
+    pub fn try_new(events_tx: Sender<Event>) -> anyhow::Result<Self> {
         let config_path = config::installed_config()
             .context("config file not found at one of the default locations")?;
         let config = config::load_from(&config_path)
@@ -156,10 +159,11 @@ impl App {
             data,
             should_quit: false,
             signal_client,
+            events_tx,
         })
     }
 
-    pub fn on_key(&mut self, key: KeyCode) {
+    pub async fn on_key(&mut self, key: KeyCode) {
         match key {
             KeyCode::Char(c) => {
                 let mut idx = self.data.input_cursor;
@@ -171,7 +175,7 @@ impl App {
             }
             KeyCode::Enter if !self.data.input.is_empty() => {
                 if let Some(idx) = self.data.channels.state.selected() {
-                    self.send_input(idx)
+                    self.send_input(idx);
                 }
             }
             KeyCode::Backspace => {
@@ -199,11 +203,26 @@ impl App {
         let message: String = self.data.input.drain(..).collect();
         self.data.input_cursor = 0;
 
-        if !channel.is_group {
-            signal::SignalClient::send_message(&message, &channel.id);
-        } else {
-            signal::SignalClient::send_group_message(&message, &channel.id);
-        }
+        let signal_client = self.signal_client.clone();
+        let mut events_tx = self.events_tx.clone();
+        let channel_id = channel.id.clone();
+        let signal_message = message.clone();
+        let is_group = channel.is_group;
+        tokio::task::spawn_local(async move {
+            let send_res = if !is_group {
+                signal_client.send_message(signal_message, channel_id).await
+            } else {
+                signal_client
+                    .send_group_message(signal_message, channel_id)
+                    .await
+            };
+            if let Err(e) = send_res {
+                events_tx
+                    .send(Event::Error(e))
+                    .await
+                    .expect("logic: events channel closed");
+            }
+        });
 
         channel.messages.push(Message {
             from: self.config.user.name.clone(),
@@ -251,23 +270,24 @@ impl App {
         }
     }
 
-    pub async fn on_message(&mut self, message: signal::Message) -> Option<()> {
+    pub async fn on_message(&mut self, message: signal::Message) -> anyhow::Result<()> {
         log::info!("incoming: {:?}", message);
 
         let mut msg = if let signal::ContentBody::DataMessage(msg) = message.body {
             msg
         } else {
-            return None;
+            bail!("only data messages supported at the moment");
         };
 
         // message text + attachments paths
         let text = msg.body.take();
         let attachments = std::mem::take(&mut msg.attachments);
         if text.is_none() && attachments.is_empty() {
-            return None;
+            bail!("no text and attachments fields");
         }
 
-        let channel_id = get_channel_id(&message.metadata, &msg)?;
+        let channel_id =
+            get_channel_id(&message.metadata, &msg).ok_or_else(|| anyhow!("no channel id"))?;
         let is_group = msg.group.is_some() || msg.group_v2.is_some();
 
         let arrived_at = NaiveDateTime::from_timestamp(
@@ -277,7 +297,13 @@ impl App {
         let arrived_at = Utc.from_utc_datetime(&arrived_at);
 
         let name = self
-            .resolve_contact_name(message.metadata.sender.e164?)
+            .resolve_contact_name(
+                message
+                    .metadata
+                    .sender
+                    .e164
+                    .ok_or_else(|| anyhow!("missing sender.e164 metadata"))?,
+            )
             .await;
 
         let channel_idx = if let Some(channel_idx) = self
@@ -322,7 +348,7 @@ impl App {
         self.bubble_up_channel(channel_idx);
         self.save().unwrap();
 
-        Some(())
+        Ok(())
     }
 
     async fn resolve_contact_name(&mut self, phone_number: String) -> String {

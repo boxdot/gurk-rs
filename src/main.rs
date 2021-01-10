@@ -55,7 +55,10 @@ async fn main() -> anyhow::Result<()> {
         init_file_logger()?;
     }
 
-    let mut app = App::try_new()?;
+    // events channel
+    let (mut tx, mut rx) = tokio::sync::mpsc::channel(100);
+
+    let mut app = App::try_new(tx.clone())?;
 
     enable_raw_mode()?;
     let _raw_mode_guard = scopeguard::guard((), |_| {
@@ -65,7 +68,6 @@ async fn main() -> anyhow::Result<()> {
     let mut stdout = std::io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
 
-    let (mut tx, mut rx) = tokio::sync::mpsc::channel(100);
     actix_rt::spawn({
         let mut tx = tx.clone();
         async move {
@@ -81,7 +83,6 @@ async fn main() -> anyhow::Result<()> {
     });
 
     let backend = CrosstermBackend::new(stdout);
-
     let mut terminal = RestoreGuard(Terminal::new(backend)?);
 
     let signal_client = app.signal_client.clone();
@@ -108,13 +109,18 @@ async fn main() -> anyhow::Result<()> {
                 KeyCode::Up => app.on_up(),
                 KeyCode::Right => app.on_right(),
                 KeyCode::Down => app.on_down(),
-                code => app.on_key(code),
+                code => app.on_key(code).await,
             },
             Some(Event::Message(message)) => {
-                app.on_message(message?).await;
+                if let Err(e) = app.on_message(message?).await {
+                    log::info!("skipping message due to: {}", e);
+                }
             }
             Some(Event::Resize) => {
                 // will just redraw the app
+            }
+            Some(Event::Error(e)) => {
+                log::error!("error: {}", e);
             }
             None => {
                 break;
