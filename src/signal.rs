@@ -6,13 +6,12 @@ use futures_util::{
     stream::{self, Stream},
     FutureExt, StreamExt,
 };
-use libsignal_protocol::{crypto::DefaultCrypto, Context};
-pub use libsignal_service::content::{AttachmentPointer, ContentBody, DataMessage, Metadata};
+pub use presage::prelude::{DefaultCrypto, Context, AttachmentPointer, ContentBody, DataMessage, Metadata};
 use serde::{Deserialize, Serialize};
-use signal_bot::{config::SledConfigStore, Manager};
+use presage::{config::SledConfigStore, Manager};
 use tokio::sync::mpsc::Sender;
 
-use std::path::PathBuf;
+use std::{path::PathBuf, time::{SystemTime, UNIX_EPOCH}};
 
 #[derive(Clone)]
 pub struct SignalClient {
@@ -96,8 +95,19 @@ impl SignalClient {
     pub fn send_message(&self, phone_number: String, message: String, mut error_tx: Sender<Event>) {
         let manager = self.manager.clone();
         tokio::task::spawn_local(async move {
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Time went backwards")
+                .as_millis() as u64;
+
+            let message = ContentBody::DataMessage(DataMessage {
+                body: Some(message),
+                timestamp: Some(timestamp),
+                ..Default::default()
+            });
+
             if let Err(e) = manager
-                .send_message(None, Some(phone_number), message)
+                .send_message(phone_number, message, timestamp)
                 .await
             {
                 error_tx
@@ -116,12 +126,23 @@ impl SignalClient {
     ) {
         let manager = self.manager.clone();
         tokio::task::spawn_local(async move {
-            if let Err(e) = manager.send_message(Some(group_id), None, message).await {
-                events_tx
-                    .send(Event::Error(e.into()))
-                    .await
-                    .expect("logic: error channel closed");
-            }
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Time went backwards")
+                .as_millis() as u64;
+
+            let message = ContentBody::DataMessage(DataMessage {
+                body: Some(message),
+                timestamp: Some(timestamp),
+                ..Default::default()
+            });
+
+            // if let Err(e) = manager.send_message_to_group(Some(group_id), None, message).await {
+            //     events_tx
+            //         .send(Event::Error(e.into()))
+            //         .await
+            //         .expect("logic: error channel closed");
+            // }
         });
     }
 

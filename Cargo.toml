@@ -31,19 +31,20 @@ toml = "0.5.6"
 tui = { version = "0.10.0", default-features = false, features = ["crossterm"] }
 unicode-width = "0.1.8"
 
-signal-bot = { git = "http://github.com/gferon/signal-bot-rs", branch = "wip" }
+presage = { git = "http://github.com/gferon/signal-bot-rs", branch = "wip" }
 
-libsignal-protocol = { git = "https://github.com/Michael-F-Bryan/libsignal-protocol-rs" }
-libsignal-service = { git = "https://github.com/Michael-F-Bryan/libsignal-service-rs" }
-libsignal-service-actix = { git = "https://github.com/Michael-F-Bryan/libsignal-service-rs" }
 futures = "0.3.8"
 log4rs = "0.13.0"
 log = "0.4.11"
 actix-rt = "1.1.1"
 hex = "0.4.2"
 
-[patch."https://github.com/Michael-F-Bryan/libsignal-protocol-rs"]
+[patch."http://github.com/gferon/signal-bot-rs"]
+presage = { path = "../presage" }
+
+[patch."https://github.com/Michael-F-Bryan/libsignal-protocol-rs.git"]
 libsignal-protocol = { path = "../libsignal-protocol-rs/libsignal-protocol" }
 
-[patch."http://github.com/gferon/signal-bot-rs"]
-signal-bot = { path = "../signal-bot-rs" }
+[patch."https://github.com/Michael-F-Bryan/libsignal-service-rs.git"]
+libsignal-service = { path = "../libsignal-service-rs/libsignal-service" }
+libsignal-service-actix = { path = "../libsignal-service-rs/libsignal-service-actix" }
