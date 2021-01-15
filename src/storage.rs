@@ -6,6 +6,7 @@ use byteorder::{BigEndian, LittleEndian};
 use chrono::Utc;
 use sled;
 use unicode_width::UnicodeWidthStr;
+use serde::{Serialize, Deserialize};
 use zerocopy::{byteorder::U64, AsBytes, FromBytes, LayoutVerified, Unaligned, U16, U32};
 
 use std::fs::File;
@@ -36,6 +37,12 @@ impl Storage for Json {
 
 pub struct Db;
 
+#[derive(Serialize, Deserialize, Debug)]
+struct PersistedMessage {
+    channel_id: u64,
+    message: Message,
+}
+
 impl Db {
     fn load_channels(db: &sled::Db) -> anyhow::Result<Vec<Channel>> {
         let channels = db.open_tree(b"channels")?;
@@ -44,21 +51,14 @@ impl Db {
 
         for name_value_res in &channels {
             let (_id, bytes) = name_value_res?;
-            let content = str::from_utf8(&bytes)?;
-            let channel = Channel {
-                id: "".to_owned(),
-                name: content.to_owned(),
-                is_group: false,
-                messages: Vec::new(),
-                unread_messages: 0,
-            };
+            let channel: Channel = bincode::deserialize(&bytes[..]).unwrap();
             out.push(channel);
         }
 
         Ok(out)
     }
 
-    fn load_messages(db: &sled::Db) -> anyhow::Result<Vec<(U64<BigEndian>, Message)>> {
+    fn load_messages(db: &sled::Db) -> anyhow::Result<Vec<(u64, Message)>> {
         let messages = db.open_tree(b"messages")?;
 
         let mut out = vec![];
@@ -66,22 +66,14 @@ impl Db {
         for name_value_res in &messages {
             let (_id, bytes) = name_value_res?;
 
-            let (channel_id, content): (_, LayoutVerified<U64<BigEndian>, &[u8]>) =
-                LayoutVerified::new_from_suffix(&*bytes).unwrap();
-            let content = str::from_utf8(&bytes)?;
-            let message = Message {
-                from: "not saved".to_owned(),
-                message: Some(content.to_owned()),
-                attachments: Vec::new(),
-                arrived_at: Utc::now(),
-            };
-            out.push((channel_id, message));
+            let decoded: PersistedMessage = bincode::deserialize(&bytes[..]).unwrap();
+            out.push((decoded.channel_id, decoded.message));
         }
 
         Ok(out)
     }
 
-    fn join(channels: Vec<Channel>, _messages: Vec<Message>) -> anyhow::Result<AppData> {
+    fn join(channels: Vec<Channel>, _messages: Vec<(u64, Message)>) -> anyhow::Result<AppData> {
         // TODO: join messages with channels
         Ok(AppData {
             channels: StatefulList::with_items(channels),
@@ -91,11 +83,9 @@ impl Db {
     }
 
     fn save_channel(channels: &sled::Tree, id: u64, channel: &Channel) -> anyhow::Result<()> {
-        let mut channel_value = vec![];
-        channel_value.extend_from_slice(channel.name.as_bytes());
+        let encoded: Vec<u8> = bincode::serialize(channel).unwrap();
         let id_value: U64<BigEndian> = U64::new(id);
-
-        channels.insert(id_value.as_bytes(), channel_value)?;
+        channels.insert(id_value.as_bytes(), encoded)?;
         Ok(())
     }
 
@@ -107,17 +97,13 @@ impl Db {
         message: &Message,
         channel_id: u64,
     ) -> anyhow::Result<()> {
-        let content = match message.message {
-            Some(ref s) => s.as_bytes(),
-            None => b"",
+        
+        let persisted = PersistedMessage {
+            channel_id, message: *message
         };
-
-        let mut message_value = vec![];
-        let channel_id_value: U64<BigEndian> = U64::new(channel_id);
-        message_value.extend_from_slice(channel_id_value.as_bytes());
-        message_value.extend_from_slice(content);
+        let encoded: Vec<u8> = bincode::serialize(&persisted).unwrap();
         let id_value: U64<BigEndian> = U64::new(id);
-        messages.insert(id_value.as_bytes(), message_value)?;
+        messages.insert(id_value.as_bytes(), encoded)?;
         Ok(())
     }
 }
