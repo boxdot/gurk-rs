@@ -130,3 +130,42 @@ impl Storage for Db {
         Ok(data)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
+    use crate::app::Message;
+    use crate::util::StatefulList;
+    use chrono::{DateTime, NaiveDateTime, Utc};
+    use std::env;
+
+    #[test]
+    fn test_save_load() {
+        let channel = Channel {
+            id: "BASIC".to_owned(),
+            name: "BASIC".to_owned(),
+            is_group: true,
+            messages: vec![Message {
+                from: "karsten".to_owned(),
+                message: Some("hello".to_owned()),
+                attachments: Vec::new(),
+                arrived_at: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(61, 0), Utc),
+            }],
+            unread_messages: 1,
+        };
+        let data = AppData {
+            channels: StatefulList::with_items(vec![channel]),
+            input: "hello".to_owned(),
+            input_cursor: 42,
+        };
+
+        let data_path = env::current_dir()
+            .expect("Could not determin current directory.")
+            .join("test-db");
+        Db::save(&data, &data_path).expect("Could not persist app data.");
+
+        let loaded_data = Db::load(&data_path).expect("Could not load app data.");
+        assert_eq!(loaded_data.input, "hello");
+    }
+}
