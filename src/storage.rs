@@ -1,4 +1,5 @@
 use crate::app::{AppData, Channel, Message};
+use crate::util::StatefulList;
 
 use anyhow;
 use byteorder::{BigEndian, LittleEndian};
@@ -77,8 +78,13 @@ impl Db {
         Ok(out)
     }
 
-    fn join(channels: Vec<Channel>, messages: Vec<Message>) -> anyhow::Result<AppData> {
-        unimplemented!()
+    fn join(channels: Vec<Channel>, _messages: Vec<Message>) -> anyhow::Result<AppData> {
+        // TODO: join messages with channels
+        Ok(AppData {
+            channels: StatefulList::with_items(channels),
+            input: "hello".to_owned(), // TODO: load
+            input_cursor: 42,          // TODO: load
+        })
     }
 
     fn save_channel(channels: &sled::Tree, id: u64, channel: &Channel) -> anyhow::Result<()> {
@@ -136,7 +142,6 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
     use crate::app::Message;
-    use crate::util::StatefulList;
     use chrono::{DateTime, NaiveDateTime, Utc};
     use std::env;
 
@@ -167,5 +172,6 @@ mod tests {
 
         let loaded_data = Db::load(&data_path).expect("Could not load app data.");
         assert_eq!(loaded_data.input, "hello");
+        assert_eq!(loaded_data.channels.items.len(), 1);
     }
 }
