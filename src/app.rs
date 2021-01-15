@@ -76,7 +76,7 @@ pub struct Channel {
     pub unread_messages: usize,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
     pub from: String,
     #[serde(alias = "text")] // remove
