@@ -58,13 +58,16 @@ impl Db {
         Ok(out)
     }
 
-    fn load_messages(db: &sled::Db) -> anyhow::Result<Vec<Message>> {
+    fn load_messages(db: &sled::Db) -> anyhow::Result<Vec<(U64<BigEndian>, Message)>> {
         let messages = db.open_tree(b"messages")?;
 
         let mut out = vec![];
 
         for name_value_res in &messages {
             let (_id, bytes) = name_value_res?;
+
+            let (channel_id, content): (_, LayoutVerified<U64<BigEndian>, &[u8]>) =
+                LayoutVerified::new_from_suffix(&*bytes).unwrap();
             let content = str::from_utf8(&bytes)?;
             let message = Message {
                 from: "not saved".to_owned(),
@@ -72,7 +75,7 @@ impl Db {
                 attachments: Vec::new(),
                 arrived_at: Utc::now(),
             };
-            out.push(message);
+            out.push((channel_id, message));
         }
 
         Ok(out)
@@ -96,13 +99,22 @@ impl Db {
         Ok(())
     }
 
-    fn save_message(messages: &sled::Tree, id: u64, message: &Message) -> anyhow::Result<()> {
+    /// Persists a message in a sled tree.
+    /// The layout is `id -> channeld.id + message.message`.
+    fn save_message(
+        messages: &sled::Tree,
+        id: u64,
+        message: &Message,
+        channel_id: u64,
+    ) -> anyhow::Result<()> {
         let content = match message.message {
             Some(ref s) => s.as_bytes(),
             None => b"",
         };
 
         let mut message_value = vec![];
+        let channel_id_value: U64<BigEndian> = U64::new(channel_id);
+        message_value.extend_from_slice(channel_id_value.as_bytes());
         message_value.extend_from_slice(content);
         let id_value: U64<BigEndian> = U64::new(id);
         messages.insert(id_value.as_bytes(), message_value)?;
@@ -121,7 +133,7 @@ impl Storage for Db {
 
             for (msg_count, message) in channel.messages.iter().enumerate() {
                 let id: u64 = (msg_count as u64) + (ch_count as u64);
-                Self::save_message(&messages, id, message)?;
+                Self::save_message(&messages, id, message, ch_count as u64)?;
             }
         }
         Ok(())
