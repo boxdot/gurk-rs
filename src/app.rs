@@ -664,6 +664,18 @@ impl App {
         Some(())
     }
 
+    pub async fn on_data_transfer_event(
+        &mut self,
+        account_id: String,
+        conversation_id: String,
+        tid: u64,
+        status: i32
+    ) -> Option<()> {
+        // TODO
+        println!("@@@ TODO");
+        Some(())
+    }
+
     /**
      * When a new conversation is ready
      * @param self

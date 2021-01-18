@@ -146,6 +146,7 @@ pub enum Event<I> {
     RegisteredNameFound(String, u64, String, String),
     AccountsChanged(),
     ConversationLoaded(u32, String, String, Vec<HashMap<String, String>>),
+    DataTransferEvent(String, String, u64, i32),
     IncomingTrustRequest(String, String, Vec<u8>, u64),
     Resize,
 }

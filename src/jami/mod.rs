@@ -1,6 +1,7 @@
 pub mod account;
 pub mod profile;
 pub mod profilemanager;
+pub mod transfermanager;
 
 pub use profile::Profile;
 pub use profilemanager::ProfileManager;
@@ -47,6 +48,22 @@ pub struct DataTransferInfo {
 impl DataTransferInfo {
     pub fn tuple(&self) -> (String, u32, u32, i64, i64, String, String, String, String, String, String) {
         (self.account_id.clone(), self.last_event, self.flags, self.total, self.bytes_progress, self.author.clone(), self.peer.clone(), self.conv_id.clone(), self.display_name.clone(), self.path.clone(), self.mimetype.clone())
+    }
+
+    pub fn from_tuple(info: (String, u32, u32, i64, i64, String, String, String, String, String, String)) -> Self {
+        Self {
+            account_id: info.0,
+            last_event: info.1,
+            flags: info.2,
+            total: info.3,
+            bytes_progress: info.4,
+            author: info.5,
+            peer: info.6,
+            conv_id: info.7,
+            display_name: info.8,
+            path: info.9,
+            mimetype: info.10,
+        }
     }
 }
 
@@ -248,6 +265,30 @@ impl Jami {
                         account_id,
                         conversation_id,
                         messages,
+                    ))
+                    .await
+                });
+                true
+            },
+        );
+
+        let mr = MatchRule::new_signal("cx.ring.Ring.ConfigurationManager", "dataTransferEvent");
+        let txs = tx.clone();
+        let _ic = conn.add_match(mr).await.ok().expect("Lost connection").cb(
+            move |_,
+                  (account_id, conversation_id, id, code): (
+                String,
+                String,
+                u64,
+                i32,
+            )| {
+                let mut txs = txs.clone();
+                tokio::spawn(async move {
+                    txs.send(Event::DataTransferEvent(
+                        account_id,
+                        conversation_id,
+                        id,
+                        code,
                     ))
                     .await
                 });
@@ -1018,4 +1059,50 @@ impl Jami {
         }
         0
     }
+
+    /**
+     * Get DataTransferInfo
+     * @param account_id        Related account
+     * @param conv_id           Related conversation
+     * @param tid               File transfer to accepts
+     * @return if an error occurs or the info
+     */
+    pub fn data_transfer_info(
+        account_id: String,
+        conv_id: String,
+        tid: u64,
+    ) -> Option<DataTransferInfo> {
+        let conn = Connection::new_session().unwrap();
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+
+        let info = DataTransferInfo {
+            account_id: String::new(),
+            last_event: 0,
+            flags: 0,
+            total: 0,
+            bytes_progress: 0,
+            author: String::new(),
+            peer: String::new(),
+            conv_id: String::new(),
+            display_name: String::new(),
+            path: String::new(),
+            mimetype: String::new()
+        };
+        let mut tuple = info.tuple();
+        let result: Result<(u32, (String, u32, u32, i64, i64, String, String, String, String, String, String),), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "dataTransferInfo",
+            (account_id, conv_id, tid, info.tuple()),
+        );
+        if result.is_ok() {
+            return Some(DataTransferInfo::from_tuple(result.unwrap().1));
+        }
+        None
+    }
+
+
 }

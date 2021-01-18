@@ -114,6 +114,10 @@ async fn main() -> anyhow::Result<()> {
                 app.on_conversation_loaded(id, account_id, conversation_id, messages)
                     .await;
             }
+            Some(Event::DataTransferEvent(account_id, conversation_id, tid, status)) => {
+                app.on_data_transfer_event(account_id, conversation_id, tid, status)
+                    .await;
+            }
             Some(Event::ProfileReceived(account_id, from, path)) => {
                 app.on_profile_received(&account_id, &from, &path).await;
             }
