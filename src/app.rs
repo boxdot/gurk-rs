@@ -308,6 +308,22 @@ impl App {
                     show_msg = false;
                     Jami::lookup_name(&account_id, &ns, &member);
                 }
+            } else if message.starts_with("/send ") {
+                let parts: Vec<&str> = message.split(" ").collect();
+                let path = parts.get(1).unwrap_or(&"").to_string();
+                Jami::send_file(account_id.to_string(), channel.id.clone(), path);
+                show_msg = false;
+            } else if message.starts_with("/accept ") {
+                let parts: Vec<&str> = message.split(" ").collect();
+                let tid = parts.get(1).unwrap_or(&"").to_string().parse::<u64>().unwrap_or(0);
+                let path = parts.get(2).unwrap_or(&"").to_string();
+                Jami::accept_file_transfer(&account_id, &channel.id, tid, &path);
+                show_msg = false;
+            } else if message.starts_with("/cancel ") {
+                let parts: Vec<&str> = message.split(" ").collect();
+                let tid = parts.get(1).unwrap_or(&"").to_string().parse::<u64>().unwrap_or(0);
+                Jami::cancel_file_transfer(&account_id, &channel.id, tid);
+                show_msg = false;
             } else if message == "/help" {
                 channel
                     .messages
@@ -326,6 +342,15 @@ impl App {
                 )));
                 channel.messages.push(Message::info(String::from(
                     "/description [description]: Change the description of the room",
+                )));
+                channel.messages.push(Message::info(String::from(
+                    "/send [path]: Send a file to the conversation",
+                )));
+                channel.messages.push(Message::info(String::from(
+                    "/accept [tid] [path]: Accept a file transfer",
+                )));
+                channel.messages.push(Message::info(String::from(
+                    "/cancel [tid] [path]: Cancel a file transfer",
                 )));
                 channel
                     .messages

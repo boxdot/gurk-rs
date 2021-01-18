@@ -30,6 +30,26 @@ pub enum ImportType {
     NETWORK,
 }
 
+pub struct DataTransferInfo {
+    pub account_id: String,
+    pub last_event: u32,
+    pub flags: u32,
+    pub total: i64,
+    pub bytes_progress: i64,
+    pub author: String,
+    pub peer: String,
+    pub conv_id: String,
+    pub display_name: String,
+    pub path: String,
+    pub mimetype: String,
+}
+
+impl DataTransferInfo {
+    pub fn tuple(&self) -> (String, u32, u32, i64, i64, String, String, String, String, String, String) {
+        (self.account_id.clone(), self.last_event, self.flags, self.total, self.bytes_progress, self.author.clone(), self.peer.clone(), self.conv_id.clone(), self.display_name.clone(), self.path.clone(), self.mimetype.clone())
+    }
+}
+
 impl Jami {
     /**
      * Retrieve account or create one if necessary.
@@ -896,6 +916,102 @@ impl Jami {
             "cx.ring.Ring.ConfigurationManager",
             "sendMessage",
             (id, conv_id, message, parent),
+        );
+        if result.is_ok() {
+            return result.unwrap().0;
+        }
+        0
+    }
+
+    /**
+     * Send a file to a conversation
+     * @param account_id        Related account
+     * @param conv_id           Related conversation
+     * @param path              Path of the file to send
+     * @return id of the transfer
+     */
+    pub fn send_file(account_id: String, conv_id: String, path: String) -> u64 {
+        let conn = Connection::new_session().unwrap();
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let info = DataTransferInfo {
+            account_id,
+            last_event: 0,
+            flags: 0,
+            total: 0,
+            bytes_progress: 0,
+            author: String::new(),
+            peer: String::new(),
+            conv_id,
+            display_name: String::new(),
+            path,
+            mimetype: String::new()
+        };
+        let id = 0 as u64;
+        let _: Result<(), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "sendFile",
+            (info.tuple(), id),
+        );
+        id
+    }
+
+    /**
+     * Accepts a file transfer
+     * @param account_id        Related account
+     * @param conv_id           Related conversation
+     * @param tid               File transfer to accepts
+     * @param path              Path of the file to send
+     * @return if an error occurs
+     */
+    pub fn accept_file_transfer(
+        id: &String,
+        conv_id: &String,
+        tid: u64,
+        path: &String,
+    ) -> u32 {
+        let conn = Connection::new_session().unwrap();
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let result: Result<(u32,), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "acceptFileTransfer",
+            (id, conv_id, tid, path, 0 as i64),
+        );
+        if result.is_ok() {
+            return result.unwrap().0;
+        }
+        0
+    }
+
+    /**
+     * Cancel a file transfer
+     * @param account_id        Related account
+     * @param conv_id           Related conversation
+     * @param tid               File transfer to accepts
+     * @return if an error occurs
+     */
+    pub fn cancel_file_transfer(
+        id: &String,
+        conv_id: &String,
+        tid: u64,
+    ) -> u32 {
+        let conn = Connection::new_session().unwrap();
+        let proxy = conn.with_proxy(
+            "cx.ring.Ring",
+            "/cx/ring/Ring/ConfigurationManager",
+            Duration::from_millis(5000),
+        );
+        let result: Result<(u32,), _> = proxy.method_call(
+            "cx.ring.Ring.ConfigurationManager",
+            "cancelDataTransfer",
+            (id, conv_id, tid),
         );
         if result.is_ok() {
             return result.unwrap().0;
