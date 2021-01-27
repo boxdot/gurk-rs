@@ -1,10 +1,15 @@
-use crate::config::{self, Config};
 use crate::signal;
 use crate::util::StatefulList;
+use crate::{
+    config::{self, Config},
+    signal::SyncMessage,
+};
 
 use anyhow::{anyhow, bail, Context as _};
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use crossterm::event::{KeyCode, KeyEvent};
+use log::warn;
+use presage::prelude::ContentBody;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::Sender;
 use unicode_width::UnicodeWidthStr;
@@ -52,34 +57,35 @@ impl AppData {
         let groups = client
             .get_groups()
             .context("failed to fetch groups from signal")?;
-        let group_channels = groups.into_iter().map(|group_info| {
-            let name = group_info
-                .name
-                .as_ref()
-                .unwrap_or(&group_info.group_id)
-                .to_string();
-            Channel {
-                id: group_info.group_id,
-                name,
-                is_group: true,
-                messages: Vec::new(),
-                unread_messages: 0,
-            }
-        });
+        // let group_channels = groups.into_iter().map(|group_info| {
+        //     let name = group_info
+        //         .name
+        //         .as_ref()
+        //         .unwrap_or(&group_info.group_id)
+        //         .to_string();
+        //     Channel {
+        //         id: group_info.group_id,
+        //         name,
+        //         is_group: true,
+        //         messages: Vec::new(),
+        //         unread_messages: 0,
+        //     }
+        // });
 
-        let contacts = client
-            .get_contacts()
-            .context("failed to fetch contact from signal")?;
-        let contact_channels = contacts.into_iter().map(|contact_info| Channel {
-            id: contact_info.phone_number,
-            name: contact_info.name,
-            is_group: false,
-            messages: Vec::new(),
-            unread_messages: 0,
-        });
+        // let contacts = client
+        //     .get_contacts()
+        //     .context("failed to fetch contact from signal")?;
+        // let contact_channels = contacts.into_iter().map(|contact_info| Channel {
+        //     id: contact_info.phone_number,
+        //     name: contact_info.name,
+        //     group_context: None,
+        //     messages: Vec::new(),
+        //     unread_messages: 0,
+        // });
 
-        let mut channels: Vec<_> = group_channels.chain(contact_channels).collect();
-        channels.sort_unstable_by(|a, b| a.name.cmp(&b.name));
+        // let mut channels: Vec<_> = group_channels.chain(contact_channels).collect();
+        // channels.sort_unstable_by(|a, b| a.name.cmp(&b.name));
+        let mut channels = vec![];
 
         let mut channels = StatefulList::with_items(channels);
         if !channels.items.is_empty() {
@@ -99,10 +105,16 @@ pub struct Channel {
     /// Either phone number or group id
     pub id: String,
     pub name: String,
-    pub is_group: bool,
+    pub group_context: Option<GroupContext>,
     pub messages: Vec<Message>,
     #[serde(default)]
     pub unread_messages: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum GroupContext {
+    V1 { members_e164: Vec<String> },
+    V2 { master_key: Vec<u8> },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -203,7 +215,7 @@ impl App {
         let message: String = self.data.input.drain(..).collect();
         self.data.input_cursor = 0;
 
-        if !channel.is_group {
+        if channel.group_context.is_none() {
             self.signal_client.send_message(
                 channel.id.clone(),
                 message.clone(),
@@ -264,24 +276,30 @@ impl App {
     }
 
     pub async fn on_message(&mut self, message: signal::Message) -> anyhow::Result<()> {
-        log::info!("incoming: {:?}", message);
+        log::info!("incoming: {:#?}", message);
 
-        let mut msg = if let signal::ContentBody::DataMessage(msg) = message.body {
-            msg
-        } else {
-            bail!("only data messages supported at the moment");
+        use presage::proto;
+        let (channel_id, group_context) = match &message.body {
+            ContentBody::DataMessage(data_message)
+            | ContentBody::SynchronizeMessage(proto::SyncMessage {
+                sent:
+                    Some(proto::sync_message::Sent {
+                        message: Some(data_message),
+                        ..
+                    }),
+                ..
+            }) => (
+                get_channel_id(&message.metadata, data_message)
+                    .ok_or_else(|| anyhow!("no channel id"))?,
+                get_group_context(data_message),
+            ),
+            _ => {
+                log::warn!("unsupported message");
+                return Ok(());
+            }
         };
 
-        // message text + attachments paths
-        let text = msg.body.take();
-        let attachments = std::mem::take(&mut msg.attachments);
-        if text.is_none() && attachments.is_empty() {
-            bail!("no text and attachments fields");
-        }
-
-        let channel_id =
-            get_channel_id(&message.metadata, &msg).ok_or_else(|| anyhow!("no channel id"))?;
-        let is_group = msg.group.is_some() || msg.group_v2.is_some();
+        log::warn!("{}", channel_id);
 
         let arrived_at = NaiveDateTime::from_timestamp(
             message.metadata.timestamp as i64 / 1000,
@@ -304,32 +322,45 @@ impl App {
             .channels
             .items
             .iter_mut()
-            .position(|channel| channel.id == channel_id && channel.is_group == is_group)
+            // TODO: restore positioning for groups?
+            .position(|channel| channel.id == channel_id)
+        //&& channel.is_group == is_group)
         {
             channel_idx
         } else {
-            let channel_name = if is_group {
-                let group_name = signal::SignalClient::get_group_name(&channel_id).await;
-                group_name.unwrap_or_else(|| channel_id.clone())
-            } else {
-                name.clone()
-            };
+            // let channel_name = if is_group {
+            //     let group_name = signal::SignalClient::get_group_name(&channel_id).await;
+            //     group_name.unwrap_or_else(|| channel_id.clone())
+            // } else {
+            //     name.clone()
+            // };
+
             self.data.channels.items.push(Channel {
                 id: channel_id.clone(),
-                name: channel_name,
-                is_group,
+                name: name.clone(),
+                group_context,
                 messages: Vec::new(),
                 unread_messages: 0,
             });
             self.data.channels.items.len() - 1
         };
 
+        // message text + attachments paths
+        let text = match message.body {
+            ContentBody::DataMessage(data_message) => data_message.body,
+            m => {
+                return Ok(());
+            }
+        };
+
+        // TODO: restore attachments
+
         self.data.channels.items[channel_idx]
             .messages
             .push(Message {
                 from: name,
                 message: text,
-                attachments,
+                attachments: vec![],
                 arrived_at,
             });
         if self.data.channels.state.selected() != Some(channel_idx) {
@@ -350,7 +381,7 @@ impl App {
             .channels
             .items
             .iter()
-            .find(|channel| channel.id == phone_number && !channel.is_group);
+            .find(|channel| channel.id == phone_number && channel.group_context.is_none());
         let contact_channel_exists = contact_channel.is_some();
         let name = match contact_channel {
             _ if phone_number == self.config.user.phone_number => {
@@ -382,7 +413,7 @@ impl App {
             self.data.channels.items.push(Channel {
                 id: phone_number,
                 name: name.clone(),
-                is_group: false,
+                group_context: None,
                 messages: Vec::new(),
                 unread_messages: 0,
             })
@@ -420,4 +451,23 @@ fn get_channel_id(metadata: &signal::Metadata, msg: &signal::DataMessage) -> Opt
             .map(hex::encode)
     });
     group_v2_id.or_else(|| metadata.sender.e164.clone())
+}
+
+fn get_group_context(msg: &signal::DataMessage) -> Option<GroupContext> {
+    use presage::proto;
+    if let Some(proto::GroupContext { members_e164, .. }) = &msg.group {
+        Some(GroupContext::V1 {
+            members_e164: members_e164.clone(),
+        })
+    } else if let Some(proto::GroupContextV2 {
+        master_key: Some(master_key),
+        ..
+    }) = &msg.group_v2
+    {
+        Some(GroupContext::V2 {
+            master_key: master_key.clone(),
+        })
+    } else {
+        None
+    }
 }

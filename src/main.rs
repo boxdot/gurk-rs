@@ -18,16 +18,33 @@ use crossterm::{
 };
 use log::info;
 use structopt::StructOpt;
-use tokio::stream::StreamExt;
-use tui::{backend::CrosstermBackend, Terminal};
+use tokio_stream::StreamExt;
+use tui::{
+    backend::CrosstermBackend,
+    layout::{Constraint, Direction, Layout},
+    style::{Color, Modifier, Style},
+    text::{Span, Spans, Text},
+    widgets::{Block, Borders, List, ListItem, Paragraph},
+    Terminal,
+};
 
 use std::io::Write;
 
 #[derive(Debug, StructOpt)]
 struct Args {
-    /// Enable logging to `gurg.log` in the current working directory.
+    /// Enable logging to `gurk.log` in the current working directory.
     #[structopt(short, long)]
     verbose: bool,
+    #[structopt(subcommand)]
+    init: Option<InitArgs>,
+}
+
+#[derive(Debug, StructOpt)]
+enum InitArgs {
+    #[structopt(name = "link-device")]
+    LinkDevice,
+    #[structopt(name = "register")]
+    Register,
 }
 
 fn init_file_logger() -> anyhow::Result<()> {
@@ -68,7 +85,7 @@ async fn main() -> anyhow::Result<()> {
     let mut stdout = std::io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
 
-    actix_rt::spawn({
+    tokio::spawn({
         let mut tx = tx.clone();
         async move {
             let mut reader = EventStream::new().fuse();
@@ -98,36 +115,47 @@ async fn main() -> anyhow::Result<()> {
 
     terminal.clear()?;
 
-    loop {
-        terminal.draw(|f| ui::draw(f, &mut app))?;
-        match rx.recv().await {
-            Some(Event::Input(event)) => match event.code {
-                KeyCode::Char('c') if event.modifiers.contains(KeyModifiers::CONTROL) => {
+    enum InputMode {
+        Normal,
+        Editing,
+    }
+
+    match args.init {
+        Some(InitArgs::LinkDevice) => unimplemented!(),
+        Some(InitArgs::Register) => unimplemented!(),
+        None => {
+            loop {
+                terminal.draw(|f| ui::draw(f, &mut app))?;
+                match rx.recv().await {
+                    Some(Event::Input(event)) => match event.code {
+                        KeyCode::Char('c') if event.modifiers.contains(KeyModifiers::CONTROL) => {
+                            break;
+                        }
+                        KeyCode::Left => app.on_left(),
+                        KeyCode::Up => app.on_up(),
+                        KeyCode::Right => app.on_right(),
+                        KeyCode::Down => app.on_down(),
+                        code => app.on_key(code).await,
+                    },
+                    Some(Event::Message(message)) => {
+                        if let Err(e) = app.on_message(message?).await {
+                            log::info!("skipping message due to: {}", e);
+                        }
+                    }
+                    Some(Event::Resize) => {
+                        // will just redraw the app
+                    }
+                    Some(Event::Error(e)) => {
+                        log::error!("error: {}", e);
+                    }
+                    None => {
+                        break;
+                    }
+                }
+                if app.should_quit {
                     break;
                 }
-                KeyCode::Left => app.on_left(),
-                KeyCode::Up => app.on_up(),
-                KeyCode::Right => app.on_right(),
-                KeyCode::Down => app.on_down(),
-                code => app.on_key(code).await,
-            },
-            Some(Event::Message(message)) => {
-                if let Err(e) = app.on_message(message?).await {
-                    log::info!("skipping message due to: {}", e);
-                }
             }
-            Some(Event::Resize) => {
-                // will just redraw the app
-            }
-            Some(Event::Error(e)) => {
-                log::error!("error: {}", e);
-            }
-            None => {
-                break;
-            }
-        }
-        if app.should_quit {
-            break;
         }
     }
 
