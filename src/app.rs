@@ -380,10 +380,10 @@ impl App {
                         .push(Message::info(String::from("Syncing… the view will update")));
                 } else {
                     Jami::accept_trust_request(&account_id, &from_request);
-                    self.data.channels.items.remove(channel_idx);
                     if !self.data.channels.items.is_empty() {
                         self.data.channels.state.select(Some(0));
                     }
+                    self.data.channels.items.remove(channel_idx);
                     show_msg = false;
                 }
             } else {
