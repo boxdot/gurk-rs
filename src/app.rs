@@ -4,13 +4,15 @@ use crate::jami::{ImportType, Jami};
 use crate::util::*;
 
 use app_dirs::{get_app_dir, AppDataType, AppInfo};
+use dirs;
 use chrono::{TimeZone, Utc};
 use crossterm::event::KeyCode;
 use unicode_width::UnicodeWidthStr;
 
 use std::collections::HashMap;
-use std::fs::{copy, File};
+use std::fs::{copy, create_dir, File};
 use std::io::Write;
+use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub struct App {
@@ -316,8 +318,34 @@ impl App {
             } else if message.starts_with("/accept ") {
                 let parts: Vec<&str> = message.split(" ").collect();
                 let tid = parts.get(1).unwrap_or(&"").to_string().parse::<u64>().unwrap_or(0);
-                let path = parts.get(2).unwrap_or(&"").to_string();
-                Jami::accept_file_transfer(&account_id, &channel.id, tid, &path);
+                let mut path = parts.get(2).unwrap_or(&"").to_string();
+                if path.is_empty() {
+                    let default_download_dir = format!("{}/Jami", dirs::download_dir().unwrap().into_os_string().into_string().unwrap());
+                    let _ = create_dir(default_download_dir.clone());
+                    let info = Jami::data_transfer_info(account_id.clone(), channel.id.clone(), tid);
+                    if info.is_none() {
+                        channel.messages.push(Message::info(String::from(
+                            "Cannot accept file",
+                        )));
+                    } else {
+                        let info = info.unwrap();
+                        let mut idx = 0;
+                        loop {
+                            let p = match idx {
+                                0 => format!("{}/{}", default_download_dir, info.display_name.clone()),
+                                i => format!("{}/{}_{}", default_download_dir, info.display_name.clone(), i),
+                            };
+                            if !Path::new(&p).exists() {
+                                path = p.clone();
+                                break;
+                            }
+                            idx += 1;
+                        } 
+                    }
+                }
+                if !path.is_empty() {
+                    Jami::accept_file_transfer(&account_id, &channel.id, tid, &path);
+                }
                 show_msg = false;
             } else if message.starts_with("/cancel ") {
                 let parts: Vec<&str> = message.split(" ").collect();
@@ -347,10 +375,10 @@ impl App {
                     "/send [path]: Send a file to the conversation",
                 )));
                 channel.messages.push(Message::info(String::from(
-                    "/accept [tid] [path]: Accept a file transfer",
+                    "/accept [tid] <path>: Accept a file transfer",
                 )));
                 channel.messages.push(Message::info(String::from(
-                    "/cancel [tid] [path]: Cancel a file transfer",
+                    "/cancel [tid]: Cancel a file transfer",
                 )));
                 channel
                     .messages
@@ -490,11 +518,12 @@ impl App {
                             arrived_at,
                         ));
                     } else if payloads.get("type").unwrap() == "application/data-transfer+json" {
-                        let message = format!(
-                            "New file transfer with id: {}",
-                            payloads.get("tid").unwrap_or(&String::new())
-                        )
-                        .clone();
+                        let tid = payloads.get("tid").unwrap_or(&String::new()).clone();
+                        let display_name = payloads.get("displayName").unwrap_or(&String::new()).clone();
+                        let message = match self.data.transfer_manager.path(account_id.clone(), conversation_id.clone(), tid.clone()) {
+                            None => format!("<New file transfer with id: {} - {} - not downloaded>", tid, display_name),
+                            Some(path) => format!("<file://{}>", path),
+                        };
                         channel.messages.push(Message::new(
                             author,
                             String::from(message),
@@ -671,8 +700,24 @@ impl App {
         tid: u64,
         status: i32
     ) -> Option<()> {
-        // TODO
-        println!("@@@ TODO");
+        if status == 6 /* Finished */ {
+            let info = Jami::data_transfer_info(account_id.clone(), conversation_id.clone(), tid);
+            if !info.is_none() {
+                println!("{}", status);
+                self.data.transfer_manager.set_file_path(account_id.clone(), conversation_id.clone(), tid.to_string(), info.unwrap().path);
+
+                // Note: bad perf there but for now I don't care, will fix this when necessary
+                if account_id == &*self.data.account.id {
+                    if let Some(idx) = self.data.channels.state.selected() {
+                        let channel = &mut self.data.channels.items[idx];
+                        if channel.id == conversation_id {
+                            channel.messages.clear();
+                            Jami::load_conversation(&self.data.account.id, &channel.id, &String::new(), 0);
+                        }
+                    }
+                }
+            }
+        }
         Some(())
     }
 

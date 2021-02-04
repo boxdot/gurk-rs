@@ -1,5 +1,5 @@
 use crate::jami::account::Account;
-use crate::jami::{Jami, ProfileManager};
+use crate::jami::{Jami, ProfileManager, TransferManager};
 use crate::util::*;
 
 use chrono::Utc;
@@ -12,6 +12,7 @@ pub struct AppData {
     pub channels: StatefulList<Channel>,
     pub account: Account,
     pub profile_manager: ProfileManager,
+    pub transfer_manager: TransferManager,
     #[serde(skip)]
     pub out_invite: Vec<OutgoingInvite>,
     #[serde(skip)]
@@ -108,6 +109,7 @@ impl AppData {
         let account = Jami::select_jami_account(true);
         let mut channels = Vec::new();
         let mut profile_manager = ProfileManager::new();
+        let transfer_manager = TransferManager::new();
         if !account.id.is_empty() {
             profile_manager.load_from_account(&account.id);
             channels = AppData::channels_for_account(&account);
@@ -122,6 +124,7 @@ impl AppData {
             channels,
             input: String::new(),
             profile_manager,
+            transfer_manager,
             out_invite: Vec::new(),
             pending_rm: Vec::new(),
             input_cursor: 0,

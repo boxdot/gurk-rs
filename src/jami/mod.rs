@@ -5,6 +5,7 @@ pub mod transfermanager;
 
 pub use profile::Profile;
 pub use profilemanager::ProfileManager;
+pub use transfermanager::TransferManager;
 
 use crate::util::Event;
 use account::Account;
@@ -1092,7 +1093,6 @@ impl Jami {
             path: String::new(),
             mimetype: String::new()
         };
-        let mut tuple = info.tuple();
         let result: Result<(u32, (String, u32, u32, i64, i64, String, String, String, String, String, String),), _> = proxy.method_call(
             "cx.ring.Ring.ConfigurationManager",
             "dataTransferInfo",
