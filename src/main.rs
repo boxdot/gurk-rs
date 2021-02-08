@@ -17,7 +17,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use structopt::StructOpt;
-use tokio::stream::StreamExt;
+use tokio_stream::StreamExt;
 use tui::{backend::CrosstermBackend, Terminal};
 
 use std::io::Write;
@@ -66,7 +66,7 @@ async fn main() -> anyhow::Result<()> {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(100);
     tokio::spawn({
-        let mut tx = tx.clone();
+        let tx = tx.clone();
         async move {
             let mut reader = EventStream::new().fuse();
             while let Some(event) = reader.next().await {

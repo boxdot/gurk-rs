@@ -160,12 +160,13 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &App, area: Rect) {
 
             let prefix_width = (time.width() + from.width() + delimeter.width()) as u16;
             let indent = " ".repeat(prefix_width.into());
-            let lines = textwrap::wrap_iter(
+            let lines = textwrap::wrap(
                 displayed_message.as_str(),
-                width.saturating_sub(prefix_width).into(),
+                width.saturating_sub(prefix_width) as usize,
             );
 
             let spans: Vec<Spans> = lines
+                .into_iter()
                 .enumerate()
                 .map(|(idx, line)| {
                     let res = if idx == 0 {
