@@ -13,7 +13,7 @@ You need to download and install [`signal-cli`], such that it is found in your `
 2. Follow the instructions at
    https://github.com/AsamK/signal-cli/wiki/Linking-other-devices-(Provisioning) to link
    `signal-cli` to your phone/device.
-3. Install gurk with `cargo install gurk`  
+3. Install gurk with `cargo install gurk`
    To enable D-Bus notifications for new messages, run `cargo install --feature notifications gurk` instead.
 4. Drop a config file with the following context
     ```
@@ -51,8 +51,21 @@ At the first run, `gurk` will sync groups and contacts.
 
 The communication with the Signal backend is implemented via [`signal-cli`]. It provides some
 functionality like lookup of group/contact name only over the dbus interface. Therefore, `gurk` only
-works on Linux. We should evaluate if it is possible to switch to the [`libsignal-service-rs`]
-crate.
+works on Linux.
+
+## Native implementation
+
+There is ongoing effort to bring a native implementation to Rust of Signal messaging based on
+[`libsignal-protocol-c`]. We have an experimental branch `native-client` which diverged quite far
+from the implementation on master. The goal is to have at least the same feature we have on master.
+After that we either merge the branch, reimplement it on master, or provide both clients as options.
+
+For reference, check the following crates:
+
+* [`libsignal-protocol-c`]: official Signal protocol implementation in C
+* [`libsignal-protocol-rs`]: Rust bindings to the C library
+* [`libsignal-service-rs`]: port of the official Java/? library
+* [`presage`]: idiomatic Rust Signal client
 
 ## License
 
@@ -70,4 +83,7 @@ shall be dual licensed as above, without any additional terms or conditions.
 [Signal Messenger]: https://signal.org
 [`signal-cli`]: https://github.com/AsamK/signal-cli
 [`libsignal-service-rs`]: https://github.com/Michael-F-Bryan/libsignal-service-rs
+[`libsignal-protocol-rs`]: https://github.com/Michael-F-Bryan/libsignal-protocol-rs
+[`libsignal-protocol-c`]: https://github.com/signalapp/libsignal-protocol-c
+[`presage`]: https://github.com/gferon/presage
 [`src/config.rs`]: https://github.com/boxdot/gurk-rs/blob/master/src/config.rs
