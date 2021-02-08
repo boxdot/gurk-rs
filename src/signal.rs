@@ -34,6 +34,8 @@ impl SignalClient {
                 Ok(info)
             })
             .collect();
+        log::debug!("got groups: {:?}", res);
+
         res
     }
 
@@ -53,6 +55,8 @@ impl SignalClient {
                 Ok(info)
             })
             .collect();
+        log::debug!("got contacts: {:?}", res);
+
         res
     }
 
@@ -66,9 +70,10 @@ impl SignalClient {
         let mut cmd = tokio::process::Command::new(self.config.signal_cli.path);
         cmd.arg("-u")
             .arg(self.config.user.phone_number)
+            .arg("--output=json")
             .arg("daemon")
-            .arg("--json")
             .stdout(Stdio::piped())
+            .stderr(Stdio::null())
             .kill_on_drop(true);
         let mut child = cmd.spawn()?;
         let stdout = child
