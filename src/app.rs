@@ -11,14 +11,13 @@ use unicode_width::UnicodeWidthStr;
 #[cfg(feature = "notifications")]
 use notify_rust::Notification;
 
+use std::collections::HashSet;
 use std::fs::File;
-use std::io::Write;
 use std::path::Path;
 
 pub struct App {
     pub config: Config,
     pub should_quit: bool,
-    pub log_file: Option<File>,
     pub signal_client: signal::SignalClient,
     pub data: AppData,
 }
@@ -29,7 +28,7 @@ impl App {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct AppData {
     pub channels: StatefulList<Channel>,
     pub input: String,
@@ -45,6 +44,7 @@ impl AppData {
     }
 
     fn load(path: impl AsRef<Path>) -> anyhow::Result<Self> {
+        log::info!("loading app data from: {}", path.as_ref().display());
         let f = File::open(path)?;
         let mut data: Self = serde_json::from_reader(f)?;
         data.input_cursor = data.input.width();
@@ -59,7 +59,7 @@ impl AppData {
             let name = group_info
                 .name
                 .as_ref()
-                .unwrap_or_else(|| &group_info.group_id)
+                .unwrap_or(&group_info.group_id)
                 .to_string();
             Channel {
                 id: group_info.group_id,
@@ -132,17 +132,11 @@ pub enum Event<I> {
 }
 
 impl App {
-    pub fn try_new(verbose: bool) -> anyhow::Result<Self> {
+    pub fn try_new() -> anyhow::Result<Self> {
         let config_path = config::installed_config()
             .context("config file not found at one of the default locations")?;
         let config = config::load_from(&config_path)
             .with_context(|| format!("failed to read config from: {}", config_path.display()))?;
-
-        let log_file = if verbose {
-            Some(File::create("gurk.log").unwrap())
-        } else {
-            None
-        };
 
         let mut load_data_path = config.data_path.clone();
         if !load_data_path.exists() {
@@ -152,15 +146,22 @@ impl App {
             }
         }
 
-        let mut data = match AppData::load(&load_data_path) {
-            Ok(data) => data,
-            Err(_) => {
-                let client = signal::SignalClient::from_config(config.clone());
-                let data = AppData::init_from_signal(&client)?;
-                data.save(&config.data_path)?;
-                data
-            }
+        let mut data = AppData::load(&load_data_path).unwrap_or_default();
+
+        // merge saved data with remote data from signal
+        let remote_data = {
+            let client = signal::SignalClient::from_config(config.clone());
+            AppData::init_from_signal(&client)?
         };
+        let known_channel_ids: HashSet<String> =
+            data.channels.items.iter().map(|c| c.id.clone()).collect();
+        for channel in remote_data.channels.items {
+            if !known_channel_ids.contains(&channel.id) {
+                data.channels.items.push(channel)
+            }
+        }
+
+        // select the first channel if none is selected
         if data.channels.state.selected().is_none() && !data.channels.items.is_empty() {
             data.channels.state.select(Some(0));
             data.save(&config.data_path)?;
@@ -173,7 +174,6 @@ impl App {
             data,
             should_quit: false,
             signal_client,
-            log_file,
         })
     }
 
@@ -264,19 +264,13 @@ impl App {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn log(&mut self, msg: impl AsRef<str>) {
-        if let Some(log_file) = &mut self.log_file {
-            writeln!(log_file, "{}", msg.as_ref()).unwrap();
-        }
-    }
-
     pub async fn on_message(
         &mut self,
         message: Option<signal::Message>,
         payload: String,
     ) -> Option<()> {
-        self.log(format!("incoming: {} -> {:?}", payload, message));
+        log::info!("incoming: {} -> {:?}", payload, message);
+
         let mut message = message?;
 
         let mut msg: signal::InnerMessage = message
