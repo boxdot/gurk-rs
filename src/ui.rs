@@ -75,20 +75,19 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
                 lines
             });
     // chars since newline on `cursor_y` line
-    let mut cursor_x = app.data.input_cursor;
+    let mut cursor_x = app.data.input_cursor_chars;
     // line selected by `app.data.input_cursor`
     let mut cursor_y = 0;
     for string in &lines {
         cursor_y += 1;
         match string.len().cmp(&cursor_x) {
-            std::cmp::Ordering::Less => cursor_x -= string.len(),
+            std::cmp::Ordering::Less => cursor_x -= string.width(),
             _ => break,
         };
     }
     let num_input_lines = lines.len().max(1);
     let input: Vec<Spans> = lines.into_iter().map(Spans::from).collect();
-    let extra_cursor_line = if app.data.input_cursor > 0 && app.data.input_cursor % text_width == 0
-    {
+    let extra_cursor_line = if cursor_x > 0 && cursor_x % text_width == 0 {
         1
     } else {
         0

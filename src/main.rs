@@ -95,9 +95,13 @@ async fn main() -> anyhow::Result<()> {
                 KeyCode::Char('c') if event.modifiers.contains(KeyModifiers::CONTROL) => {
                     break;
                 }
-                KeyCode::Left => app.on_left(),
+                KeyCode::Left => {
+                    app.on_left();
+                }
                 KeyCode::Up => app.on_up(),
-                KeyCode::Right => app.on_right(),
+                KeyCode::Right => {
+                    app.on_right();
+                }
                 KeyCode::Down => app.on_down(),
                 code => app.on_key(code),
             },

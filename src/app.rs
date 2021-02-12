@@ -32,8 +32,12 @@ impl App {
 pub struct AppData {
     pub channels: StatefulList<Channel>,
     pub input: String,
+    /// Input position in bytes (not number of chars)
     #[serde(skip)]
     pub input_cursor: usize,
+    /// Input position in chars
+    #[serde(skip)]
+    pub input_cursor_chars: usize,
 }
 
 impl AppData {
@@ -47,7 +51,8 @@ impl AppData {
         log::info!("loading app data from: {}", path.as_ref().display());
         let f = File::open(path)?;
         let mut data: Self = serde_json::from_reader(f)?;
-        data.input_cursor = data.input.width();
+        data.input_cursor = data.input.len();
+        data.input_cursor_chars = data.input.width();
         Ok(data)
     }
 
@@ -93,6 +98,7 @@ impl AppData {
             channels,
             input: String::new(),
             input_cursor: 0,
+            input_cursor_chars: 0,
         })
     }
 }
@@ -178,12 +184,10 @@ impl App {
     }
 
     pub fn put_char(&mut self, c: char) {
-        let mut idx = self.data.input_cursor;
-        while !self.data.input.is_char_boundary(idx) {
-            idx += 1;
-        }
+        let idx = self.data.input_cursor;
         self.data.input.insert(idx, c);
-        self.data.input_cursor += 1;
+        self.data.input_cursor += c.len_utf8();
+        self.data.input_cursor_chars += 1;
     }
 
     pub fn on_key(&mut self, key: KeyCode) {
@@ -197,9 +201,13 @@ impl App {
             }
             KeyCode::Backspace => {
                 if self.data.input_cursor > 0 {
-                    let idx = self.data.input_cursor - 1;
+                    let mut idx = self.data.input_cursor - 1;
+                    while !self.data.input.is_char_boundary(idx) {
+                        idx -= 1;
+                    }
                     self.data.input.remove(idx);
                     self.data.input_cursor = idx;
+                    self.data.input_cursor_chars -= 1;
                 }
             }
             _ => {}
@@ -211,6 +219,7 @@ impl App {
 
         let message: String = self.data.input.drain(..).collect();
         self.data.input_cursor = 0;
+        self.data.input_cursor_chars = 0;
 
         if !channel.is_group {
             signal::SignalClient::send_message(&message, &channel.id);
@@ -254,14 +263,24 @@ impl App {
         false
     }
 
-    pub fn on_left(&mut self) {
-        self.data.input_cursor = self.data.input_cursor.saturating_sub(1);
+    pub fn on_left(&mut self) -> Option<()> {
+        let mut idx = self.data.input_cursor.checked_sub(1)?;
+        while !self.data.input.is_char_boundary(idx) {
+            idx -= 1;
+        }
+        self.data.input_cursor = idx;
+        self.data.input_cursor_chars -= 1;
+        Some(())
     }
 
-    pub fn on_right(&mut self) {
-        if self.data.input_cursor < self.data.input.len() {
-            self.data.input_cursor += 1;
+    pub fn on_right(&mut self) -> Option<()> {
+        let mut idx = Some(self.data.input_cursor + 1).filter(|x| x <= &self.data.input.len())?;
+        while idx < self.data.input.len() && !self.data.input.is_char_boundary(idx) {
+            idx -= 1;
         }
+        self.data.input_cursor = idx;
+        self.data.input_cursor_chars += 1;
+        Some(())
     }
 
     pub async fn on_message(
