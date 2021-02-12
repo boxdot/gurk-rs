@@ -34,6 +34,8 @@ impl SignalClient {
                 Ok(info)
             })
             .collect();
+        log::debug!("got groups: {:?}", res);
+
         res
     }
 
@@ -53,12 +55,14 @@ impl SignalClient {
                 Ok(info)
             })
             .collect();
+        log::debug!("got contacts: {:?}", res);
+
         res
     }
 
     pub async fn stream_messages<T: std::fmt::Debug, C: std::fmt::Debug>(
         self,
-        mut tx: tokio::sync::mpsc::Sender<crate::app::Event<T, C>>,
+        tx: tokio::sync::mpsc::Sender<crate::app::Event<T, C>>,
     ) -> Result<(), std::io::Error> {
         use std::process::Stdio;
         use tokio::io::{AsyncBufReadExt, BufReader};
@@ -66,9 +70,10 @@ impl SignalClient {
         let mut cmd = tokio::process::Command::new(self.config.signal_cli.path);
         cmd.arg("-u")
             .arg(self.config.user.phone_number)
+            .arg("--output=json")
             .arg("daemon")
-            .arg("--json")
             .stdout(Stdio::piped())
+            .stderr(Stdio::null())
             .kill_on_drop(true);
         let mut child = cmd.spawn()?;
         let stdout = child
@@ -77,7 +82,7 @@ impl SignalClient {
             .expect("child did not have a handle to stdout");
 
         let mut reader = BufReader::new(stdout).lines();
-        let cmd_handle = tokio::spawn(async { child.await });
+        let cmd_handle = tokio::spawn(async move { child.wait().await });
 
         while let Some(payload) = reader.next_line().await? {
             let message = serde_json::from_str(&payload).ok();
@@ -93,7 +98,7 @@ impl SignalClient {
     }
 
     pub fn send_message(message: &str, phone_number: &str) {
-        let child = tokio::process::Command::new("dbus-send")
+        let mut child = tokio::process::Command::new("dbus-send")
             .args(&[
                 "--session",
                 "--type=method_call",
@@ -107,11 +112,11 @@ impl SignalClient {
             .spawn()
             .unwrap();
 
-        tokio::spawn(child);
+        tokio::spawn(async move { child.wait().await });
     }
 
     pub fn send_group_message(message: &str, group_id: &str) {
-        let child = tokio::process::Command::new("dbus-send")
+        let mut child = tokio::process::Command::new("dbus-send")
             .args(&[
                 "--session",
                 "--type=method_call",
@@ -128,7 +133,7 @@ impl SignalClient {
             .spawn()
             .unwrap();
 
-        tokio::spawn(child);
+        tokio::spawn(async move { child.wait().await });
     }
 
     pub async fn get_contact_name(phone_number: &str) -> Option<String> {

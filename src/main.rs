@@ -17,7 +17,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use structopt::StructOpt;
-use tokio::stream::StreamExt;
+use tokio_stream::StreamExt;
 use tui::{backend::CrosstermBackend, Terminal};
 
 use std::io::Write;
@@ -29,11 +29,32 @@ struct Args {
     verbose: bool,
 }
 
+fn init_file_logger() -> anyhow::Result<()> {
+    use log::LevelFilter;
+    use log4rs::append::file::FileAppender;
+    use log4rs::config::{Appender, Config, Root};
+    use log4rs::encode::pattern::PatternEncoder;
+
+    let logfile = FileAppender::builder()
+        .encoder(Box::new(PatternEncoder::new("[{d} {l} {M}] {m}\n")))
+        .build("gurk.log")?;
+
+    let config = Config::builder()
+        .appender(Appender::builder().build("logfile", Box::new(logfile)))
+        .build(Root::builder().appender("logfile").build(LevelFilter::Info))?;
+
+    log4rs::init_config(config)?;
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::from_args();
+    if args.verbose {
+        init_file_logger()?;
+    }
 
-    let mut app = App::try_new(args.verbose)?;
+    let mut app = App::try_new()?;
 
     enable_raw_mode()?;
     let _raw_mode_guard = scopeguard::guard((), |_| {
@@ -45,7 +66,7 @@ async fn main() -> anyhow::Result<()> {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(100);
     tokio::spawn({
-        let mut tx = tx.clone();
+        let tx = tx.clone();
         async move {
             let mut reader = EventStream::new().fuse();
             while let Some(event) = reader.next().await {
@@ -110,9 +131,13 @@ async fn main() -> anyhow::Result<()> {
                 KeyCode::Char('c') if event.modifiers.contains(KeyModifiers::CONTROL) => {
                     break;
                 }
-                KeyCode::Left => app.on_left(),
+                KeyCode::Left => {
+                    app.on_left();
+                }
                 KeyCode::Up => app.on_up(),
-                KeyCode::Right => app.on_right(),
+                KeyCode::Right => {
+                    app.on_right();
+                }
                 KeyCode::Down => app.on_down(),
                 code => app.on_key(code),
             },

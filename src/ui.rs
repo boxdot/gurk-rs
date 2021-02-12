@@ -75,20 +75,19 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
                 lines
             });
     // chars since newline on `cursor_y` line
-    let mut cursor_x = app.data.input_cursor;
+    let mut cursor_x = app.data.input_cursor_chars;
     // line selected by `app.data.input_cursor`
     let mut cursor_y = 0;
     for string in &lines {
         cursor_y += 1;
         match string.len().cmp(&cursor_x) {
-            std::cmp::Ordering::Less => cursor_x -= string.len(),
+            std::cmp::Ordering::Less => cursor_x -= string.width(),
             _ => break,
         };
     }
     let num_input_lines = lines.len().max(1);
     let input: Vec<Spans> = lines.into_iter().map(Spans::from).collect();
-    let extra_cursor_line = if app.data.input_cursor > 0 && app.data.input_cursor % text_width == 0
-    {
+    let extra_cursor_line = if cursor_x > 0 && cursor_x % text_width == 0 {
         1
     } else {
         0
@@ -160,12 +159,14 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &App, area: Rect) {
 
             let prefix_width = (time.width() + from.width() + delimeter.width()) as u16;
             let indent = " ".repeat(prefix_width.into());
-            let lines = textwrap::wrap_iter(
-                displayed_message.as_str(),
-                width.saturating_sub(prefix_width).into(),
-            );
+
+            let wrap_opts = textwrap::Options::new(width.into())
+                .initial_indent(&indent)
+                .subsequent_indent(&indent);
+            let lines = textwrap::wrap(displayed_message.as_str(), wrap_opts);
 
             let spans: Vec<Spans> = lines
+                .into_iter()
                 .enumerate()
                 .map(|(idx, line)| {
                     let res = if idx == 0 {
@@ -173,10 +174,10 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &App, area: Rect) {
                             time.clone(),
                             from.clone(),
                             delimeter.clone(),
-                            Span::from(line.to_string()),
+                            Span::from(line.strip_prefix(&indent).unwrap().to_string()),
                         ]
                     } else {
-                        vec![Span::from(format!("{}{}", indent, line))]
+                        vec![Span::from(line.to_string())]
                     };
                     Spans::from(res)
                 })
