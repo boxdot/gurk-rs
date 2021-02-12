@@ -423,6 +423,23 @@ impl App {
             self.data.channels.items.len() - 1
         };
 
+        #[cfg(feature = "notifications")]
+        if let Some(text) = text.as_ref() {
+            use std::borrow::Cow;
+            let summary = self
+                .data
+                .channels
+                .items
+                .get(channel_idx)
+                .as_ref()
+                .filter(|_| is_group)
+                .map(|c| Cow::from(format!("{} in {}", name, c.name)))
+                .unwrap_or_else(|| Cow::from(&name));
+            if let Err(e) = Notification::new().summary(&summary).body(&text).show() {
+                log::error!("failed to send notification: {}", e);
+            }
+        }
+
         self.data.channels.items[channel_idx]
             .messages
             .push(Message {
@@ -436,13 +453,6 @@ impl App {
         } else {
             self.reset_unread_messages();
         }
-
-        #[cfg(feature = "notifications")]
-        Notification::new()
-            .summary("Gurk")
-            .body("New Signal message received")
-            .show()
-            .expect("Was not able to send message notification.");
 
         self.bubble_up_channel(channel_idx);
         self.save().unwrap();
