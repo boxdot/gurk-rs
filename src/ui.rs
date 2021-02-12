@@ -160,12 +160,14 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &App, area: Rect) {
 
             let prefix_width = (time.width() + from.width() + delimeter.width()) as u16;
             let indent = " ".repeat(prefix_width.into());
-            let lines = textwrap::wrap_iter(
-                displayed_message.as_str(),
-                width.saturating_sub(prefix_width).into(),
-            );
+
+            let wrap_opts = textwrap::Options::new(width.into())
+                .initial_indent(&indent)
+                .subsequent_indent(&indent);
+            let lines = textwrap::wrap(displayed_message.as_str(), wrap_opts);
 
             let spans: Vec<Spans> = lines
+                .into_iter()
                 .enumerate()
                 .map(|(idx, line)| {
                     let res = if idx == 0 {
@@ -173,10 +175,10 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &App, area: Rect) {
                             time.clone(),
                             from.clone(),
                             delimeter.clone(),
-                            Span::from(line.to_string()),
+                            Span::from(line.strip_prefix(&indent).unwrap().to_string()),
                         ]
                     } else {
-                        vec![Span::from(format!("{}{}", indent, line))]
+                        vec![Span::from(line.to_string())]
                     };
                     Spans::from(res)
                 })
