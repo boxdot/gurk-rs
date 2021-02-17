@@ -1,5 +1,5 @@
 # gurk 🥒
-![CI](https://github.com/boxdot/gurk-rs/workflows/CI/badge.svg)
+![CI][ci-badge] [![chat][chat-badge]][chat-link]
 
 [Signal Messenger] client for terminal.
 
@@ -34,6 +34,10 @@ You need to download and install [`signal-cli`], such that it is found in your `
 5. Run `gurk`
 
 At the first run, `gurk` will sync groups and contacts.
+
+## Chat
+
+[![chat-qr](chat-qr.png)][chat-link]
 
 ## Missing features / known issues
 
@@ -87,3 +91,6 @@ shall be dual licensed as above, without any additional terms or conditions.
 [`libsignal-protocol-c`]: https://github.com/signalapp/libsignal-protocol-c
 [`presage`]: https://github.com/gferon/presage
 [`src/config.rs`]: https://github.com/boxdot/gurk-rs/blob/master/src/config.rs
+[chat-badge]: https://img.shields.io/badge/chat-on%20signal-brightgreen?logo=signal
+[ci-badge]: https://github.com/boxdot/gurk-rs/workflows/CI/badge.svg
+[chat-link]: https://signal.group/#CjQKILaqQTWUZks14mPRSn0m0zyU9A-buNMG6haQBmWrxJHeEhCc7HLIwCFZRNDw63MWj-fA
