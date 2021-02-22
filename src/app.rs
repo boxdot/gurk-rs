@@ -237,23 +237,17 @@ impl App {
     pub fn on_key(&mut self, key: KeyCode) {
         match key {
             KeyCode::Char('\r') => self.put_char('\n'),
-            KeyCode::Char(c) => self.put_char(c),
             KeyCode::Enter if !self.data.input.is_empty() => {
                 if let Some(idx) = self.data.channels.state.selected() {
                     self.send_input(idx)
                 }
             }
+            KeyCode::Home => self.on_home(),
+            KeyCode::End => self.on_end(),
             KeyCode::Backspace => {
-                if self.data.input_cursor > 0 {
-                    let mut idx = self.data.input_cursor - 1;
-                    while !self.data.input.is_char_boundary(idx) {
-                        idx -= 1;
-                    }
-                    self.data.input.remove(idx);
-                    self.data.input_cursor = idx;
-                    self.data.input_cursor_chars -= 1;
-                }
+                self.on_backspace();
             }
+            KeyCode::Char(c) => self.put_char(c),
             _ => {}
         }
     }
@@ -364,6 +358,47 @@ impl App {
         Some(())
     }
 
+    fn word_operation(&mut self, op: impl Fn(&mut App) -> Option<()>) -> Option<()> {
+        while op(self).is_some() {
+            if self.data.input.as_bytes().get(self.data.input_cursor)? != &b' ' {
+                break;
+            }
+        }
+        while op(self).is_some() {
+            if self.data.input.as_bytes().get(self.data.input_cursor)? == &b' ' {
+                return Some(());
+            }
+        }
+        None
+    }
+
+    /// Move a word back
+    pub fn on_alt_left(&mut self) {
+        self.on_left();
+        self.word_operation(Self::on_left);
+        if self.data.input.as_bytes().get(self.data.input_cursor) == Some(&b' ') {
+            self.on_right();
+        }
+    }
+
+    /// Move a word forward
+    pub fn on_alt_right(&mut self) {
+        self.word_operation(Self::on_right);
+        while self.data.input.as_bytes().get(self.data.input_cursor) == Some(&b' ') {
+            self.on_right();
+        }
+    }
+
+    pub fn on_home(&mut self) {
+        self.data.input_cursor = 0;
+        self.data.input_cursor_chars = 0;
+    }
+
+    pub fn on_end(&mut self) {
+        self.data.input_cursor = self.data.input.len();
+        self.data.input_cursor_chars = self.data.input.width();
+    }
+
     pub fn on_right(&mut self) -> Option<()> {
         let mut idx = Some(self.data.input_cursor + 1).filter(|x| x <= &self.data.input.len())?;
         while idx < self.data.input.len() && !self.data.input.is_char_boundary(idx) {
@@ -372,6 +407,45 @@ impl App {
         self.data.input_cursor = idx;
         self.data.input_cursor_chars += 1;
         Some(())
+    }
+
+    pub fn on_backspace(&mut self) -> Option<()> {
+        let mut idx = self.data.input_cursor.checked_sub(1)?;
+        while idx < self.data.input.len() && !self.data.input.is_char_boundary(idx) {
+            idx -= 1;
+        }
+        self.data.input.remove(idx);
+        self.data.input_cursor = idx;
+        self.data.input_cursor_chars -= 1;
+        Some(())
+    }
+
+    pub fn on_delete_word(&mut self) -> Option<()> {
+        while self
+            .data
+            .input
+            .as_bytes()
+            .get(self.data.input_cursor.checked_sub(1)?)?
+            == &b' '
+        {
+            self.on_backspace();
+        }
+        while self
+            .data
+            .input
+            .as_bytes()
+            .get(self.data.input_cursor.checked_sub(1)?)?
+            != &b' '
+        {
+            self.on_backspace();
+        }
+        Some(())
+    }
+
+    pub fn on_delete_suffix(&mut self) {
+        if self.data.input_cursor < self.data.input.len() {
+            self.data.input.truncate(self.data.input_cursor);
+        }
     }
 
     pub fn on_channels(&mut self, remote_channels: Vec<Channel>) {
