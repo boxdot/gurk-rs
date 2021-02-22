@@ -374,12 +374,13 @@ impl App {
             return None;
         }
 
+        let is_from_me = message.envelope.source == self.config.user.phone_number;
         let channel_id = msg
             .group_info
             .as_ref()
             .map(|g| g.group_id.as_str())
             .or_else(|| {
-                if message.envelope.source == self.config.user.phone_number {
+                if is_from_me {
                     msg.destination.as_deref()
                 } else {
                     Some(message.envelope.source.as_str())
@@ -424,19 +425,21 @@ impl App {
         };
 
         #[cfg(feature = "notifications")]
-        if let Some(text) = text.as_ref() {
-            use std::borrow::Cow;
-            let summary = self
-                .data
-                .channels
-                .items
-                .get(channel_idx)
-                .as_ref()
-                .filter(|_| is_group)
-                .map(|c| Cow::from(format!("{} in {}", name, c.name)))
-                .unwrap_or_else(|| Cow::from(&name));
-            if let Err(e) = Notification::new().summary(&summary).body(&text).show() {
-                log::error!("failed to send notification: {}", e);
+        if !is_from_me {
+            if let Some(text) = text.as_ref() {
+                use std::borrow::Cow;
+                let summary = self
+                    .data
+                    .channels
+                    .items
+                    .get(channel_idx)
+                    .as_ref()
+                    .filter(|_| is_group)
+                    .map(|c| Cow::from(format!("{} in {}", name, c.name)))
+                    .unwrap_or_else(|| Cow::from(&name));
+                if let Err(e) = Notification::new().summary(&summary).body(&text).show() {
+                    log::error!("failed to send notification: {}", e);
+                }
             }
         }
 
