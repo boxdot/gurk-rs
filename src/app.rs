@@ -58,7 +58,7 @@ impl AppData {
         Ok(data)
     }
 
-    fn init_from_signal(client: &signal::SignalClient) -> anyhow::Result<Self> {
+    pub fn init_from_signal(client: &signal::SignalClient) -> anyhow::Result<Self> {
         let groups = client
             .get_groups()
             .context("failed to fetch groups from signal")?;
@@ -139,6 +139,9 @@ pub struct Message {
 pub enum Event<I, C> {
     Click(C),
     Input(I),
+    Channels {
+        remote: Vec<Channel>,
+    },
     Message {
         /// used for debugging
         payload: String,
@@ -184,19 +187,6 @@ impl App {
         }
 
         let mut data = AppData::load(&load_data_path).unwrap_or_default();
-
-        // merge saved data with remote data from signal
-        let remote_data = {
-            let client = signal::SignalClient::from_config(config.clone());
-            AppData::init_from_signal(&client)?
-        };
-        let known_channel_ids: HashSet<String> =
-            data.channels.items.iter().map(|c| c.id.clone()).collect();
-        for channel in remote_data.channels.items {
-            if !known_channel_ids.contains(&channel.id) {
-                data.channels.items.push(channel)
-            }
-        }
 
         // select the first channel if none is selected
         if data.channels.state.selected().is_none() && !data.channels.items.is_empty() {
@@ -349,6 +339,21 @@ impl App {
         self.data.input_cursor = idx;
         self.data.input_cursor_chars += 1;
         Some(())
+    }
+
+    pub fn on_channels(&mut self, remote_channels: Vec<Channel>) {
+        let known_channel_ids: HashSet<String> = self
+            .data
+            .channels
+            .items
+            .iter()
+            .map(|c| c.id.clone())
+            .collect();
+        for channel in remote_channels {
+            if !known_channel_ids.contains(&channel.id) {
+                self.data.channels.items.push(channel)
+            }
+        }
     }
 
     pub async fn on_message(
