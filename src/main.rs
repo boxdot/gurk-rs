@@ -165,6 +165,27 @@ async fn main() -> anyhow::Result<()> {
                 KeyCode::Down => app.on_down(),
                 KeyCode::PageUp => app.on_pgup(),
                 KeyCode::PageDown => app.on_pgdn(),
+                KeyCode::Char('f') if event.modifiers.contains(KeyModifiers::ALT) => {
+                    app.on_alt_right();
+                }
+                KeyCode::Char('b') if event.modifiers.contains(KeyModifiers::ALT) => {
+                    app.on_alt_left();
+                }
+                KeyCode::Char('a') if event.modifiers.contains(KeyModifiers::CONTROL) => {
+                    app.on_home();
+                }
+                KeyCode::Char('e') if event.modifiers.contains(KeyModifiers::CONTROL) => {
+                    app.on_end();
+                }
+                KeyCode::Char('w') if event.modifiers.contains(KeyModifiers::CONTROL) => {
+                    app.on_delete_word();
+                }
+                KeyCode::Char('\u{7f}') if event.modifiers.contains(KeyModifiers::ALT) => {
+                    app.on_delete_word();
+                }
+                KeyCode::Char('k') if event.modifiers.contains(KeyModifiers::CONTROL) => {
+                    app.on_delete_suffix();
+                }
                 code => app.on_key(code),
             },
             Some(Event::Message { payload, message }) => {
