@@ -16,6 +16,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use log::error;
 use structopt::StructOpt;
 use tokio_stream::StreamExt;
 use tui::{backend::CrosstermBackend, Terminal};
@@ -89,7 +90,28 @@ async fn main() -> anyhow::Result<()> {
     app.data.chanpos.downside = terminal.get_frame().size().height - 3;
 
     let signal_client = signal::SignalClient::from_config(app.config.clone());
-    tokio::spawn(async move { signal_client.stream_messages(tx).await });
+    tokio::spawn(async move {
+        // load data from signal asynchronously
+        let remote_channels = tokio::task::spawn_blocking({
+            let client = signal_client.clone();
+            move || {
+                app::AppData::init_from_signal(&client)
+                    .map(|remote_data| remote_data.channels.items)
+            }
+        })
+        .await;
+
+        match remote_channels {
+            Ok(Ok(remote)) => {
+                let _ = tx.send(Event::Channels { remote }).await;
+            }
+            Ok(Err(e)) => error!("failed to load channel from server: {}", e),
+            Err(e) => unreachable!(e.to_string()),
+        }
+
+        // listen to incoming messages
+        signal_client.stream_messages(tx).await
+    });
 
     terminal.clear()?;
 
@@ -119,10 +141,12 @@ async fn main() -> anyhow::Result<()> {
                 },
                 MouseEvent::ScrollUp(col, _, _) => match col {
                     col if col < terminal.get_frame().size().width / 4 => app.on_up(),
+                    col if col > terminal.get_frame().size().width / 4 => app.on_pgup(),
                     _ => {}
                 },
                 MouseEvent::ScrollDown(col, _, _) => match col {
                     col if col < terminal.get_frame().size().width / 4 => app.on_down(),
+                    col if col > terminal.get_frame().size().width / 4 => app.on_pgdn(),
                     _ => {}
                 },
                 _ => {}
@@ -146,6 +170,7 @@ async fn main() -> anyhow::Result<()> {
             Some(Event::Message { payload, message }) => {
                 app.on_message(message, payload).await;
             }
+            Some(Event::Channels { remote }) => app.on_channels(remote),
             Some(Event::Resize { cols: _, rows }) => match rows {
                 // terminal too narrow for mouse navigation
                 rows if rows < 3 => {}

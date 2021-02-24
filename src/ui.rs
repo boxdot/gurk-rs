@@ -268,17 +268,22 @@ fn symlink_attachments(attachments: &[signal::Attachment]) -> anyhow::Result<Vec
         .map(|attachment| {
             let source = signal_cli_data_dir.join("attachments").join(&attachment.id);
 
-            let mut filename = id_to_short_random_filename(&attachment.id);
+            let filename = id_to_short_random_filename(&attachment.id);
+            let filename = std::str::from_utf8(&filename[..])?;
+            let mut dest = tmp_attachments_dir.join(filename);
             if let Some(ext) = attachment.filename.extension() {
-                filename += ".";
-                filename += &ext.to_string_lossy();
+                dest.set_extension(ext);
             };
-            let dest = tmp_attachments_dir.join(filename);
 
-            let _ = std::fs::remove_file(&dest);
+            match std::fs::read_link(&dest) {
+                Ok(linked) if linked == source => return Ok(dest),
+                Ok(_) => std::fs::remove_file(&dest)?,
+                _ => (),
+            }
+
             std::os::unix::fs::symlink(&source, &dest).with_context(|| {
                 format!(
-                    "failed to create symlink: {} -> {}",
+                    "failed to attachment create symlink: {} -> {}",
                     source.display(),
                     dest.display(),
                 )
@@ -296,16 +301,17 @@ fn xorshift32(mut x: u32) -> u32 {
     x
 }
 
-fn id_to_short_random_filename(id: &str) -> String {
+fn id_to_short_random_filename(id: &str) -> [u8; 6] {
     const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     let mut seed = id
         .chars()
-        .fold(0u32, |acc, c| acc.wrapping_add(c as u32))
+        .fold(0u32, |acc, c| xorshift32(acc.wrapping_add(c as u32)))
         .max(1); // must be != 0
-    (0..6)
-        .map(move |_| {
-            seed = xorshift32(seed);
-            CHARSET[seed as usize % CHARSET.len()] as char
-        })
-        .collect()
+
+    let mut filename = [0; 6];
+    for letter in &mut filename {
+        seed = xorshift32(seed);
+        *letter = CHARSET[seed as usize % CHARSET.len()];
+    }
+    filename
 }

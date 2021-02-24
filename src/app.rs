@@ -59,7 +59,7 @@ impl AppData {
         Ok(data)
     }
 
-    fn init_from_signal(client: &signal::SignalClient) -> anyhow::Result<Self> {
+    pub fn init_from_signal(client: &signal::SignalClient) -> anyhow::Result<Self> {
         let groups = client
             .get_groups()
             .context("failed to fetch groups from signal")?;
@@ -142,6 +142,9 @@ pub struct Message {
 pub enum Event<I, C> {
     Click(C),
     Input(I),
+    Channels {
+        remote: Vec<Channel>,
+    },
     Message {
         /// used for debugging
         payload: String,
@@ -187,19 +190,6 @@ impl App {
         }
 
         let mut data = AppData::load(&load_data_path).unwrap_or_default();
-
-        // merge saved data with remote data from signal
-        let remote_data = {
-            let client = signal::SignalClient::from_config(config.clone());
-            AppData::init_from_signal(&client)?
-        };
-        let known_channel_ids: HashSet<String> =
-            data.channels.items.iter().map(|c| c.id.clone()).collect();
-        for channel in remote_data.channels.items {
-            if !known_channel_ids.contains(&channel.id) {
-                data.channels.items.push(channel)
-            }
-        }
 
         // select the first channel if none is selected
         if data.channels.state.selected().is_none() && !data.channels.items.is_empty() {
@@ -364,6 +354,21 @@ impl App {
         Some(())
     }
 
+    pub fn on_channels(&mut self, remote_channels: Vec<Channel>) {
+        let known_channel_ids: HashSet<String> = self
+            .data
+            .channels
+            .items
+            .iter()
+            .map(|c| c.id.clone())
+            .collect();
+        for channel in remote_channels {
+            if !known_channel_ids.contains(&channel.id) {
+                self.data.channels.items.push(channel)
+            }
+        }
+    }
+
     pub async fn on_message(
         &mut self,
         message: Option<signal::Message>,
@@ -387,12 +392,13 @@ impl App {
             return None;
         }
 
+        let is_from_me = message.envelope.source == self.config.user.phone_number;
         let channel_id = msg
             .group_info
             .as_ref()
             .map(|g| g.group_id.as_str())
             .or_else(|| {
-                if message.envelope.source == self.config.user.phone_number {
+                if is_from_me {
                     msg.destination.as_deref()
                 } else {
                     Some(message.envelope.source.as_str())
@@ -437,19 +443,21 @@ impl App {
         };
 
         #[cfg(feature = "notifications")]
-        if let Some(text) = text.as_ref() {
-            use std::borrow::Cow;
-            let summary = self
-                .data
-                .channels
-                .items
-                .get(channel_idx)
-                .as_ref()
-                .filter(|_| is_group)
-                .map(|c| Cow::from(format!("{} in {}", name, c.name)))
-                .unwrap_or_else(|| Cow::from(&name));
-            if let Err(e) = Notification::new().summary(&summary).body(&text).show() {
-                log::error!("failed to send notification: {}", e);
+        if !is_from_me {
+            if let Some(text) = text.as_ref() {
+                use std::borrow::Cow;
+                let summary = self
+                    .data
+                    .channels
+                    .items
+                    .get(channel_idx)
+                    .as_ref()
+                    .filter(|_| is_group)
+                    .map(|c| Cow::from(format!("{} in {}", name, c.name)))
+                    .unwrap_or_else(|| Cow::from(&name));
+                if let Err(e) = Notification::new().summary(&summary).body(&text).show() {
+                    log::error!("failed to send notification: {}", e);
+                }
             }
         }
 
