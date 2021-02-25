@@ -5,35 +5,42 @@ use crate::util::StatefulList;
 use anyhow::Context;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use crossterm::event::KeyCode;
+use derivative::Derivative;
 use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthStr;
 
+#[cfg(feature = "notifications")]
+use notify_rust::Notification;
+
+use std::collections::HashSet;
 use std::fs::File;
-use std::io::Write;
 use std::path::Path;
 
 pub struct App {
     pub config: Config,
     pub should_quit: bool,
-    pub log_file: Option<File>,
     pub signal_client: signal::SignalClient,
     pub data: AppData,
 }
 
 impl App {
-    fn save(&self) -> anyhow::Result<()> {
+    pub fn save(&self) -> anyhow::Result<()> {
         self.data.save(&self.config.data_path)
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct AppData {
     pub channels: StatefulList<Channel>,
     #[serde(skip)]
-    pub messages: StatefulList<Message>,
+    pub chanpos: ChannelPosition,
     pub input: String,
+    /// Input position in bytes (not number of chars)
     #[serde(skip)]
     pub input_cursor: usize,
+    /// Input position in chars
+    #[serde(skip)]
+    pub input_cursor_chars: usize,
 }
 
 impl AppData {
@@ -44,9 +51,11 @@ impl AppData {
     }
 
     fn load(path: impl AsRef<Path>) -> anyhow::Result<Self> {
+        log::info!("loading app data from: {}", path.as_ref().display());
         let f = File::open(path)?;
         let mut data: Self = serde_json::from_reader(f)?;
-        data.input_cursor = data.input.width();
+        data.input_cursor = data.input.len();
+        data.input_cursor_chars = data.input.width();
         Ok(data)
     }
 
@@ -58,13 +67,13 @@ impl AppData {
             let name = group_info
                 .name
                 .as_ref()
-                .unwrap_or_else(|| &group_info.group_id)
+                .unwrap_or(&group_info.group_id)
                 .to_string();
             Channel {
                 id: group_info.group_id,
                 name,
                 is_group: true,
-                messages: Vec::new(),
+                messages: StatefulList::with_items(Vec::new()),
                 unread_messages: 0,
             }
         });
@@ -76,7 +85,7 @@ impl AppData {
             id: contact_info.phone_number,
             name: contact_info.name,
             is_group: false,
-            messages: Vec::new(),
+            messages: StatefulList::with_items(Vec::new()),
             unread_messages: 0,
         });
 
@@ -88,42 +97,32 @@ impl AppData {
             channels.state.select(Some(0));
         }
 
-        let messages: Vec<_> = channels
-            .state
-            .selected()
-            .and_then(|idx| channels.items.get(idx))
-            .map(|channel| &channel.messages[..])
-            .unwrap_or(&[])
-            .iter()
-            .map(|msg| Message {
-                from: msg.from.clone(),
-                message: msg.message.clone(),
-                attachments: msg.attachments.clone(),
-                arrived_at: msg.arrived_at,
-            })
-            .collect();
-
-        let mut messages = StatefulList::with_items(messages);
-        if !messages.items.is_empty() {
-            messages.state.select(Some(0));
-        }
+        let chanpos = ChannelPosition {
+            top: 0,
+            upside: 0,
+            // value will be initialized in main.rs
+            downside: 0,
+        };
 
         Ok(AppData {
             channels,
-            messages,
+            chanpos,
             input: String::new(),
             input_cursor: 0,
+            input_cursor_chars: 0,
         })
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Derivative, Serialize, Deserialize)]
+#[derivative(Debug)]
 pub struct Channel {
     /// Either phone number or group id
     pub id: String,
     pub name: String,
     pub is_group: bool,
-    pub messages: Vec<Message>,
+    #[derivative(Debug = "ignore")]
+    pub messages: StatefulList<Message>,
     #[serde(default)]
     pub unread_messages: usize,
 }
@@ -140,7 +139,8 @@ pub struct Message {
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
-pub enum Event<I> {
+pub enum Event<I, C> {
+    Click(C),
     Input(I),
     Message {
         /// used for debugging
@@ -148,21 +148,35 @@ pub enum Event<I> {
         /// some message if deserialized successfully
         message: Option<signal::Message>,
     },
-    Resize,
+    Resize {
+        cols: u16,
+        rows: u16,
+    },
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChannelPosition {
+    pub top: usize,    // list index of channel at top of viewport
+    pub upside: u16,   // number of rows between selected channel and top of viewport
+    pub downside: u16, // number of rows between selected channel and bottom of viewport
+}
+
+impl Default for ChannelPosition {
+    fn default() -> ChannelPosition {
+        ChannelPosition {
+            top: 0,
+            upside: 0,
+            downside: 0,
+        }
+    }
 }
 
 impl App {
-    pub fn try_new(verbose: bool) -> anyhow::Result<Self> {
+    pub fn try_new() -> anyhow::Result<Self> {
         let config_path = config::installed_config()
             .context("config file not found at one of the default locations")?;
         let config = config::load_from(&config_path)
             .with_context(|| format!("failed to read config from: {}", config_path.display()))?;
-
-        let log_file = if verbose {
-            Some(File::create("gurk.log").unwrap())
-        } else {
-            None
-        };
 
         let mut load_data_path = config.data_path.clone();
         if !load_data_path.exists() {
@@ -172,15 +186,22 @@ impl App {
             }
         }
 
-        let mut data = match AppData::load(&load_data_path) {
-            Ok(data) => data,
-            Err(_) => {
-                let client = signal::SignalClient::from_config(config.clone());
-                let data = AppData::init_from_signal(&client)?;
-                data.save(&config.data_path)?;
-                data
-            }
+        let mut data = AppData::load(&load_data_path).unwrap_or_default();
+
+        // merge saved data with remote data from signal
+        let remote_data = {
+            let client = signal::SignalClient::from_config(config.clone());
+            AppData::init_from_signal(&client)?
         };
+        let known_channel_ids: HashSet<String> =
+            data.channels.items.iter().map(|c| c.id.clone()).collect();
+        for channel in remote_data.channels.items {
+            if !known_channel_ids.contains(&channel.id) {
+                data.channels.items.push(channel)
+            }
+        }
+
+        // select the first channel if none is selected
         if data.channels.state.selected().is_none() && !data.channels.items.is_empty() {
             data.channels.state.select(Some(0));
             data.save(&config.data_path)?;
@@ -193,38 +214,34 @@ impl App {
             data,
             should_quit: false,
             signal_client,
-            log_file,
         })
+    }
+
+    pub fn put_char(&mut self, c: char) {
+        let idx = self.data.input_cursor;
+        self.data.input.insert(idx, c);
+        self.data.input_cursor += c.len_utf8();
+        self.data.input_cursor_chars += 1;
     }
 
     pub fn on_key(&mut self, key: KeyCode) {
         match key {
-            KeyCode::Char(c) => {
-                let mut idx = self.data.input_cursor;
-                while !self.data.input.is_char_boundary(idx) {
-                    idx += 1;
-                }
-                self.data.input.insert(idx, c);
-                self.data.input_cursor += 1;
-            }
+            KeyCode::Char('\r') => self.put_char('\n'),
+            KeyCode::Char(c) => self.put_char(c),
             KeyCode::Enter if !self.data.input.is_empty() => {
                 if let Some(idx) = self.data.channels.state.selected() {
                     self.send_input(idx)
                 }
             }
             KeyCode::Backspace => {
-                if self.data.input_cursor > 0
-                    && self.data.input_cursor < self.data.input.width() + 1
-                {
-                    self.data.input_cursor = self.data.input_cursor.saturating_sub(1);
-                    let idx = self
-                        .data
-                        .input
-                        .chars()
-                        .take(self.data.input_cursor)
-                        .map(|c| c.len_utf8())
-                        .sum();
+                if self.data.input_cursor > 0 {
+                    let mut idx = self.data.input_cursor - 1;
+                    while !self.data.input.is_char_boundary(idx) {
+                        idx -= 1;
+                    }
                     self.data.input.remove(idx);
+                    self.data.input_cursor = idx;
+                    self.data.input_cursor_chars -= 1;
                 }
             }
             _ => {}
@@ -236,6 +253,7 @@ impl App {
 
         let message: String = self.data.input.drain(..).collect();
         self.data.input_cursor = 0;
+        self.data.input_cursor_chars = 0;
 
         if !channel.is_group {
             signal::SignalClient::send_message(&message, &channel.id);
@@ -243,7 +261,7 @@ impl App {
             signal::SignalClient::send_group_message(&message, &channel.id);
         }
 
-        channel.messages.push(Message {
+        channel.messages.items.push(Message {
             from: self.config.user.name.clone(),
             message: Some(message),
             attachments: Vec::new(),
@@ -252,7 +270,6 @@ impl App {
 
         self.reset_unread_messages();
         self.bubble_up_channel(channel_idx);
-        self.load_messages();
         self.save().unwrap();
     }
 
@@ -260,27 +277,64 @@ impl App {
         if self.reset_unread_messages() {
             self.save().unwrap();
         }
+
+        // when list is about to cycle from top to bottom
+        if self.data.channels.state.selected() == Some(0) {
+            self.data.chanpos.top =
+                self.data.channels.items.len() - self.data.chanpos.downside as usize - 1;
+            self.data.chanpos.upside = self.data.chanpos.downside;
+            self.data.chanpos.downside = 0;
+        } else {
+            // viewport scrolls up in list
+            if self.data.chanpos.upside == 0 {
+                if self.data.chanpos.top > 0 {
+                    self.data.chanpos.top -= 1;
+                }
+            // select scrolls up in viewport
+            } else {
+                self.data.chanpos.upside -= 1;
+                self.data.chanpos.downside += 1;
+            }
+        }
+
         self.data.channels.previous();
-        self.load_messages();
     }
 
     pub fn on_down(&mut self) {
         if self.reset_unread_messages() {
             self.save().unwrap();
         }
+
+        // viewport scrolls down in list
+        if self.data.chanpos.downside == 0 {
+            self.data.chanpos.top += 1;
+        // select scrolls down in viewport
+        } else {
+            self.data.chanpos.upside += 1;
+            self.data.chanpos.downside -= 1;
+        }
+
         self.data.channels.next();
-        self.load_messages();
+
+        // when list has just cycled from bottom to top
+        if self.data.channels.state.selected() == Some(0) {
+            self.data.chanpos.top = 0;
+            self.data.chanpos.downside = self.data.chanpos.upside;
+            self.data.chanpos.upside = 0;
+        }
     }
 
     pub fn on_pgup(&mut self) {
-        self.data.messages.next();
+        let select = self.data.channels.state.selected().unwrap();
+        self.data.channels.items[select].messages.next();
     }
 
     pub fn on_pgdn(&mut self) {
-        self.data.messages.previous();
+        let select = self.data.channels.state.selected().unwrap();
+        self.data.channels.items[select].messages.previous();
     }
 
-    fn reset_unread_messages(&mut self) -> bool {
+    pub fn reset_unread_messages(&mut self) -> bool {
         if let Some(selected_idx) = self.data.channels.state.selected() {
             if self.data.channels.items[selected_idx].unread_messages > 0 {
                 self.data.channels.items[selected_idx].unread_messages = 0;
@@ -290,47 +344,24 @@ impl App {
         false
     }
 
-    pub fn on_left(&mut self) {
-        self.data.input_cursor = self.data.input_cursor.saturating_sub(1);
+    pub fn on_left(&mut self) -> Option<()> {
+        let mut idx = self.data.input_cursor.checked_sub(1)?;
+        while !self.data.input.is_char_boundary(idx) {
+            idx -= 1;
+        }
+        self.data.input_cursor = idx;
+        self.data.input_cursor_chars -= 1;
+        Some(())
     }
 
-    pub fn on_right(&mut self) {
-        if self.data.input_cursor < self.data.input.width() {
-            self.data.input_cursor += 1;
+    pub fn on_right(&mut self) -> Option<()> {
+        let mut idx = Some(self.data.input_cursor + 1).filter(|x| x <= &self.data.input.len())?;
+        while idx < self.data.input.len() && !self.data.input.is_char_boundary(idx) {
+            idx -= 1;
         }
-    }
-
-    #[allow(dead_code)]
-    pub fn log(&mut self, msg: impl AsRef<str>) {
-        if let Some(log_file) = &mut self.log_file {
-            writeln!(log_file, "{}", msg.as_ref()).unwrap();
-        }
-    }
-
-    pub fn load_messages(&mut self) {
-        let messages: Vec<_> = self
-            .data
-            .channels
-            .state
-            .selected()
-            .and_then(|idx| self.data.channels.items.get(idx))
-            .map(|channel| &channel.messages[..])
-            .unwrap_or(&[])
-            .iter()
-            .map(|msg| Message {
-                from: msg.from.clone(),
-                message: msg.message.clone(),
-                attachments: msg.attachments.clone(),
-                arrived_at: msg.arrived_at,
-            })
-            .collect();
-
-        let mut messages = StatefulList::with_items(messages);
-        if !messages.items.is_empty() {
-            messages.state.select(Some(0));
-        }
-
-        self.data.messages = messages;
+        self.data.input_cursor = idx;
+        self.data.input_cursor_chars += 1;
+        Some(())
     }
 
     pub async fn on_message(
@@ -338,7 +369,8 @@ impl App {
         message: Option<signal::Message>,
         payload: String,
     ) -> Option<()> {
-        self.log(format!("incoming: {} -> {:?}", payload, message));
+        log::info!("incoming: {} -> {:?}", payload, message);
+
         let mut message = message?;
 
         let mut msg: signal::InnerMessage = message
@@ -398,14 +430,32 @@ impl App {
                 id: channel_id.clone(),
                 name: channel_name,
                 is_group,
-                messages: Vec::new(),
+                messages: StatefulList::with_items(Vec::new()),
                 unread_messages: 0,
             });
             self.data.channels.items.len() - 1
         };
 
+        #[cfg(feature = "notifications")]
+        if let Some(text) = text.as_ref() {
+            use std::borrow::Cow;
+            let summary = self
+                .data
+                .channels
+                .items
+                .get(channel_idx)
+                .as_ref()
+                .filter(|_| is_group)
+                .map(|c| Cow::from(format!("{} in {}", name, c.name)))
+                .unwrap_or_else(|| Cow::from(&name));
+            if let Err(e) = Notification::new().summary(&summary).body(&text).show() {
+                log::error!("failed to send notification: {}", e);
+            }
+        }
+
         self.data.channels.items[channel_idx]
             .messages
+            .items
             .push(Message {
                 from: name,
                 message: text,
@@ -419,7 +469,6 @@ impl App {
         }
 
         self.bubble_up_channel(channel_idx);
-        self.load_messages();
         self.save().unwrap();
 
         Some(())
@@ -446,7 +495,7 @@ impl App {
 
         if let Some(name) = name.as_ref() {
             for channel in self.data.channels.items.iter_mut() {
-                for message in channel.messages.iter_mut() {
+                for message in channel.messages.items.iter_mut() {
                     if message.from == phone_number {
                         message.from = name.clone();
                     }
@@ -464,7 +513,7 @@ impl App {
                 id: phone_number,
                 name: name.clone(),
                 is_group: false,
-                messages: Vec::new(),
+                messages: StatefulList::with_items(Vec::new()),
                 unread_messages: 0,
             })
         }

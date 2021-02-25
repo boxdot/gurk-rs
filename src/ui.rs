@@ -56,27 +56,42 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
 
 fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let text_width = area.width.saturating_sub(2) as usize;
-    let lines = app
-        .data
-        .input
-        .chars()
-        .enumerate()
-        .fold(Vec::new(), |mut lines, (idx, c)| {
-            if idx % text_width == 0 {
-                lines.push(String::new())
-            }
-            lines.last_mut().unwrap().push(c);
-            lines
-        });
+    let lines: Vec<String> =
+        app.data
+            .input
+            .chars()
+            .enumerate()
+            .fold(Vec::new(), |mut lines, (idx, c)| {
+                if idx % text_width == 0 {
+                    lines.push(String::new());
+                }
+                match c {
+                    '\n' => {
+                        lines.last_mut().unwrap().push('\n');
+                        lines.push(String::new())
+                    }
+                    _ => lines.last_mut().unwrap().push(c),
+                }
+                lines
+            });
+    // chars since newline on `cursor_y` line
+    let mut cursor_x = app.data.input_cursor_chars;
+    // line selected by `app.data.input_cursor`
+    let mut cursor_y = 0;
+    for string in &lines {
+        cursor_y += 1;
+        match string.len().cmp(&cursor_x) {
+            std::cmp::Ordering::Less => cursor_x -= string.width(),
+            _ => break,
+        };
+    }
     let num_input_lines = lines.len().max(1);
     let input: Vec<Spans> = lines.into_iter().map(Spans::from).collect();
-    let extra_cursor_line = if app.data.input_cursor > 0 && app.data.input_cursor % text_width == 0
-    {
+    let extra_cursor_line = if cursor_x > 0 && cursor_x % text_width == 0 {
         1
     } else {
         0
     };
-
     let chunks = Layout::default()
         .constraints(
             [
@@ -95,14 +110,21 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     f.render_widget(input, chunks[1]);
     f.set_cursor(
         // Put cursor past the end of the input text
-        chunks[1].x + ((app.data.input_cursor as u16) % text_width as u16) + 1,
+        chunks[1].x + ((cursor_x as u16) % text_width as u16) + 1,
         // Move one line down, from the border to the input line
-        chunks[1].y + (app.data.input_cursor as u16 / (text_width as u16)) + 1,
+        chunks[1].y + (cursor_x as u16 / (text_width as u16)) + cursor_y.max(1) as u16,
     );
 }
 
 fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
-    let messages: &Vec<app::Message> = &app.data.messages.items;
+    let messages = app
+        .data
+        .channels
+        .state
+        .selected()
+        .and_then(|idx| app.data.channels.items.get(idx))
+        .map(|channel| &channel.messages.items[..])
+        .unwrap_or(&[]);
 
     let max_username_width = messages
         .iter()
@@ -136,12 +158,14 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
         let prefix_width = (time.width() + from.width() + delimeter.width()) as u16;
         let indent = " ".repeat(prefix_width.into());
-        let lines = textwrap::wrap_iter(
-            displayed_message.as_str(),
-            width.saturating_sub(prefix_width).into(),
-        );
+
+        let wrap_opts = textwrap::Options::new(width.into())
+            .initial_indent(&indent)
+            .subsequent_indent(&indent);
+        let lines = textwrap::wrap(displayed_message.as_str(), wrap_opts);
 
         let spans: Vec<Spans> = lines
+            .into_iter()
             .enumerate()
             .map(|(idx, line)| {
                 let res = if idx == 0 {
@@ -149,10 +173,10 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
                         time.clone(),
                         from.clone(),
                         delimeter.clone(),
-                        Span::from(line.to_string()),
+                        Span::from(line.strip_prefix(&indent).unwrap().to_string()),
                     ]
                 } else {
-                    vec![Span::from(format!("{}{}", indent, line))]
+                    vec![Span::from(line.to_string())]
                 };
                 Spans::from(res)
             })
@@ -179,7 +203,14 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         .style(Style::default().fg(Color::White))
         .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray))
         .start_corner(Corner::BottomLeft);
-    f.render_stateful_widget(list, area, &mut app.data.messages.state);
+
+    let selected = app.data.channels.state.selected().unwrap();
+
+    f.render_stateful_widget(
+        list,
+        area,
+        &mut app.data.channels.items[selected].messages.state,
+    );
 }
 
 // Randomly but deterministically choose a color for a username

@@ -9,11 +9,10 @@ pub struct StatefulList<T> {
 }
 
 impl<T> Default for StatefulList<T> {
-    fn default() -> StatefulList<T> {
-        let items = Vec::default();
-        StatefulList {
-            state: ListState::default(),
-            items,
+    fn default() -> Self {
+        Self {
+            state: Default::default(),
+            items: Vec::new(),
         }
     }
 }
