@@ -1,4 +1,5 @@
 use crate::signal;
+use crate::util;
 use crate::{app, App};
 
 use anyhow::Context;
@@ -204,13 +205,26 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray))
         .start_corner(Corner::BottomLeft);
 
-    let selected = app.data.channels.state.selected().unwrap();
+    let selected = app.data.channels.state.selected().unwrap_or_default();
 
-    f.render_stateful_widget(
-        list,
-        area,
-        &mut app.data.channels.items[selected].messages.state,
-    );
+    let init = &mut app::Channel {
+        id: "default".to_string(),
+        name: " ".to_string(),
+        is_group: false,
+        messages: util::StatefulList::with_items(Vec::new()),
+        unread_messages: 0,
+    };
+
+    let state = &mut app
+        .data
+        .channels
+        .items
+        .get_mut(selected)
+        .unwrap_or(init)
+        .messages
+        .state;
+
+    f.render_stateful_widget(list, area, state);
 }
 
 // Randomly but deterministically choose a color for a username

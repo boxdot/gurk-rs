@@ -315,12 +315,12 @@ impl App {
     }
 
     pub fn on_pgup(&mut self) {
-        let select = self.data.channels.state.selected().unwrap();
+        let select = self.data.channels.state.selected().unwrap_or_default();
         self.data.channels.items[select].messages.next();
     }
 
     pub fn on_pgdn(&mut self) {
-        let select = self.data.channels.state.selected().unwrap();
+        let select = self.data.channels.state.selected().unwrap_or_default();
         self.data.channels.items[select].messages.previous();
     }
 
