@@ -122,9 +122,29 @@ pub struct Channel {
     pub name: String,
     pub is_group: bool,
     #[derivative(Debug = "ignore")]
+    #[serde(serialize_with = "Channel::serialize_msgs")]
+    #[serde(deserialize_with = "Channel::deserialize_msgs")]
     pub messages: StatefulList<Message>,
     #[serde(default)]
     pub unread_messages: usize,
+}
+
+impl Channel {
+    fn serialize_msgs<S>(messages: &StatefulList<Message>, ser: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        // the messages StatefulList becomes the vec that was messages.items
+        messages.items.serialize(ser)
+    }
+
+    fn deserialize_msgs<'de, D>(deserializer: D) -> Result<StatefulList<Message>, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        let tmp: Vec<Message> = serde::de::Deserialize::deserialize(deserializer)?;
+        Ok(StatefulList::with_items(tmp))
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
