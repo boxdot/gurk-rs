@@ -141,10 +141,12 @@ async fn main() -> anyhow::Result<()> {
                 },
                 MouseEvent::ScrollUp(col, _, _) => match col {
                     col if col < terminal.get_frame().size().width / 4 => app.on_up(),
+                    col if col > terminal.get_frame().size().width / 4 => app.on_pgup(),
                     _ => {}
                 },
                 MouseEvent::ScrollDown(col, _, _) => match col {
                     col if col < terminal.get_frame().size().width / 4 => app.on_down(),
+                    col if col > terminal.get_frame().size().width / 4 => app.on_pgdn(),
                     _ => {}
                 },
                 _ => {}
@@ -161,6 +163,8 @@ async fn main() -> anyhow::Result<()> {
                     app.on_right();
                 }
                 KeyCode::Down => app.on_down(),
+                KeyCode::PageUp => app.on_pgup(),
+                KeyCode::PageDown => app.on_pgdn(),
                 code => app.on_key(code),
             },
             Some(Event::Message { payload, message }) => {

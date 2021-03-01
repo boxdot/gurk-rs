@@ -17,6 +17,7 @@ anyhow = "1.0.38"
 base64 = "0.13.0"
 chrono = { version = "0.4.19", features = ["serde"] }
 crossterm = { version = "0.18.2", features = ["event-stream"] }
+derivative = "2.2.0"
 dirs = "3.0.1"
 itertools = "0.10.0"
 log = "0.4.14"

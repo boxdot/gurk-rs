@@ -5,6 +5,7 @@ use crate::util::StatefulList;
 use anyhow::Context;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use crossterm::event::KeyCode;
+use derivative::Derivative;
 use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthStr;
 
@@ -72,7 +73,7 @@ impl AppData {
                 id: group_info.group_id,
                 name,
                 is_group: true,
-                messages: Vec::new(),
+                messages: StatefulList::with_items(Vec::new()),
                 unread_messages: 0,
             }
         });
@@ -84,7 +85,7 @@ impl AppData {
             id: contact_info.phone_number,
             name: contact_info.name,
             is_group: false,
-            messages: Vec::new(),
+            messages: StatefulList::with_items(Vec::new()),
             unread_messages: 0,
         });
 
@@ -113,15 +114,37 @@ impl AppData {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Derivative, Serialize, Deserialize)]
+#[derivative(Debug)]
 pub struct Channel {
     /// Either phone number or group id
     pub id: String,
     pub name: String,
     pub is_group: bool,
-    pub messages: Vec<Message>,
+    #[derivative(Debug = "ignore")]
+    #[serde(serialize_with = "Channel::serialize_msgs")]
+    #[serde(deserialize_with = "Channel::deserialize_msgs")]
+    pub messages: StatefulList<Message>,
     #[serde(default)]
     pub unread_messages: usize,
+}
+
+impl Channel {
+    fn serialize_msgs<S>(messages: &StatefulList<Message>, ser: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        // the messages StatefulList becomes the vec that was messages.items
+        messages.items.serialize(ser)
+    }
+
+    fn deserialize_msgs<'de, D>(deserializer: D) -> Result<StatefulList<Message>, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        let tmp: Vec<Message> = serde::de::Deserialize::deserialize(deserializer)?;
+        Ok(StatefulList::with_items(tmp))
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -248,7 +271,7 @@ impl App {
             signal::SignalClient::send_group_message(&message, &channel.id);
         }
 
-        channel.messages.push(Message {
+        channel.messages.items.push(Message {
             from: self.config.user.name.clone(),
             message: Some(message),
             attachments: Vec::new(),
@@ -309,6 +332,16 @@ impl App {
             self.data.chanpos.downside = self.data.chanpos.upside;
             self.data.chanpos.upside = 0;
         }
+    }
+
+    pub fn on_pgup(&mut self) {
+        let select = self.data.channels.state.selected().unwrap_or_default();
+        self.data.channels.items[select].messages.next();
+    }
+
+    pub fn on_pgdn(&mut self) {
+        let select = self.data.channels.state.selected().unwrap_or_default();
+        self.data.channels.items[select].messages.previous();
     }
 
     pub fn reset_unread_messages(&mut self) -> bool {
@@ -423,7 +456,7 @@ impl App {
                 id: channel_id.clone(),
                 name: channel_name,
                 is_group,
-                messages: Vec::new(),
+                messages: StatefulList::with_items(Vec::new()),
                 unread_messages: 0,
             });
             self.data.channels.items.len() - 1
@@ -450,6 +483,7 @@ impl App {
 
         self.data.channels.items[channel_idx]
             .messages
+            .items
             .push(Message {
                 from: name,
                 message: text,
@@ -489,7 +523,7 @@ impl App {
 
         if let Some(name) = name.as_ref() {
             for channel in self.data.channels.items.iter_mut() {
-                for message in channel.messages.iter_mut() {
+                for message in channel.messages.items.iter_mut() {
                     if message.from == phone_number {
                         message.from = name.clone();
                     }
@@ -507,7 +541,7 @@ impl App {
                 id: phone_number,
                 name: name.clone(),
                 is_group: false,
-                messages: Vec::new(),
+                messages: StatefulList::with_items(Vec::new()),
                 unread_messages: 0,
             })
         }
