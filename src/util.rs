@@ -1,3 +1,4 @@
+use chrono::{DateTime, NaiveDateTime, TimeZone as _, Utc};
 use serde::{Deserialize, Serialize};
 use tui::widgets::ListState;
 
@@ -64,4 +65,9 @@ impl<T> StatefulList<T> {
         };
         self.state.select(Some(i));
     }
+}
+
+pub fn timestamp_msec_to_utc(timestamp: u64) -> DateTime<Utc> {
+    let dt = NaiveDateTime::from_timestamp(timestamp as i64 / 1000, (timestamp % 1000) as u32);
+    Utc.from_utc_datetime(&dt)
 }

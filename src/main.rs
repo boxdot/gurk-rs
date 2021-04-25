@@ -225,9 +225,7 @@ async fn main() -> anyhow::Result<()> {
             Some(Event::Message { payload, message }) => {
                 app.on_message(message, payload).await;
             }
-            Some(Event::PresageMessage(content)) => {
-                log::info!("Incoming message: {:?}", content);
-            }
+            Some(Event::PresageMessage(content)) => app.on_pressage_message(content),
             Some(Event::Channels { remote }) => app.on_channels(remote),
             Some(Event::Resize { cols: _, rows }) => match rows {
                 // terminal too narrow for mouse navigation
