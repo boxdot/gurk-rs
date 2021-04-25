@@ -8,6 +8,7 @@ use crossterm::event::KeyCode;
 use derivative::Derivative;
 use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthStr;
+use uuid::Uuid;
 
 #[cfg(feature = "notifications")]
 use notify_rust::Notification;
@@ -120,7 +121,7 @@ impl AppData {
 #[derivative(Debug)]
 pub struct Channel {
     /// Either phone number or group id
-    pub id: String,
+    pub id: String, // TODO: replace by UUID (groups v1 are gone)
     pub name: String,
     pub is_group: bool,
     #[derivative(Debug = "ignore")]
@@ -151,6 +152,7 @@ impl Channel {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Message {
+    pub from_id: Uuid,
     pub from: String,
     #[serde(alias = "text")] // remove
     pub message: Option<String>,
@@ -325,6 +327,7 @@ impl App {
         }
 
         channel.messages.items.push(Message {
+            from_id: self.signal_manager.uuid(),
             from: self.config.user.name.clone(),
             message: Some(message),
             attachments: Vec::new(),
@@ -522,6 +525,84 @@ impl App {
         }
     }
 
+    pub fn on_pressage_message(&mut self, content: libsignal_service::content::Content) {
+        use libsignal_service::content::{ContentBody, SyncMessage};
+        use libsignal_service::proto::sync_message::Sent;
+        use libsignal_service::proto::DataMessage;
+
+        log::info!("incoming: {:?}", content);
+
+        let self_uuid = self.signal_manager.uuid();
+
+        match content.body {
+            // Note message
+            ContentBody::SynchronizeMessage(SyncMessage {
+                sent:
+                    Some(Sent {
+                        destination_uuid: Some(destination_uuid),
+                        timestamp: Some(timestamp),
+                        message:
+                            Some(DataMessage {
+                                body: Some(text), ..
+                            }),
+                        ..
+                    }),
+                ..
+            }) if destination_uuid.parse() == Ok(self_uuid) => {
+                let channel_idx = self.ensure_channel_exists(
+                    self_uuid.to_string(),
+                    self.config.user.name.clone(),
+                    false,
+                );
+                let message = Message {
+                    from_id: self_uuid,
+                    from: self.config.user.name.clone(),
+                    message: Some(text),
+                    attachments: Default::default(),
+                    arrived_at: crate::util::timestamp_msec_to_utc(timestamp),
+                };
+                self.add_message_to_channel(channel_idx, message);
+            }
+            _ => return,
+        };
+    }
+
+    fn ensure_channel_exists(&mut self, id: String, name: String, is_group: bool) -> usize {
+        if let Some(channel_idx) = self
+            .data
+            .channels
+            .items
+            .iter_mut()
+            .position(|channel| channel.id == id)
+        {
+            channel_idx
+        } else {
+            self.data.channels.items.push(Channel {
+                id,
+                name,
+                is_group,
+                messages: StatefulList::with_items(Vec::new()),
+                unread_messages: 0,
+            });
+            self.data.channels.items.len() - 1
+        }
+    }
+
+    fn add_message_to_channel(&mut self, channel_idx: usize, message: Message) {
+        self.data.channels.items[channel_idx]
+            .messages
+            .items
+            .push(message);
+        if self.data.channels.state.selected() != Some(channel_idx) {
+            self.data.channels.items[channel_idx].unread_messages += 1;
+        } else {
+            self.reset_unread_messages();
+        }
+
+        self.bubble_up_channel(channel_idx);
+        self.save().unwrap();
+    }
+
     pub async fn on_message(
         &mut self,
         message: Option<signal::Message>,
@@ -618,6 +699,7 @@ impl App {
             .messages
             .items
             .push(Message {
+                from_id: Default::default(),
                 from: name,
                 message: text,
                 attachments,

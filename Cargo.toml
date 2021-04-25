@@ -41,6 +41,7 @@ futures-util = { version = "0.3.14", default-features = false }
 libsignal-protocol = { git = "https://github.com/Michael-F-Bryan/libsignal-protocol-rs" }
 libsignal-service = { git = "https://github.com/Michael-F-Bryan/libsignal-service-rs" }
 presage = { git = "https://github.com/whisperfish/presage.git", branch = "main" }
+uuid = "0.8.2"
 
 [features]
 notifications = ["notify-rust"]
