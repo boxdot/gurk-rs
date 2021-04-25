@@ -8,6 +8,7 @@ mod util;
 
 use app::{App, Event};
 
+use anyhow::Context as _;
 use crossterm::{
     event::{
         DisableMouseCapture, EnableMouseCapture, Event as CEvent, EventStream, KeyCode,
@@ -16,6 +17,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use futures_util::Stream;
 use log::error;
 use structopt::StructOpt;
 use tokio_stream::StreamExt;
@@ -48,6 +50,21 @@ fn init_file_logger() -> anyhow::Result<()> {
     Ok(())
 }
 
+async fn init_messages_stream(
+    store: presage::config::SledConfigStore,
+) -> anyhow::Result<impl Stream<Item = libsignal_service::content::Content>> {
+    let context =
+        libsignal_protocol::Context::new(libsignal_protocol::crypto::DefaultCrypto::default())
+            .context("failed to initialize signal crypto")?;
+    let manager = presage::Manager::with_config_store(store, context)
+        .context("failed to init signal manager")?;
+    let messages = manager
+        .receive_messages_stream()
+        .await
+        .context("failed to initialize messages stream")?;
+    Ok(messages)
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::from_args();
@@ -55,7 +72,7 @@ async fn main() -> anyhow::Result<()> {
         init_file_logger()?;
     }
 
-    let mut app = App::try_new()?;
+    let mut app = App::try_new().await?;
 
     enable_raw_mode()?;
     let _raw_mode_guard = scopeguard::guard((), |_| {
@@ -65,7 +82,7 @@ async fn main() -> anyhow::Result<()> {
     let mut stdout = std::io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
 
-    let (tx, mut rx) = tokio::sync::mpsc::channel(100);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<Event<_, _>>(100);
     tokio::spawn({
         let tx = tx.clone();
         async move {
@@ -89,28 +106,45 @@ async fn main() -> anyhow::Result<()> {
 
     app.data.chanpos.downside = terminal.get_frame().size().height - 3;
 
-    let signal_client = signal::SignalClient::from_config(app.config.clone());
-    tokio::spawn(async move {
-        // load data from signal asynchronously
-        let remote_channels = tokio::task::spawn_blocking({
-            let client = signal_client.clone();
-            move || {
-                app::AppData::init_from_signal(&client)
-                    .map(|remote_data| remote_data.channels.items)
-            }
-        })
-        .await;
+    let local_store = app.signal_manager.config_store.clone();
+    let local_rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    std::thread::spawn(move || {
+        let local = tokio::task::LocalSet::new();
+        local.spawn_local(async move {
+            // load data from signal asynchronously
+            // let remote_channels = tokio::task::spawn_blocking({
+            //     let manager = signal_manager.clone();
+            //     move || {
+            //         app::AppData::init_from_signal(&manager)
+            //             .map(|remote_data| remote_data.channels.items)
+            //     }
+            // })
+            // .await;
+            // match remote_channels {
+            //     Ok(Ok(remote)) => {
+            //         let _ = tx.send(Event::Channels { remote }).await;
+            //     }
+            //     Ok(Err(e)) => error!("failed to load channel from server: {}", e),
+            //     Err(e) => unreachable!(e.to_string()),
+            // }
 
-        match remote_channels {
-            Ok(Ok(remote)) => {
-                let _ = tx.send(Event::Channels { remote }).await;
-            }
-            Ok(Err(e)) => error!("failed to load channel from server: {}", e),
-            Err(e) => unreachable!(e.to_string()),
-        }
+            let messages = match init_messages_stream(local_store).await {
+                Ok(messages) => messages,
+                Err(e) => {
+                    tx.send(Event::Quit(Some(e.into()))).await.unwrap();
+                    return;
+                }
+            };
+            futures_util::pin_mut!(messages);
 
-        // listen to incoming messages
-        signal_client.stream_messages(tx).await
+            while let Some(message) = messages.next().await {
+                tx.send(Event::PresageMessage(message)).await.unwrap()
+            }
+        });
+        local_rt.block_on(local);
     });
 
     terminal.clear()?;
@@ -191,6 +225,9 @@ async fn main() -> anyhow::Result<()> {
             Some(Event::Message { payload, message }) => {
                 app.on_message(message, payload).await;
             }
+            Some(Event::PresageMessage(content)) => {
+                log::info!("Incoming message: {:?}", content);
+            }
             Some(Event::Channels { remote }) => app.on_channels(remote),
             Some(Event::Resize { cols: _, rows }) => match rows {
                 // terminal too narrow for mouse navigation
@@ -234,6 +271,12 @@ async fn main() -> anyhow::Result<()> {
                 // will just redraw the app
                 _ => {}
             },
+            Some(Event::Quit(e)) => {
+                if let Some(e) = e {
+                    error!("fatal error: {}", e);
+                };
+                app.should_quit = true;
+            }
             None => {
                 break;
             }
