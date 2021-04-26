@@ -6,8 +6,11 @@ use anyhow::Context;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
 use derivative::Derivative;
-use libsignal_service::content::ContentBody;
-use libsignal_service::proto::DataMessage;
+use libsignal_service::{
+    content::{ContentBody, Metadata},
+    ServiceAddress,
+};
+use libsignal_service::{prelude::phonenumber::PhoneNumber, proto::DataMessage};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use unicode_width::UnicodeWidthStr;
@@ -16,9 +19,9 @@ use uuid::Uuid;
 #[cfg(feature = "notifications")]
 use notify_rust::Notification;
 
-use std::collections::HashSet;
 use std::fs::File;
 use std::path::Path;
+use std::{collections::HashSet, convert::TryInto};
 
 pub struct App {
     pub config: Config,
@@ -481,7 +484,7 @@ impl App {
         }
     }
 
-    pub fn on_pressage_message(&mut self, content: libsignal_service::content::Content) {
+    pub async fn on_pressage_message(&mut self, content: libsignal_service::content::Content) {
         use libsignal_service::content::SyncMessage;
         use libsignal_service::proto::sync_message::Sent;
 
@@ -489,29 +492,59 @@ impl App {
 
         let self_uuid = self.signal_manager.uuid();
 
-        match content.body {
-            // Note message
-            ContentBody::SynchronizeMessage(SyncMessage {
-                sent:
-                    Some(Sent {
-                        destination_uuid: Some(destination_uuid),
-                        timestamp: Some(timestamp),
-                        message:
-                            Some(DataMessage {
-                                body: Some(text), ..
-                            }),
-                        ..
-                    }),
-                ..
-            }) if destination_uuid.parse() == Ok(self_uuid) => {
-                let channel_idx = self.ensure_channel_exists(
-                    self_uuid.to_string(),
-                    self.config.user.name.clone(),
-                    false,
-                );
+        match (content.metadata, content.body) {
+            // Private note message
+            (
+                _,
+                ContentBody::SynchronizeMessage(SyncMessage {
+                    sent:
+                        Some(Sent {
+                            destination_uuid: Some(destination_uuid),
+                            timestamp: Some(timestamp),
+                            message:
+                                Some(DataMessage {
+                                    body: Some(text), ..
+                                }),
+                            ..
+                        }),
+                    ..
+                }),
+            ) if destination_uuid.parse() == Ok(self_uuid) => {
+                let channel_idx = self.ensure_own_channel_exists();
                 let message = Message {
                     from_id: self_uuid,
                     from: self.config.user.name.clone(),
+                    message: Some(text),
+                    attachments: Default::default(),
+                    arrived_at: crate::util::timestamp_msec_to_utc(timestamp),
+                };
+                self.add_message_to_channel(channel_idx, message);
+            }
+            // Direct message
+            (
+                Metadata {
+                    sender:
+                        ServiceAddress {
+                            uuid: Some(uuid),
+                            phonenumber: Some(phone_number),
+                            ..
+                        },
+                    ..
+                },
+                ContentBody::DataMessage(DataMessage {
+                    body: Some(text),
+                    group_v2: None,
+                    timestamp: Some(timestamp),
+                    profile_key: Some(profile_key),
+                    ..
+                }),
+            ) => {
+                let channel_idx = self
+                    .ensure_contact_channel_exists(uuid, profile_key, phone_number)
+                    .await;
+                let message = Message {
+                    from_id: self_uuid,
+                    from: self.data.channels.items[channel_idx].name.clone(),
                     message: Some(text),
                     attachments: Default::default(),
                     arrived_at: crate::util::timestamp_msec_to_utc(timestamp),
@@ -522,20 +555,55 @@ impl App {
         };
     }
 
-    fn ensure_channel_exists(&mut self, id: String, name: String, is_group: bool) -> usize {
+    fn ensure_own_channel_exists(&mut self) -> usize {
+        let self_uuid = self.signal_manager.uuid().to_string();
         if let Some(channel_idx) = self
             .data
             .channels
             .items
             .iter_mut()
-            .position(|channel| channel.id == id)
+            .position(|channel| channel.id == self_uuid)
         {
             channel_idx
         } else {
             self.data.channels.items.push(Channel {
-                id,
+                id: self_uuid,
+                name: self.config.user.name.clone(),
+                is_group: false,
+                messages: StatefulList::with_items(Vec::new()),
+                unread_messages: 0,
+            });
+            self.data.channels.items.len() - 1
+        }
+    }
+
+    async fn ensure_contact_channel_exists(
+        &mut self,
+        uuid: Uuid,
+        profile_key: Vec<u8>,
+        fallback_name: impl std::fmt::Display,
+    ) -> usize {
+        let uuid_str = uuid.to_string();
+        if let Some(channel_idx) = self
+            .data
+            .channels
+            .items
+            .iter_mut()
+            .position(|channel| channel.id == uuid_str)
+        {
+            channel_idx
+        } else {
+            let name = match profile_key.try_into() {
+                Ok(key) => signal::contact_name(&self.signal_manager, uuid, key)
+                    .await
+                    .unwrap_or_else(|| fallback_name.to_string()),
+                Err(_) => fallback_name.to_string(),
+            };
+
+            self.data.channels.items.push(Channel {
+                id: uuid_str,
                 name,
-                is_group,
+                is_group: false,
                 messages: StatefulList::with_items(Vec::new()),
                 unread_messages: 0,
             });
