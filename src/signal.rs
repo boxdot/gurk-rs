@@ -22,45 +22,6 @@ pub struct SignalClient {
 /// Signal Manager backed by a `sled` store.
 pub type Manager = presage::Manager<presage::config::SledConfigStore>;
 
-/// Spawns a thread with local message sender to Signal.
-///
-/// Note: We cannot use `tokio::spawn` directly, since `presage::Manager` does not implement `Send`.
-pub fn spawn_message_sender(
-    config_store: presage::config::SledConfigStore,
-) -> mpsc::UnboundedSender<(Vec<Uuid>, ContentBody, u64)> {
-    let (message_tx, mut message_rx) = mpsc::unbounded_channel::<(Vec<Uuid>, ContentBody, u64)>();
-    std::thread::spawn(move || {
-        let local_rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        let local = tokio::task::LocalSet::new();
-        local.spawn_local(async move {
-            let signal_context = libsignal_protocol::Context::new(
-                libsignal_protocol::crypto::DefaultCrypto::default(),
-            )
-            .unwrap();
-            let manager =
-                presage::Manager::with_config_store(config_store, signal_context).unwrap();
-            while let Some((recipients, message, timestamp)) = message_rx.recv().await {
-                if recipients.len() != 1 {
-                    warn!(
-                        "atm we only support a single recipient, got: {}",
-                        recipients.len()
-                    );
-                    continue;
-                }
-                let recipient = recipients[0];
-                if let Err(e) = manager.send_message(recipient, message, timestamp).await {
-                    error!("failed to send message: {}", e);
-                }
-            }
-        });
-        local_rt.block_on(local);
-    });
-    message_tx
-}
-
 fn get_signal_manager() -> anyhow::Result<Manager> {
     let data_dir = config::default_data_dir();
     let db_path = data_dir.join("signal-db");
