@@ -2,32 +2,29 @@ use crate::config::{self, Config};
 use crate::signal;
 use crate::util::StatefulList;
 
-use anyhow::Context;
-use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, Utc};
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
 use derivative::Derivative;
-use libsignal_service::proto::DataMessage;
 use libsignal_service::{
     content::{ContentBody, Metadata},
     ServiceAddress,
 };
+use libsignal_service::{prelude::Content, proto::DataMessage};
 use log::error;
 use notify_rust::Notification;
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc;
 use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
 
+use std::convert::TryInto;
 use std::fs::File;
 use std::path::Path;
-use std::{collections::HashSet, convert::TryInto};
 
 pub struct App {
     pub config: Config,
     pub should_quit: bool,
     pub signal_manager: signal::Manager,
     pub data: AppData,
-    events_tx: mpsc::Sender<Event>,
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -58,60 +55,6 @@ impl AppData {
         data.input_cursor = data.input.len();
         data.input_cursor_chars = data.input.width();
         Ok(data)
-    }
-
-    pub fn init_from_signal(client: &signal::SignalClient) -> anyhow::Result<Self> {
-        let groups = client
-            .get_groups()
-            .context("failed to fetch groups from signal")?;
-        let group_channels = groups.into_iter().map(|group_info| {
-            let name = group_info
-                .name
-                .as_ref()
-                .unwrap_or(&group_info.group_id)
-                .to_string();
-            Channel {
-                id: group_info.group_id,
-                name,
-                is_group: true,
-                messages: StatefulList::with_items(Vec::new()),
-                unread_messages: 0,
-            }
-        });
-
-        let contacts = client
-            .get_contacts()
-            .context("failed to fetch contact from signal")?;
-        let contact_channels = contacts.into_iter().map(|contact_info| Channel {
-            id: contact_info.phone_number,
-            name: contact_info.name,
-            is_group: false,
-            messages: StatefulList::with_items(Vec::new()),
-            unread_messages: 0,
-        });
-
-        let mut channels: Vec<_> = group_channels.chain(contact_channels).collect();
-        channels.sort_unstable_by(|a, b| a.name.cmp(&b.name));
-
-        let mut channels = StatefulList::with_items(channels);
-        if !channels.items.is_empty() {
-            channels.state.select(Some(0));
-        }
-
-        let chanpos = ChannelPosition {
-            top: 0,
-            upside: 0,
-            // value will be initialized in main.rs
-            downside: 0,
-        };
-
-        Ok(AppData {
-            channels,
-            chanpos,
-            input: String::new(),
-            input_cursor: 0,
-            input_cursor_chars: 0,
-        })
     }
 }
 
@@ -164,20 +107,8 @@ pub struct Message {
 pub enum Event {
     Click(MouseEvent),
     Input(KeyEvent),
-    Channels {
-        remote: Vec<Channel>,
-    },
-    Message {
-        /// used for debugging
-        payload: String,
-        /// some message if deserialized successfully
-        message: Option<signal::Message>,
-    },
-    PresageMessage(libsignal_service::content::Content),
-    Resize {
-        cols: u16,
-        rows: u16,
-    },
+    Message(libsignal_service::content::Content),
+    Resize { cols: u16, rows: u16 },
     Quit(Option<anyhow::Error>),
 }
 
@@ -199,7 +130,7 @@ impl Default for ChannelPosition {
 }
 
 impl App {
-    pub async fn try_new(events_tx: mpsc::Sender<Event>) -> anyhow::Result<Self> {
+    pub async fn try_new() -> anyhow::Result<Self> {
         let (signal_manager, config) = signal::ensure_linked_device().await?;
 
         let mut load_data_path = config.data_path.clone();
@@ -223,7 +154,6 @@ impl App {
             data,
             should_quit: false,
             signal_manager,
-            events_tx,
         })
     }
 
@@ -468,22 +398,7 @@ impl App {
         }
     }
 
-    pub fn on_channels(&mut self, remote_channels: Vec<Channel>) {
-        let known_channel_ids: HashSet<String> = self
-            .data
-            .channels
-            .items
-            .iter()
-            .map(|c| c.id.clone())
-            .collect();
-        for channel in remote_channels {
-            if !known_channel_ids.contains(&channel.id) {
-                self.data.channels.items.push(channel)
-            }
-        }
-    }
-
-    pub async fn on_pressage_message(&mut self, content: libsignal_service::content::Content) {
+    pub async fn on_message(&mut self, content: Content) {
         use libsignal_service::content::SyncMessage;
         use libsignal_service::proto::sync_message::Sent;
 
@@ -666,166 +581,6 @@ impl App {
 
         self.bubble_up_channel(channel_idx);
         self.save().unwrap();
-    }
-
-    pub async fn on_message(
-        &mut self,
-        message: Option<signal::Message>,
-        payload: String,
-    ) -> Option<()> {
-        log::info!("incoming: {} -> {:?}", payload, message);
-
-        let mut message = message?;
-
-        let mut msg: signal::InnerMessage = message
-            .envelope
-            .sync_message
-            .take()
-            .map(|m| m.sent_message)
-            .or_else(|| message.envelope.data_message.take())?;
-
-        // message text + attachments paths
-        let text = msg.message.take();
-        let attachments = msg.attachments.take().unwrap_or_default();
-        if text.is_none() && attachments.is_empty() {
-            return None;
-        }
-
-        let is_from_me = message.envelope.source == self.config.user.phone_number;
-        let channel_id = msg
-            .group_info
-            .as_ref()
-            .map(|g| g.group_id.as_str())
-            .or_else(|| {
-                if is_from_me {
-                    msg.destination.as_deref()
-                } else {
-                    Some(message.envelope.source.as_str())
-                }
-            })?
-            .to_string();
-        let is_group = msg.group_info.is_some();
-
-        let arrived_at = NaiveDateTime::from_timestamp(
-            message.envelope.timestamp as i64 / 1000,
-            (message.envelope.timestamp % 1000) as u32,
-        );
-        let arrived_at = Utc.from_utc_datetime(&arrived_at);
-
-        let name = self
-            .resolve_contact_name(message.envelope.source.clone())
-            .await;
-
-        let channel_idx = if let Some(channel_idx) = self
-            .data
-            .channels
-            .items
-            .iter_mut()
-            .position(|channel| channel.id == channel_id && channel.is_group == is_group)
-        {
-            channel_idx
-        } else {
-            let channel_name = if is_group {
-                let group_name = signal::SignalClient::get_group_name(&channel_id).await;
-                group_name.unwrap_or_else(|| channel_id.clone())
-            } else {
-                name.clone()
-            };
-            self.data.channels.items.push(Channel {
-                id: channel_id.clone(),
-                name: channel_name,
-                is_group,
-                messages: StatefulList::with_items(Vec::new()),
-                unread_messages: 0,
-            });
-            self.data.channels.items.len() - 1
-        };
-
-        if !is_from_me {
-            if let Some(text) = text.as_ref() {
-                use std::borrow::Cow;
-                let summary = self
-                    .data
-                    .channels
-                    .items
-                    .get(channel_idx)
-                    .as_ref()
-                    .filter(|_| is_group)
-                    .map(|c| Cow::from(format!("{} in {}", name, c.name)))
-                    .unwrap_or_else(|| Cow::from(&name));
-                if let Err(e) = Notification::new().summary(&summary).body(&text).show() {
-                    log::error!("failed to send notification: {}", e);
-                }
-            }
-        }
-
-        self.data.channels.items[channel_idx]
-            .messages
-            .items
-            .push(Message {
-                from_id: Default::default(),
-                from: name,
-                message: text,
-                attachments,
-                arrived_at,
-            });
-        if self.data.channels.state.selected() != Some(channel_idx) {
-            self.data.channels.items[channel_idx].unread_messages += 1;
-        } else {
-            self.reset_unread_messages();
-        }
-
-        self.bubble_up_channel(channel_idx);
-        self.save().unwrap();
-
-        Some(())
-    }
-
-    async fn resolve_contact_name(&mut self, phone_number: String) -> String {
-        let contact_channel = self
-            .data
-            .channels
-            .items
-            .iter()
-            .find(|channel| channel.id == phone_number && !channel.is_group);
-        let contact_channel_exists = contact_channel.is_some();
-        let name = match contact_channel {
-            _ if phone_number == self.config.user.phone_number => {
-                Some(self.config.user.name.clone())
-            }
-            Some(channel) if channel.id == channel.name => {
-                signal::SignalClient::get_contact_name(&phone_number).await
-            }
-            None => signal::SignalClient::get_contact_name(&phone_number).await,
-            Some(channel) => Some(channel.name.clone()),
-        };
-
-        if let Some(name) = name.as_ref() {
-            for channel in self.data.channels.items.iter_mut() {
-                for message in channel.messages.items.iter_mut() {
-                    if message.from == phone_number {
-                        message.from = name.clone();
-                    }
-                }
-                if channel.id == phone_number {
-                    channel.name = name.clone();
-                }
-            }
-        }
-
-        let name = name.unwrap_or_else(|| phone_number.clone());
-
-        if !contact_channel_exists {
-            self.data.channels.items.push(Channel {
-                id: phone_number,
-                name: name.clone(),
-                is_group: false,
-                messages: StatefulList::with_items(Vec::new()),
-                unread_messages: 0,
-            })
-        }
-
-        name
     }
 
     fn bubble_up_channel(&mut self, channel_idx: usize) {
