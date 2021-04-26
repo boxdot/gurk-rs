@@ -152,7 +152,7 @@ async fn run_single_threaded() -> anyhow::Result<()> {
             let messages = match init_messages_stream(local_store).await {
                 Ok(messages) => messages,
                 Err(e) => {
-                    tx.send(Event::Quit(Some(e.into()))).await.unwrap();
+                    tx.send(Event::Quit(Some(e))).await.unwrap();
                     return;
                 }
             };

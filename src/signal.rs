@@ -41,8 +41,7 @@ pub async fn ensure_linked_device() -> anyhow::Result<(Manager, Config)> {
                     hostname
                         .to_string_lossy()
                         .split('.')
-                        .filter(|s| !s.is_empty())
-                        .next()
+                        .find(|s| !s.is_empty())
                         .map(|s| format!("@{}", s))
                 })
                 .unwrap_or_else(String::new);
@@ -63,7 +62,7 @@ pub async fn ensure_linked_device() -> anyhow::Result<(Manager, Config)> {
         let name = profile
             .name
             .map(|name| name.given_name)
-            .unwrap_or_else(|| whoami::username());
+            .unwrap_or_else(whoami::username);
 
         let user = config::User {
             name,
