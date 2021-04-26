@@ -128,7 +128,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
     let max_username_width = messages
         .iter()
-        .map(|msg| displayed_name(&msg.from, app.config.first_name_only).width())
+        .map(|msg| displayed_name(app.name_by_id(msg.from_id), app.config.first_name_only).width())
         .max()
         .unwrap_or(0);
 
@@ -147,10 +147,10 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
             ),
             time_style,
         );
-        let from = displayed_name(&msg.from, app.config.first_name_only);
+        let from = displayed_name(app.name_by_id(msg.from_id), app.config.first_name_only);
         let from = Span::styled(
             textwrap::indent(&from, &" ".repeat(max_username_width - from.width())),
-            Style::default().fg(user_color(&msg.from)),
+            Style::default().fg(user_color(app.name_by_id(msg.from_id))),
         );
         let delimeter = Span::from(": ");
 

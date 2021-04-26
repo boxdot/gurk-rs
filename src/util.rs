@@ -1,4 +1,5 @@
 use chrono::{DateTime, NaiveDateTime, TimeZone as _, Utc};
+use libsignal_service::prelude::phonenumber::PhoneNumber;
 use serde::{Deserialize, Serialize};
 use tui::widgets::ListState;
 
@@ -77,4 +78,9 @@ pub fn utc_timestamp_msec() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .expect("Time went backwards")
         .as_millis() as u64
+}
+
+pub fn is_phone_number(s: impl AsRef<str>) -> bool {
+    use std::str::FromStr;
+    PhoneNumber::from_str(s.as_ref()).is_ok()
 }

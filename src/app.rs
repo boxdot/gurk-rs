@@ -131,7 +131,6 @@ impl From<Uuid> for ChannelId {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Message {
     pub from_id: Uuid,
-    pub from: String,
     #[serde(alias = "text")] // remove
     pub message: Option<String>,
     #[serde(default)]
@@ -196,6 +195,14 @@ impl App {
 
     pub fn save(&self) -> anyhow::Result<()> {
         self.data.save(&self.config.data_path)
+    }
+
+    pub fn name_by_id(&self, id: Uuid) -> &str {
+        self.data
+            .names
+            .get(&id)
+            .map(|s| s.as_ref())
+            .unwrap_or("Unknown Name")
     }
 
     pub fn put_char(&mut self, c: char) {
@@ -282,7 +289,6 @@ impl App {
 
         channel.messages.items.push(Message {
             from_id: self.signal_manager.uuid(),
-            from: self.config.user.name.clone(),
             message: Some(message),
             attachments: Vec::new(),
             arrived_at: Utc::now(),
@@ -493,7 +499,6 @@ impl App {
                 let channel_idx = self.ensure_own_channel_exists();
                 let message = Message {
                     from_id: self_uuid,
-                    from: self.config.user.name.clone(),
                     message: Some(text),
                     attachments: Default::default(),
                     arrived_at: util::timestamp_msec_to_utc(timestamp),
@@ -527,9 +532,6 @@ impl App {
                     ..
                 }),
             ) if sender_uuid == self_uuid => {
-                let from_id = self_uuid;
-                let from = self.config.user.name.clone();
-
                 let channel_idx = if let Some(GroupContextV2 {
                     master_key: Some(master_key),
                     revision: Some(revision),
@@ -552,8 +554,7 @@ impl App {
                 };
 
                 let message = Message {
-                    from_id,
-                    from,
+                    from_id: self_uuid,
                     message: Some(text),
                     attachments: Default::default(),
                     arrived_at: util::timestamp_msec_to_utc(timestamp),
@@ -588,7 +589,6 @@ impl App {
                 self.notify(&from, &text);
                 let message = Message {
                     from_id: uuid,
-                    from,
                     message: Some(text),
                     attachments: Default::default(),
                     arrived_at: util::timestamp_msec_to_utc(timestamp),
@@ -630,7 +630,6 @@ impl App {
                 self.notify(&from, &text);
                 let message = Message {
                     from_id: uuid,
-                    from,
                     message: Some(text),
                     attachments: Default::default(),
                     arrived_at: util::timestamp_msec_to_utc(timestamp),
@@ -723,7 +722,7 @@ impl App {
             .data
             .names
             .get(&uuid)
-            .map(|name| name.starts_with('+'))
+            .map(util::is_phone_number)
             .unwrap_or(true);
         if is_phone_number_or_unknown {
             let name = match profile_key.try_into() {
@@ -772,9 +771,15 @@ impl App {
             .data
             .channels
             .items
-            .iter_mut()
+            .iter()
             .position(|channel| channel.user_id() == Some(uuid))
         {
+            if let Some(name) = self.data.names.get(&uuid) {
+                let channel = &mut self.data.channels.items[channel_idx];
+                if &channel.name != name {
+                    channel.name = name.clone();
+                }
+            }
             channel_idx
         } else {
             self.data.channels.items.push(Channel {
