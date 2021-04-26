@@ -6,6 +6,7 @@ use log::error;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::mpsc;
+use uuid::Uuid;
 
 use std::io::BufRead;
 use std::path::PathBuf;
@@ -423,4 +424,12 @@ mod tests {
         });
         let _: Message = serde_json::from_value(value).expect("failed to deserialize message");
     }
+}
+
+pub async fn contact_name(manager: &Manager, uuid: Uuid, profile_key: [u8; 32]) -> Option<String> {
+    let profile = manager
+        .retrieve_profile_by_uuid(uuid, profile_key)
+        .await
+        .ok()?;
+    Some(profile.name?.given_name)
 }
