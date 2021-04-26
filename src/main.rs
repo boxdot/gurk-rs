@@ -111,7 +111,7 @@ async fn run_single_threaded() -> anyhow::Result<()> {
                 return;
             }
         };
-        futures_util::pin_mut!(messages);
+        pin_utils::pin_mut!(messages);
         while let Some(message) = messages.next().await {
             inner_tx
                 .send(Event::Message(message))
