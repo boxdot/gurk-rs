@@ -1,13 +1,11 @@
-use crate::app::Event;
+use crate::app::{self, Event};
 use crate::config::{self, Config};
 
 use anyhow::Context;
-use libsignal_service::content::ContentBody;
-use log::{error, warn};
+use log::error;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::mpsc;
-use uuid::Uuid;
 
 use std::io::BufRead;
 use std::path::PathBuf;
@@ -131,7 +129,7 @@ impl SignalClient {
 
     pub async fn stream_messages<T: std::fmt::Debug, C: std::fmt::Debug>(
         self,
-        tx: tokio::sync::mpsc::Sender<crate::app::Event<T, C>>,
+        tx: mpsc::Sender<app::Event>,
     ) -> Result<(), std::io::Error> {
         use std::process::Stdio;
         use tokio::io::{AsyncBufReadExt, BufReader};

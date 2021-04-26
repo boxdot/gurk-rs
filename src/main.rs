@@ -79,7 +79,8 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn run_single_threaded() -> anyhow::Result<()> {
-    let mut app = App::try_new().await?;
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<Event>(100);
+    let mut app = App::try_new(tx.clone()).await?;
 
     enable_raw_mode()?;
     let _raw_mode_guard = scopeguard::guard((), |_| {
@@ -89,7 +90,6 @@ async fn run_single_threaded() -> anyhow::Result<()> {
     let mut stdout = std::io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
 
-    let (tx, mut rx) = tokio::sync::mpsc::channel::<Event<_, _>>(100);
     tokio::spawn({
         let tx = tx.clone();
         async move {

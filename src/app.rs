@@ -4,11 +4,12 @@ use crate::util::StatefulList;
 
 use anyhow::Context;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
 use derivative::Derivative;
 use libsignal_service::content::ContentBody;
 use libsignal_service::proto::DataMessage;
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc;
 use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
 
@@ -24,12 +25,7 @@ pub struct App {
     pub should_quit: bool,
     pub signal_manager: signal::Manager,
     pub data: AppData,
-}
-
-impl App {
-    pub fn save(&self) -> anyhow::Result<()> {
-        self.data.save(&self.config.data_path)
-    }
+    events_tx: mpsc::Sender<Event>,
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -163,9 +159,9 @@ pub struct Message {
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
-pub enum Event<I, C> {
-    Click(C),
-    Input(I),
+pub enum Event {
+    Click(MouseEvent),
+    Input(KeyEvent),
     Channels {
         remote: Vec<Channel>,
     },
@@ -201,7 +197,7 @@ impl Default for ChannelPosition {
 }
 
 impl App {
-    pub async fn try_new() -> anyhow::Result<Self> {
+    pub async fn try_new(events_tx: mpsc::Sender<Event>) -> anyhow::Result<Self> {
         let (signal_manager, config) = signal::ensure_linked_device().await?;
 
         let mut load_data_path = config.data_path.clone();
@@ -225,7 +221,12 @@ impl App {
             data,
             should_quit: false,
             signal_manager,
+            events_tx,
         })
+    }
+
+    pub fn save(&self) -> anyhow::Result<()> {
+        self.data.save(&self.config.data_path)
     }
 
     pub fn put_char(&mut self, c: char) {
