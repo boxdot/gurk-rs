@@ -6,6 +6,8 @@ use anyhow::Context;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use crossterm::event::KeyCode;
 use derivative::Derivative;
+use libsignal_service::content::ContentBody;
+use libsignal_service::proto::DataMessage;
 use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
@@ -295,12 +297,12 @@ impl App {
         self.data.input_cursor_chars += 1;
     }
 
-    pub fn on_key(&mut self, key: KeyCode) {
+    pub async fn on_key(&mut self, key: KeyCode) {
         match key {
             KeyCode::Char('\r') => self.put_char('\n'),
             KeyCode::Enter if !self.data.input.is_empty() => {
                 if let Some(idx) = self.data.channels.state.selected() {
-                    self.send_input(idx)
+                    self.send_input(idx).await;
                 }
             }
             KeyCode::Home => self.on_home(),
@@ -313,7 +315,7 @@ impl App {
         }
     }
 
-    fn send_input(&mut self, channel_idx: usize) {
+    async fn send_input(&mut self, channel_idx: usize) {
         let channel = &mut self.data.channels.items[channel_idx];
 
         let message: String = self.data.input.drain(..).collect();
@@ -321,9 +323,24 @@ impl App {
         self.data.input_cursor_chars = 0;
 
         if !channel.is_group {
-            signal::SignalClient::send_message(&message, &channel.id);
+            let uuid: Uuid = channel.id.parse().unwrap();
+            let timestamp = crate::util::utc_timestamp_msec();
+            let body = ContentBody::DataMessage(DataMessage {
+                body: Some(message.clone()),
+                timestamp: Some(timestamp),
+                ..Default::default()
+            });
+            if let Err(e) = self
+                .signal_manager
+                .send_message(uuid, body, timestamp)
+                .await
+            {
+                // TODO: Proper error handling
+                log::error!("Failed to send message `{}`: {}", message, e);
+                return;
+            }
         } else {
-            signal::SignalClient::send_group_message(&message, &channel.id);
+            unimplemented!("sending to groups is not yet implemented");
         }
 
         channel.messages.items.push(Message {
@@ -526,9 +543,8 @@ impl App {
     }
 
     pub fn on_pressage_message(&mut self, content: libsignal_service::content::Content) {
-        use libsignal_service::content::{ContentBody, SyncMessage};
+        use libsignal_service::content::SyncMessage;
         use libsignal_service::proto::sync_message::Sent;
-        use libsignal_service::proto::DataMessage;
 
         log::info!("incoming: {:?}", content);
 
