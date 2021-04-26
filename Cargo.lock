@@ -1025,12 +1025,10 @@ name = "gurk"
 version = "0.2.0"
 dependencies = [
  "anyhow",
- "base64 0.13.0",
  "chrono",
  "crossterm",
  "derivative",
  "dirs 3.0.2",
- "futures-util",
  "hostname",
  "itertools 0.10.0",
  "libsignal-protocol",
@@ -1039,6 +1037,7 @@ dependencies = [
  "log-panics",
  "log4rs",
  "notify-rust",
+ "pin-utils",
  "presage",
  "scopeguard",
  "serde",
@@ -1437,7 +1436,7 @@ dependencies = [
 [[package]]
 name = "libsignal-service-hyper"
 version = "0.1.0"
-source = "git+https://github.com/Michael-F-Bryan/libsignal-service-rs.git#117998657d4724300b8aa0669406398dc79a4d0c"
+source = "git+https://github.com/Michael-F-Bryan/libsignal-service-rs#117998657d4724300b8aa0669406398dc79a4d0c"
 dependencies = [
  "async-trait",
  "async-tungstenite",
@@ -2849,17 +2848,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "83f0c8e7c0addab50b663055baf787d0af7f413a46e6e7fb9559a4e4db7137a5"
 dependencies = [
  "autocfg",
- "bytes",
  "libc",
- "memchr",
  "mio",
  "num_cpus",
- "once_cell",
- "parking_lot",
  "pin-project-lite",
- "signal-hook-registry",
  "tokio-macros",
- "winapi",
 ]
 
 [[package]]
