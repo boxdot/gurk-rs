@@ -71,10 +71,10 @@ async fn main() -> anyhow::Result<()> {
     if args.verbose {
         init_file_logger()?;
     }
+    log_panics::init();
 
-    let local = tokio::task::LocalSet::new();
-    local
-        .run_until(async move { run_single_threaded().await })
+    tokio::task::LocalSet::new()
+        .run_until(run_single_threaded())
         .await
 }
 
