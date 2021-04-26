@@ -1404,6 +1404,7 @@ dependencies = [
 [[package]]
 name = "libsignal-service"
 version = "0.1.0"
+source = "git+https://github.com/Michael-F-Bryan/libsignal-service-rs#117998657d4724300b8aa0669406398dc79a4d0c"
 dependencies = [
  "aes 0.6.0",
  "aes-ctr",
@@ -1436,6 +1437,7 @@ dependencies = [
 [[package]]
 name = "libsignal-service-hyper"
 version = "0.1.0"
+source = "git+https://github.com/Michael-F-Bryan/libsignal-service-rs.git#117998657d4724300b8aa0669406398dc79a4d0c"
 dependencies = [
  "async-trait",
  "async-tungstenite",
@@ -2021,6 +2023,7 @@ checksum = "ac74c624d6b2d21f425f752262f42188365d7b8ff1aff74c82e45136510a4857"
 [[package]]
 name = "presage"
 version = "0.1.0"
+source = "git+https://github.com/boxdot/presage.git?branch=messages-stream#023e6608d7f2ba10ce16c3c758edc9e05d476d63"
 dependencies = [
  "anyhow",
  "base64 0.12.3",

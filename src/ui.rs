@@ -277,7 +277,7 @@ fn symlink_attachments(attachments: &[signal::Attachment]) -> anyhow::Result<Vec
     std::fs::create_dir_all(&tmp_attachments_dir)
         .with_context(|| format!("failed to create {}", tmp_attachments_dir.display()))?;
 
-    let tmp_attachments_symlinks: anyhow::Result<Vec<_>> = attachments
+    attachments
         .iter()
         .map(|attachment| {
             let source = signal_cli_data_dir.join("attachments").join(&attachment.id);
@@ -304,8 +304,7 @@ fn symlink_attachments(attachments: &[signal::Attachment]) -> anyhow::Result<Vec
             })?;
             Ok(dest)
         })
-        .collect();
-    Ok(tmp_attachments_symlinks?)
+        .collect()
 }
 
 fn xorshift32(mut x: u32) -> u32 {
