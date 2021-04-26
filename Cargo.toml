@@ -22,7 +22,7 @@ dirs = "3.0.1"
 itertools = "0.10.0"
 log = "0.4.14"
 log4rs = "1.0.0"
-notify-rust = { version = "4.2.2", optional = true }
+notify-rust = "4.2.2"
 scopeguard = "1.1.0"
 serde = { version = "1.0.123", features = ["derive"] }
 serde_json = "1.0.62"
@@ -42,9 +42,6 @@ libsignal-protocol = { git = "https://github.com/Michael-F-Bryan/libsignal-proto
 libsignal-service = { git = "https://github.com/Michael-F-Bryan/libsignal-service-rs" }
 presage = { git = "https://github.com/whisperfish/presage.git", branch = "main" }
 uuid = "0.8.2"
-
-[features]
-notifications = ["notify-rust"]
 
 [patch."https://github.com/Michael-F-Bryan/libsignal-service-rs.git"]
 libsignal-service = { path = "../libsignal-service-rs/libsignal-service" }

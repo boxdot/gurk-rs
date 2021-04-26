@@ -6,18 +6,17 @@ use anyhow::Context;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
 use derivative::Derivative;
+use libsignal_service::proto::DataMessage;
 use libsignal_service::{
     content::{ContentBody, Metadata},
     ServiceAddress,
 };
-use libsignal_service::{prelude::phonenumber::PhoneNumber, proto::DataMessage};
+use log::error;
+use notify_rust::Notification;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
-
-#[cfg(feature = "notifications")]
-use notify_rust::Notification;
 
 use std::fs::File;
 use std::path::Path;
@@ -520,6 +519,47 @@ impl App {
                 };
                 self.add_message_to_channel(channel_idx, message);
             }
+            // Direct message by us from a different device
+            (
+                Metadata {
+                    sender:
+                        ServiceAddress {
+                            uuid: Some(sender_uuid),
+                            ..
+                        },
+                    ..
+                },
+                ContentBody::SynchronizeMessage(SyncMessage {
+                    sent:
+                        Some(Sent {
+                            destination_e164: Some(destination_e164),
+                            destination_uuid: Some(destination_uuid),
+                            timestamp: Some(timestamp),
+                            message:
+                                Some(DataMessage {
+                                    body: Some(text),
+                                    group_v2: None,
+                                    profile_key: Some(profile_key),
+                                    ..
+                                }),
+                            ..
+                        }),
+                    ..
+                }),
+            ) if sender_uuid == self_uuid => {
+                let destination_uuid = destination_uuid.parse().unwrap();
+                let channel_idx = self
+                    .ensure_contact_channel_exists(destination_uuid, profile_key, destination_e164)
+                    .await;
+                let message = Message {
+                    from_id: destination_uuid,
+                    from: self.config.user.name.clone(),
+                    message: Some(text),
+                    attachments: Default::default(),
+                    arrived_at: crate::util::timestamp_msec_to_utc(timestamp),
+                };
+                self.add_message_to_channel(channel_idx, message);
+            }
             // Direct message
             (
                 Metadata {
@@ -542,9 +582,11 @@ impl App {
                 let channel_idx = self
                     .ensure_contact_channel_exists(uuid, profile_key, phone_number)
                     .await;
+                let from = self.data.channels.items[channel_idx].name.clone();
+                self.notify(&from, &text);
                 let message = Message {
-                    from_id: self_uuid,
-                    from: self.data.channels.items[channel_idx].name.clone(),
+                    from_id: uuid,
+                    from,
                     message: Some(text),
                     attachments: Default::default(),
                     arrived_at: crate::util::timestamp_msec_to_utc(timestamp),
@@ -699,7 +741,6 @@ impl App {
             self.data.channels.items.len() - 1
         };
 
-        #[cfg(feature = "notifications")]
         if !is_from_me {
             if let Some(text) = text.as_ref() {
                 use std::borrow::Cow;
@@ -800,5 +841,11 @@ impl App {
             }
             _ => {}
         };
+    }
+
+    fn notify(&self, summary: &str, text: &str) {
+        if let Err(e) = Notification::new().summary(&summary).body(&text).show() {
+            error!("failed to send notification: {}", e);
+        }
     }
 }
