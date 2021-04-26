@@ -220,7 +220,7 @@ async fn main() -> anyhow::Result<()> {
                 KeyCode::Char('k') if event.modifiers.contains(KeyModifiers::CONTROL) => {
                     app.on_delete_suffix();
                 }
-                code => app.on_key(code),
+                code => app.on_key(code).await,
             },
             Some(Event::Message { payload, message }) => {
                 app.on_message(message, payload).await;
