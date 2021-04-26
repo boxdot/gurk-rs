@@ -9,6 +9,7 @@ use derivative::Derivative;
 use libsignal_service::content::ContentBody;
 use libsignal_service::proto::DataMessage;
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc;
 use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
 
@@ -19,12 +20,11 @@ use std::collections::HashSet;
 use std::fs::File;
 use std::path::Path;
 
-type SignalManager = presage::Manager<presage::config::SledConfigStore>;
-
 pub struct App {
     pub config: Config,
     pub should_quit: bool,
-    pub signal_manager: SignalManager,
+    pub signal_manager: signal::Manager,
+    message_tx: mpsc::UnboundedSender<(Vec<Uuid>, ContentBody, u64)>,
     pub data: AppData,
 }
 
@@ -202,69 +202,9 @@ impl Default for ChannelPosition {
     }
 }
 
-fn get_signal_manager() -> anyhow::Result<SignalManager> {
-    let data_dir = config::default_data_dir();
-    let db_path = data_dir.join("signal-db");
-    let config_store = presage::config::SledConfigStore::new(db_path)?;
-    let signal_context =
-        libsignal_protocol::Context::new(libsignal_protocol::crypto::DefaultCrypto::default())?;
-    let manager = presage::Manager::with_config_store(config_store, signal_context)?;
-    Ok(manager)
-}
-
-async fn ensure_linked_device() -> anyhow::Result<(SignalManager, config::Config)> {
-    let mut manager = get_signal_manager()?;
-    let config = if let Some(config_path) = config::installed_config() {
-        config::load_from(config_path)?
-    } else {
-        if manager.phone_number().is_none() {
-            // link device
-            let at_hostname = hostname::get()
-                .ok()
-                .and_then(|hostname| {
-                    hostname
-                        .to_string_lossy()
-                        .split('.')
-                        .filter(|s| !s.is_empty())
-                        .next()
-                        .map(|s| format!("@{}", s))
-                })
-                .unwrap_or_else(String::new);
-            let device_name = format!("gurk{}", at_hostname);
-            println!("Linking new device with device name: {}", device_name);
-            manager
-                .link_secondary_device(
-                    libsignal_service::configuration::SignalServers::Production,
-                    device_name.clone(),
-                )
-                .await?;
-        }
-
-        let phone_number = manager
-            .phone_number()
-            .expect("no phone number after device was linked");
-        let profile = manager.retrieve_profile().await?;
-        let name = profile
-            .name
-            .map(|name| name.given_name)
-            .unwrap_or_else(|| whoami::username());
-
-        let user = config::User {
-            name,
-            phone_number: phone_number.to_string(),
-        };
-        let config = config::Config::with_user(user);
-        config.save_new().context("failed to init config file")?;
-
-        config
-    };
-
-    Ok((manager, config))
-}
-
 impl App {
     pub async fn try_new() -> anyhow::Result<Self> {
-        let (signal_manager, config) = ensure_linked_device().await?;
+        let (signal_manager, config) = signal::ensure_linked_device().await?;
 
         let mut load_data_path = config.data_path.clone();
         if !load_data_path.exists() {
@@ -282,11 +222,14 @@ impl App {
             data.save(&config.data_path)?;
         }
 
+        let message_tx = signal::spawn_message_sender(signal_manager.config_store.clone());
+
         Ok(Self {
             config,
             data,
             should_quit: false,
             signal_manager,
+            message_tx,
         })
     }
 
@@ -330,11 +273,7 @@ impl App {
                 timestamp: Some(timestamp),
                 ..Default::default()
             });
-            if let Err(e) = self
-                .signal_manager
-                .send_message(uuid, body, timestamp)
-                .await
-            {
+            if let Err(e) = self.message_tx.send((vec![uuid], body, timestamp)) {
                 // TODO: Proper error handling
                 log::error!("Failed to send message `{}`: {}", message, e);
                 return;
