@@ -1,6 +1,10 @@
-use crate::config::{self, Config};
+use crate::{
+    app::GroupData,
+    config::{self, Config},
+};
 
-use anyhow::Context;
+use anyhow::{anyhow, Context as _};
+use libsignal_service::prelude::GroupMasterKey;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -83,4 +87,37 @@ pub async fn contact_name(manager: &Manager, uuid: Uuid, profile_key: [u8; 32]) 
         .await
         .ok()?;
     Some(profile.name?.given_name)
+}
+
+pub async fn try_resolve_group(
+    manager: &mut Manager,
+    master_key: Vec<u8>,
+) -> anyhow::Result<(String, GroupData, Vec<Vec<u8>>)> {
+    use std::convert::TryInto;
+
+    let master_key = master_key
+        .try_into()
+        .map_err(|_| anyhow!("invalid master key"))?;
+    let decrypted_group = manager
+        .get_group_v2(GroupMasterKey::new(master_key))
+        .await?;
+
+    let mut members = Vec::with_capacity(decrypted_group.members.len());
+    let mut member_profile_keys = Vec::with_capacity(decrypted_group.members.len());
+    for member in decrypted_group.members {
+        let uuid = match Uuid::from_slice(&member.uuid) {
+            Ok(id) => id,
+            Err(_) => continue,
+        };
+        members.push(uuid);
+        member_profile_keys.push(member.profile_key);
+    }
+
+    let title = decrypted_group.title;
+    let group_data = GroupData {
+        members,
+        revision: decrypted_group.revision,
+    };
+
+    Ok((title, group_data, member_profile_keys))
 }

@@ -1,12 +1,13 @@
 use crate::config::{self, Config};
 use crate::signal;
-use crate::util::StatefulList;
+use crate::util::{self, StatefulList};
 
+use anyhow::Context;
 use chrono::{DateTime, Utc};
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
-use derivative::Derivative;
 use libsignal_service::{
     content::{ContentBody, Metadata},
+    proto::GroupContextV2,
     ServiceAddress,
 };
 use libsignal_service::{prelude::Content, proto::DataMessage};
@@ -16,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
 
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fs::File;
 use std::path::Path;
@@ -30,6 +32,7 @@ pub struct App {
 #[derive(Default, Serialize, Deserialize)]
 pub struct AppData {
     pub channels: StatefulList<Channel>,
+    pub names: HashMap<Uuid, String>,
     #[serde(skip)]
     pub chanpos: ChannelPosition,
     pub input: String,
@@ -58,14 +61,12 @@ impl AppData {
     }
 }
 
-#[derive(Derivative, Serialize, Deserialize)]
-#[derivative(Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct Channel {
-    /// Either phone number or group id
-    pub id: String, // TODO: replace by UUID (groups v1 are gone)
+    pub id: ChannelId,
     pub name: String,
-    pub is_group: bool,
-    #[derivative(Debug = "ignore")]
+    #[serde(default)]
+    pub group_data: Option<GroupData>,
     #[serde(serialize_with = "Channel::serialize_msgs")]
     #[serde(deserialize_with = "Channel::deserialize_msgs")]
     pub messages: StatefulList<Message>,
@@ -73,7 +74,31 @@ pub struct Channel {
     pub unread_messages: usize,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct GroupData {
+    pub members: Vec<Uuid>,
+    pub revision: u32,
+}
+
 impl Channel {
+    /// Used in UI when there is no channel selected.
+    pub fn empty() -> Self {
+        Channel {
+            id: Uuid::default().into(),
+            name: " ".to_string(),
+            group_data: None,
+            messages: util::StatefulList::with_items(Vec::new()),
+            unread_messages: 0,
+        }
+    }
+
+    fn user_id(&self) -> Option<Uuid> {
+        match self.id {
+            ChannelId::User(id) => Some(id),
+            ChannelId::Group(_) => None,
+        }
+    }
+
     fn serialize_msgs<S>(messages: &StatefulList<Message>, ser: S) -> Result<S::Ok, S::Error>
     where
         S: serde::ser::Serializer,
@@ -88,6 +113,18 @@ impl Channel {
     {
         let tmp: Vec<Message> = serde::de::Deserialize::deserialize(deserializer)?;
         Ok(StatefulList::with_items(tmp))
+    }
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Eq)]
+pub enum ChannelId {
+    User(Uuid),
+    Group(Vec<u8>),
+}
+
+impl From<Uuid> for ChannelId {
+    fn from(id: Uuid) -> Self {
+        ChannelId::User(id)
     }
 }
 
@@ -193,25 +230,54 @@ impl App {
         self.data.input_cursor = 0;
         self.data.input_cursor_chars = 0;
 
-        if !channel.is_group {
-            let uuid: Uuid = channel.id.parse().unwrap();
-            let timestamp = crate::util::utc_timestamp_msec();
-            let body = ContentBody::DataMessage(DataMessage {
-                body: Some(message.clone()),
-                timestamp: Some(timestamp),
-                ..Default::default()
-            });
+        let timestamp = util::utc_timestamp_msec();
+        let mut data_message = DataMessage {
+            body: Some(message.clone()),
+            timestamp: Some(timestamp),
+            ..Default::default()
+        };
 
-            let manager = self.signal_manager.clone();
-            tokio::task::spawn_local(async move {
-                if let Err(e) = manager.send_message(uuid, body, timestamp).await {
-                    // TODO: Proper error handling
-                    log::error!("Failed to send message to {}: {}", uuid, e);
-                    return;
+        match channel.id {
+            ChannelId::User(uuid) => {
+                let manager = self.signal_manager.clone();
+                let body = ContentBody::DataMessage(data_message);
+                tokio::task::spawn_local(async move {
+                    if let Err(e) = manager.send_message(uuid, body, timestamp).await {
+                        // TODO: Proper error handling
+                        log::error!("Failed to send message to {}: {}", uuid, e);
+                        return;
+                    }
+                });
+            }
+            ChannelId::Group(ref master_key) => {
+                if let Some(group_data) = channel.group_data.as_ref() {
+                    let manager = self.signal_manager.clone();
+                    let self_uuid = self.signal_manager.uuid();
+
+                    data_message.group_v2 = Some(GroupContextV2 {
+                        master_key: Some(master_key.clone()),
+                        revision: Some(group_data.revision),
+                        ..Default::default()
+                    });
+
+                    let recipients = group_data.members.clone().into_iter();
+
+                    tokio::task::spawn_local(async move {
+                        let recipients =
+                            recipients.filter(|uuid| *uuid != self_uuid).map(Into::into);
+                        if let Err(e) = manager
+                            .send_message_to_group(recipients, data_message, timestamp)
+                            .await
+                        {
+                            // TODO: Proper error handling
+                            log::error!("Failed to send group message: {}", e);
+                            return;
+                        }
+                    });
+                } else {
+                    error!("cannot send to broken channel without group data");
                 }
-            });
-        } else {
-            unimplemented!("sending to groups is not yet implemented");
+            }
         }
 
         channel.messages.items.push(Message {
@@ -398,7 +464,7 @@ impl App {
         }
     }
 
-    pub async fn on_message(&mut self, content: Content) {
+    pub async fn on_message(&mut self, content: Content) -> anyhow::Result<()> {
         use libsignal_service::content::SyncMessage;
         use libsignal_service::proto::sync_message::Sent;
 
@@ -430,11 +496,11 @@ impl App {
                     from: self.config.user.name.clone(),
                     message: Some(text),
                     attachments: Default::default(),
-                    arrived_at: crate::util::timestamp_msec_to_utc(timestamp),
+                    arrived_at: util::timestamp_msec_to_utc(timestamp),
                 };
                 self.add_message_to_channel(channel_idx, message);
             }
-            // Direct message by us from a different device
+            // Direct/group message by us from a different device
             (
                 Metadata {
                     sender:
@@ -447,14 +513,13 @@ impl App {
                 ContentBody::SynchronizeMessage(SyncMessage {
                     sent:
                         Some(Sent {
-                            destination_e164: Some(destination_e164),
-                            destination_uuid: Some(destination_uuid),
+                            destination_e164,
+                            destination_uuid,
                             timestamp: Some(timestamp),
                             message:
                                 Some(DataMessage {
                                     body: Some(text),
-                                    group_v2: None,
-                                    profile_key: Some(profile_key),
+                                    group_v2,
                                     ..
                                 }),
                             ..
@@ -462,16 +527,36 @@ impl App {
                     ..
                 }),
             ) if sender_uuid == self_uuid => {
-                let destination_uuid = destination_uuid.parse().unwrap();
-                let channel_idx = self
-                    .ensure_contact_channel_exists(destination_uuid, profile_key, destination_e164)
-                    .await;
+                let from_id = self_uuid;
+                let from = self.config.user.name.clone();
+
+                let channel_idx = if let Some(GroupContextV2 {
+                    master_key: Some(master_key),
+                    revision: Some(revision),
+                    ..
+                }) = group_v2
+                {
+                    // message -> group
+                    self.ensure_group_channel_exists(master_key, revision)
+                        .await
+                        .context("failed to create group channel")?
+                } else if let (Some(destination_uuid), Some(destination_e164)) = (
+                    destination_uuid.and_then(|s| s.parse().ok()),
+                    destination_e164,
+                ) {
+                    // message -> contact
+                    self.ensure_contact_channel_exists(destination_uuid, &destination_e164)
+                        .await
+                } else {
+                    return Ok(());
+                };
+
                 let message = Message {
-                    from_id: destination_uuid,
-                    from: self.config.user.name.clone(),
+                    from_id,
+                    from,
                     message: Some(text),
                     attachments: Default::default(),
-                    arrived_at: crate::util::timestamp_msec_to_utc(timestamp),
+                    arrived_at: util::timestamp_msec_to_utc(timestamp),
                 };
                 self.add_message_to_channel(channel_idx, message);
             }
@@ -494,9 +579,11 @@ impl App {
                     ..
                 }),
             ) => {
-                let channel_idx = self
-                    .ensure_contact_channel_exists(uuid, profile_key, phone_number)
-                    .await;
+                let name = self
+                    .ensure_user_is_known(uuid, profile_key, phone_number)
+                    .await
+                    .to_string();
+                let channel_idx = self.ensure_contact_channel_exists(uuid, &name).await;
                 let from = self.data.channels.items[channel_idx].name.clone();
                 self.notify(&from, &text);
                 let message = Message {
@@ -504,29 +591,175 @@ impl App {
                     from,
                     message: Some(text),
                     attachments: Default::default(),
-                    arrived_at: crate::util::timestamp_msec_to_utc(timestamp),
+                    arrived_at: util::timestamp_msec_to_utc(timestamp),
                 };
                 self.add_message_to_channel(channel_idx, message);
             }
-            _ => return,
+            // Group message
+            (
+                Metadata {
+                    sender:
+                        ServiceAddress {
+                            uuid: Some(uuid),
+                            phonenumber: Some(phone_number),
+                            ..
+                        },
+                    ..
+                },
+                ContentBody::DataMessage(DataMessage {
+                    body: Some(text),
+                    group_v2:
+                        Some(GroupContextV2 {
+                            master_key: Some(master_key),
+                            revision: Some(revision),
+                            ..
+                        }),
+                    timestamp: Some(timestamp),
+                    profile_key: Some(profile_key),
+                    ..
+                }),
+            ) => {
+                let channel_idx = self
+                    .ensure_group_channel_exists(master_key, revision)
+                    .await
+                    .context("failed to create group channel")?;
+                let from = self
+                    .ensure_user_is_known(uuid, profile_key, phone_number)
+                    .await
+                    .to_string();
+                self.notify(&from, &text);
+                let message = Message {
+                    from_id: uuid,
+                    from,
+                    message: Some(text),
+                    attachments: Default::default(),
+                    arrived_at: util::timestamp_msec_to_utc(timestamp),
+                };
+                self.add_message_to_channel(channel_idx, message);
+            }
+            _ => (),
         };
+
+        Ok(())
+    }
+
+    async fn ensure_group_channel_exists(
+        &mut self,
+        master_key: Vec<u8>,
+        revision: u32,
+    ) -> anyhow::Result<usize> {
+        let id = ChannelId::Group(master_key.clone());
+        if let Some(channel_idx) = self
+            .data
+            .channels
+            .items
+            .iter()
+            .position(|channel| channel.id == id)
+        {
+            let is_stale = match self.data.channels.items[channel_idx].group_data.as_ref() {
+                Some(group_data) => group_data.revision != revision,
+                None => true,
+            };
+            if is_stale {
+                let (name, group_data, profile_keys) =
+                    signal::try_resolve_group(&mut self.signal_manager, master_key).await?;
+
+                self.try_ensure_users_are_known(
+                    group_data
+                        .members
+                        .iter()
+                        .copied()
+                        .zip(profile_keys.into_iter()),
+                )
+                .await;
+
+                let channel = &mut self.data.channels.items[channel_idx];
+                channel.name = name;
+                channel.group_data = Some(group_data);
+            }
+            Ok(channel_idx)
+        } else {
+            let (name, group_data, profile_keys) =
+                signal::try_resolve_group(&mut self.signal_manager, master_key).await?;
+
+            self.try_ensure_users_are_known(
+                group_data
+                    .members
+                    .iter()
+                    .copied()
+                    .zip(profile_keys.into_iter()),
+            )
+            .await;
+
+            self.data.channels.items.push(Channel {
+                id,
+                name,
+                group_data: Some(group_data),
+                messages: StatefulList::with_items(Vec::new()),
+                unread_messages: 0,
+            });
+            Ok(self.data.channels.items.len() - 1)
+        }
+    }
+
+    async fn ensure_user_is_known(
+        &mut self,
+        uuid: Uuid,
+        profile_key: Vec<u8>,
+        fallback_name: impl std::fmt::Display,
+    ) -> &str {
+        if self
+            .try_ensure_user_is_known(uuid, profile_key)
+            .await
+            .is_none()
+        {
+            self.data.names.insert(uuid, fallback_name.to_string());
+        }
+        self.data.names.get(&uuid).unwrap()
+    }
+
+    async fn try_ensure_user_is_known(&mut self, uuid: Uuid, profile_key: Vec<u8>) -> Option<&str> {
+        let is_phone_number_or_unknown = self
+            .data
+            .names
+            .get(&uuid)
+            .map(|name| name.starts_with('+'))
+            .unwrap_or(true);
+        if is_phone_number_or_unknown {
+            let name = match profile_key.try_into() {
+                Ok(key) => signal::contact_name(&self.signal_manager, uuid, key).await,
+                Err(_) => None,
+            };
+            self.data.names.insert(uuid, name?);
+        }
+        self.data.names.get(&uuid).map(|s| s.as_str())
+    }
+
+    async fn try_ensure_users_are_known(
+        &mut self,
+        users_with_keys: impl Iterator<Item = (Uuid, Vec<u8>)>,
+    ) {
+        // TODO: Run in parallel
+        for (uuid, profile_key) in users_with_keys {
+            self.try_ensure_user_is_known(uuid, profile_key).await;
+        }
     }
 
     fn ensure_own_channel_exists(&mut self) -> usize {
-        let self_uuid = self.signal_manager.uuid().to_string();
+        let self_uuid = self.signal_manager.uuid();
         if let Some(channel_idx) = self
             .data
             .channels
             .items
             .iter_mut()
-            .position(|channel| channel.id == self_uuid)
+            .position(|channel| channel.user_id() == Some(self_uuid))
         {
             channel_idx
         } else {
             self.data.channels.items.push(Channel {
-                id: self_uuid,
+                id: self_uuid.into(),
                 name: self.config.user.name.clone(),
-                is_group: false,
+                group_data: None,
                 messages: StatefulList::with_items(Vec::new()),
                 unread_messages: 0,
             });
@@ -534,33 +767,20 @@ impl App {
         }
     }
 
-    async fn ensure_contact_channel_exists(
-        &mut self,
-        uuid: Uuid,
-        profile_key: Vec<u8>,
-        fallback_name: impl std::fmt::Display,
-    ) -> usize {
-        let uuid_str = uuid.to_string();
+    async fn ensure_contact_channel_exists(&mut self, uuid: Uuid, name: &str) -> usize {
         if let Some(channel_idx) = self
             .data
             .channels
             .items
             .iter_mut()
-            .position(|channel| channel.id == uuid_str)
+            .position(|channel| channel.user_id() == Some(uuid))
         {
             channel_idx
         } else {
-            let name = match profile_key.try_into() {
-                Ok(key) => signal::contact_name(&self.signal_manager, uuid, key)
-                    .await
-                    .unwrap_or_else(|| fallback_name.to_string()),
-                Err(_) => fallback_name.to_string(),
-            };
-
             self.data.channels.items.push(Channel {
-                id: uuid_str,
-                name,
-                is_group: false,
+                id: uuid.into(),
+                name: name.to_string(),
+                group_data: None,
                 messages: StatefulList::with_items(Vec::new()),
                 unread_messages: 0,
             });
