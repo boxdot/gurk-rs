@@ -107,11 +107,12 @@ async fn main() -> anyhow::Result<()> {
     app.data.chanpos.downside = terminal.get_frame().size().height - 3;
 
     let local_store = app.signal_manager.config_store.clone();
-    let local_rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap();
     std::thread::spawn(move || {
+        let local_rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+
         let local = tokio::task::LocalSet::new();
         local.spawn_local(async move {
             // load data from signal asynchronously

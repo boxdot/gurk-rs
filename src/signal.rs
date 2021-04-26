@@ -1,8 +1,13 @@
 use crate::app::Event;
-use crate::config::Config;
+use crate::config::{self, Config};
 
+use anyhow::Context;
+use libsignal_service::content::ContentBody;
+use log::{error, warn};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tokio::sync::mpsc;
+use uuid::Uuid;
 
 use std::io::BufRead;
 use std::path::PathBuf;
@@ -12,6 +17,108 @@ use std::str::FromStr;
 #[derive(Debug, Clone)]
 pub struct SignalClient {
     config: Config,
+}
+
+/// Signal Manager backed by a `sled` store.
+pub type Manager = presage::Manager<presage::config::SledConfigStore>;
+
+/// Spawns a thread with local message sender to Signal.
+///
+/// Note: We cannot use `tokio::spawn` directly, since `presage::Manager` does not implement `Send`.
+pub fn spawn_message_sender(
+    config_store: presage::config::SledConfigStore,
+) -> mpsc::UnboundedSender<(Vec<Uuid>, ContentBody, u64)> {
+    let (message_tx, mut message_rx) = mpsc::unbounded_channel::<(Vec<Uuid>, ContentBody, u64)>();
+    std::thread::spawn(move || {
+        let local_rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let local = tokio::task::LocalSet::new();
+        local.spawn_local(async move {
+            let signal_context = libsignal_protocol::Context::new(
+                libsignal_protocol::crypto::DefaultCrypto::default(),
+            )
+            .unwrap();
+            let manager =
+                presage::Manager::with_config_store(config_store, signal_context).unwrap();
+            while let Some((recipients, message, timestamp)) = message_rx.recv().await {
+                if recipients.len() != 1 {
+                    warn!(
+                        "atm we only support a single recipient, got: {}",
+                        recipients.len()
+                    );
+                    continue;
+                }
+                let recipient = recipients[0];
+                if let Err(e) = manager.send_message(recipient, message, timestamp).await {
+                    error!("failed to send message: {}", e);
+                }
+            }
+        });
+        local_rt.block_on(local);
+    });
+    message_tx
+}
+
+fn get_signal_manager() -> anyhow::Result<Manager> {
+    let data_dir = config::default_data_dir();
+    let db_path = data_dir.join("signal-db");
+    let config_store = presage::config::SledConfigStore::new(db_path)?;
+    let signal_context =
+        libsignal_protocol::Context::new(libsignal_protocol::crypto::DefaultCrypto::default())?;
+    let manager = presage::Manager::with_config_store(config_store, signal_context)?;
+    Ok(manager)
+}
+
+pub async fn ensure_linked_device() -> anyhow::Result<(Manager, Config)> {
+    let mut manager = get_signal_manager()?;
+    let config = if let Some(config_path) = config::installed_config() {
+        config::load_from(config_path)?
+    } else {
+        if manager.phone_number().is_none() {
+            // link device
+            let at_hostname = hostname::get()
+                .ok()
+                .and_then(|hostname| {
+                    hostname
+                        .to_string_lossy()
+                        .split('.')
+                        .filter(|s| !s.is_empty())
+                        .next()
+                        .map(|s| format!("@{}", s))
+                })
+                .unwrap_or_else(String::new);
+            let device_name = format!("gurk{}", at_hostname);
+            println!("Linking new device with device name: {}", device_name);
+            manager
+                .link_secondary_device(
+                    libsignal_service::configuration::SignalServers::Production,
+                    device_name.clone(),
+                )
+                .await?;
+        }
+
+        let phone_number = manager
+            .phone_number()
+            .expect("no phone number after device was linked");
+        let profile = manager.retrieve_profile().await?;
+        let name = profile
+            .name
+            .map(|name| name.given_name)
+            .unwrap_or_else(|| whoami::username());
+
+        let user = config::User {
+            name,
+            phone_number: phone_number.to_string(),
+        };
+        let config = config::Config::with_user(user);
+        config.save_new().context("failed to init config file")?;
+
+        config
+    };
+
+    Ok((manager, config))
 }
 
 impl SignalClient {
