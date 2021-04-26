@@ -8,7 +8,6 @@ mod util;
 
 use app::{App, Event};
 
-use anyhow::Context as _;
 use crossterm::{
     event::{
         DisableMouseCapture, EnableMouseCapture, Event as CEvent, EventStream, KeyCode,
@@ -17,7 +16,6 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use futures_util::Stream;
 use log::error;
 use structopt::StructOpt;
 use tokio_stream::StreamExt;
@@ -48,21 +46,6 @@ fn init_file_logger() -> anyhow::Result<()> {
 
     log4rs::init_config(config)?;
     Ok(())
-}
-
-async fn init_messages_stream(
-    store: presage::config::SledConfigStore,
-) -> anyhow::Result<impl Stream<Item = libsignal_service::content::Content>> {
-    let context =
-        libsignal_protocol::Context::new(libsignal_protocol::crypto::DefaultCrypto::default())
-            .context("failed to initialize signal crypto")?;
-    let manager = presage::Manager::with_config_store(store, context)
-        .context("failed to init signal manager")?;
-    let messages = manager
-        .receive_messages_stream()
-        .await
-        .context("failed to initialize messages stream")?;
-    Ok(messages)
 }
 
 #[tokio::main]
@@ -116,53 +99,25 @@ async fn run_single_threaded() -> anyhow::Result<()> {
     let inner_manager = app.signal_manager.clone();
     let inner_tx = tx.clone();
     tokio::task::spawn_local(async move {
-        let messages = inner_manager.receive_messages_stream().await.unwrap();
+        let messages = match inner_manager.receive_messages_stream().await {
+            Ok(messages) => messages,
+            Err(e) => {
+                let e = anyhow::Error::from(e)
+                    .context("failed to initialize the stream of Signal messages");
+                inner_tx
+                    .send(Event::Quit(Some(e)))
+                    .await
+                    .expect("logic error: events channel closed");
+                return;
+            }
+        };
         futures_util::pin_mut!(messages);
         while let Some(message) = messages.next().await {
-            inner_tx.send(Event::Message(message)).await.unwrap()
+            inner_tx
+                .send(Event::Message(message))
+                .await
+                .expect("logic error: events channel closed")
         }
-    });
-
-    let local_store = app.signal_manager.config_store.clone();
-    std::thread::spawn(move || {
-        let local_rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-
-        let local = tokio::task::LocalSet::new();
-        local.spawn_local(async move {
-            // load data from signal asynchronously
-            // let remote_channels = tokio::task::spawn_blocking({
-            //     let manager = signal_manager.clone();
-            //     move || {
-            //         app::AppData::init_from_signal(&manager)
-            //             .map(|remote_data| remote_data.channels.items)
-            //     }
-            // })
-            // .await;
-            // match remote_channels {
-            //     Ok(Ok(remote)) => {
-            //         let _ = tx.send(Event::Channels { remote }).await;
-            //     }
-            //     Ok(Err(e)) => error!("failed to load channel from server: {}", e),
-            //     Err(e) => unreachable!(e.to_string()),
-            // }
-
-            let messages = match init_messages_stream(local_store).await {
-                Ok(messages) => messages,
-                Err(e) => {
-                    tx.send(Event::Quit(Some(e))).await.unwrap();
-                    return;
-                }
-            };
-            futures_util::pin_mut!(messages);
-
-            while let Some(message) = messages.next().await {
-                tx.send(Event::Message(message)).await.unwrap()
-            }
-        });
-        local_rt.block_on(local);
     });
 
     terminal.clear()?;
@@ -287,7 +242,7 @@ async fn run_single_threaded() -> anyhow::Result<()> {
                 if let Some(e) = e {
                     error!("fatal error: {}", e);
                 };
-                app.should_quit = true;
+                break;
             }
             None => {
                 break;
