@@ -14,8 +14,6 @@ pub struct Config {
     #[serde(default)]
     pub first_name_only: bool,
     pub user: User,
-    #[serde(default)]
-    pub signal_cli: SignalCli,
 }
 
 impl Config {
@@ -23,7 +21,6 @@ impl Config {
     pub fn with_user(user: User) -> Self {
         Config {
             user,
-            signal_cli: Default::default(),
             data_path: default_data_path(),
             signal_db_path: default_signal_db_path(),
             first_name_only: false,

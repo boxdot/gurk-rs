@@ -79,8 +79,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn run_single_threaded() -> anyhow::Result<()> {
-    let (tx, mut rx) = tokio::sync::mpsc::channel::<Event>(100);
-    let mut app = App::try_new(tx.clone()).await?;
+    let mut app = App::try_new().await?;
 
     enable_raw_mode()?;
     let _raw_mode_guard = scopeguard::guard((), |_| {
@@ -90,6 +89,7 @@ async fn run_single_threaded() -> anyhow::Result<()> {
     let mut stdout = std::io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
 
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<Event>(100);
     tokio::spawn({
         let tx = tx.clone();
         async move {
@@ -119,7 +119,7 @@ async fn run_single_threaded() -> anyhow::Result<()> {
         let messages = inner_manager.receive_messages_stream().await.unwrap();
         futures_util::pin_mut!(messages);
         while let Some(message) = messages.next().await {
-            inner_tx.send(Event::PresageMessage(message)).await.unwrap()
+            inner_tx.send(Event::Message(message)).await.unwrap()
         }
     });
 
@@ -159,7 +159,7 @@ async fn run_single_threaded() -> anyhow::Result<()> {
             futures_util::pin_mut!(messages);
 
             while let Some(message) = messages.next().await {
-                tx.send(Event::PresageMessage(message)).await.unwrap()
+                tx.send(Event::Message(message)).await.unwrap()
             }
         });
         local_rt.block_on(local);
@@ -240,11 +240,7 @@ async fn run_single_threaded() -> anyhow::Result<()> {
                 }
                 code => app.on_key(code).await,
             },
-            Some(Event::Message { payload, message }) => {
-                app.on_message(message, payload).await;
-            }
-            Some(Event::PresageMessage(content)) => app.on_pressage_message(content).await,
-            Some(Event::Channels { remote }) => app.on_channels(remote),
+            Some(Event::Message(content)) => app.on_message(content).await,
             Some(Event::Resize { cols: _, rows }) => match rows {
                 // terminal too narrow for mouse navigation
                 rows if rows < 3 => {}
