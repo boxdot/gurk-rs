@@ -72,6 +72,13 @@ async fn main() -> anyhow::Result<()> {
         init_file_logger()?;
     }
 
+    let local = tokio::task::LocalSet::new();
+    local
+        .run_until(async move { run_single_threaded().await })
+        .await
+}
+
+async fn run_single_threaded() -> anyhow::Result<()> {
     let mut app = App::try_new().await?;
 
     enable_raw_mode()?;
@@ -105,6 +112,16 @@ async fn main() -> anyhow::Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     app.data.chanpos.downside = terminal.get_frame().size().height - 3;
+
+    let inner_manager = app.signal_manager.clone();
+    let inner_tx = tx.clone();
+    tokio::task::spawn_local(async move {
+        let messages = inner_manager.receive_messages_stream().await.unwrap();
+        futures_util::pin_mut!(messages);
+        while let Some(message) = messages.next().await {
+            inner_tx.send(Event::PresageMessage(message)).await.unwrap()
+        }
+    });
 
     let local_store = app.signal_manager.config_store.clone();
     std::thread::spawn(move || {

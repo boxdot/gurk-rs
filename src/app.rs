@@ -9,7 +9,6 @@ use derivative::Derivative;
 use libsignal_service::content::ContentBody;
 use libsignal_service::proto::DataMessage;
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc;
 use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
 
@@ -24,7 +23,6 @@ pub struct App {
     pub config: Config,
     pub should_quit: bool,
     pub signal_manager: signal::Manager,
-    message_tx: mpsc::UnboundedSender<(Vec<Uuid>, ContentBody, u64)>,
     pub data: AppData,
 }
 
@@ -222,14 +220,11 @@ impl App {
             data.save(&config.data_path)?;
         }
 
-        let message_tx = signal::spawn_message_sender(signal_manager.config_store.clone());
-
         Ok(Self {
             config,
             data,
             should_quit: false,
             signal_manager,
-            message_tx,
         })
     }
 
@@ -273,11 +268,15 @@ impl App {
                 timestamp: Some(timestamp),
                 ..Default::default()
             });
-            if let Err(e) = self.message_tx.send((vec![uuid], body, timestamp)) {
-                // TODO: Proper error handling
-                log::error!("Failed to send message `{}`: {}", message, e);
-                return;
-            }
+
+            let manager = self.signal_manager.clone();
+            tokio::task::spawn_local(async move {
+                if let Err(e) = manager.send_message(uuid, body, timestamp).await {
+                    // TODO: Proper error handling
+                    log::error!("Failed to send message to {}: {}", uuid, e);
+                    return;
+                }
+            });
         } else {
             unimplemented!("sending to groups is not yet implemented");
         }
