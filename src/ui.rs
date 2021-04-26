@@ -1,5 +1,4 @@
 use crate::signal;
-use crate::util;
 use crate::{app, App};
 
 use anyhow::Context;
@@ -207,13 +206,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
     let selected = app.data.channels.state.selected().unwrap_or_default();
 
-    let init = &mut app::Channel {
-        id: "default".to_string(),
-        name: " ".to_string(),
-        is_group: false,
-        messages: util::StatefulList::with_items(Vec::new()),
-        unread_messages: 0,
-    };
+    let init = &mut app::Channel::empty();
 
     let state = &mut app
         .data

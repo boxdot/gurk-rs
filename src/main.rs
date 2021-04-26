@@ -195,7 +195,11 @@ async fn run_single_threaded() -> anyhow::Result<()> {
                 }
                 code => app.on_key(code).await,
             },
-            Some(Event::Message(content)) => app.on_message(content).await,
+            Some(Event::Message(content)) => {
+                if let Err(e) = app.on_message(content).await {
+                    error!("failed on incoming message: {}", e);
+                }
+            }
             Some(Event::Resize { cols: _, rows }) => match rows {
                 // terminal too narrow for mouse navigation
                 rows if rows < 3 => {}
