@@ -202,11 +202,11 @@ impl App {
     }
 
     pub fn name_by_id(&self, id: Uuid) -> &str {
-        self.data
-            .names
-            .get(&id)
-            .map(|s| s.as_ref())
-            .unwrap_or("Unknown Name")
+        self.get_name_by_id(id).unwrap_or("Unknown Name")
+    }
+
+    pub fn get_name_by_id(&self, id: Uuid) -> Option<&str> {
+        self.data.names.get(&id).map(|s| s.as_ref())
     }
 
     pub fn put_char(&mut self, c: char) {
@@ -258,6 +258,7 @@ impl App {
             text: message.message.clone(),
             ..Default::default()
         });
+        let quote_message = quote.clone().and_then(Message::from_quote).map(Box::new);
         let with_quote = quote.is_some();
 
         let mut data_message = DataMessage {
@@ -315,7 +316,7 @@ impl App {
             message: Some(message),
             attachments: Vec::new(),
             arrived_at: Utc::now(),
-            quote: None,
+            quote: quote_message,
         });
 
         self.reset_unread_messages();
