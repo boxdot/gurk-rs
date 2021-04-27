@@ -73,16 +73,14 @@ For reference, check the following crates:
 
 ## License
 
- * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
-   http://www.apache.org/licenses/LICENSE-2.0)
- * MIT License ([LICENSE-MIT](LICENSE-MIT) or
-   http://opensource.org/licenses/MIT)
+ * GNU Affero General Public License v3 only ([AGPL-3.0-only](LICENSE-AGPL-3.0) or
+   https://www.gnu.org/licenses/agpl-3.0.en.html)
 
 ### Contribution
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in this document by you, as defined in the Apache-2.0 license,
-shall be dual licensed as above, without any additional terms or conditions.
+for inclusion in this document by you, as defined in the AGPL-3.0-only license,
+shall be licensed as above, without any additional terms or conditions.
 
 [Signal Messenger]: https://signal.org
 [`signal-cli`]: https://github.com/AsamK/signal-cli
