@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
 use libsignal_service::{
     content::{ContentBody, Metadata},
-    proto::GroupContextV2,
+    proto::{data_message::Quote, GroupContextV2},
     ServiceAddress,
 };
 use libsignal_service::{prelude::Content, proto::DataMessage};
@@ -95,6 +95,15 @@ impl Channel {
             ChannelId::User(id) => Some(id),
             ChannelId::Group(_) => None,
         }
+    }
+
+    fn selected_message(&self) -> Option<&Message> {
+        // Messages are shown in reversed order => selected is reversed
+        self.messages
+            .state
+            .selected()
+            .and_then(|idx| self.messages.items.len().checked_sub(idx + 1))
+            .and_then(|idx| self.messages.items.get(idx))
     }
 
     fn serialize_msgs<S>(messages: &StatefulList<Message>, ser: S) -> Result<S::Ok, S::Error>
@@ -206,14 +215,16 @@ impl App {
             KeyCode::Backspace => {
                 self.on_backspace();
             }
-            KeyCode::Esc => {
-                if let Some(idx) = self.data.channels.state.selected() {
-                    let channel = &mut self.data.channels.items[idx];
-                    channel.messages.state.select(None);
-                }
-            }
+            KeyCode::Esc => self.reset_message_selection(),
             KeyCode::Char(c) => self.put_char(c),
             _ => {}
+        }
+    }
+
+    fn reset_message_selection(&mut self) {
+        if let Some(idx) = self.data.channels.state.selected() {
+            let channel = &mut self.data.channels.items[idx];
+            channel.messages.state.select(None);
         }
     }
 
@@ -224,10 +235,21 @@ impl App {
         self.data.input_cursor = 0;
         self.data.input_cursor_chars = 0;
 
-        let timestamp = util::utc_timestamp_msec();
+        let timestamp = util::utc_now_timestamp_msec();
+
+        let quote = channel.selected_message().map(|message| Quote {
+            // Messages are shown in reverse order => selected is reverse
+            id: Some(message.arrived_at.timestamp_millis() as u64),
+            author_uuid: Some(message.from_id.to_string()),
+            text: message.message.clone(),
+            ..Default::default()
+        });
+        let with_quote = quote.is_some();
+
         let mut data_message = DataMessage {
             body: Some(message.clone()),
             timestamp: Some(timestamp),
+            quote,
             ..Default::default()
         };
 
@@ -282,6 +304,9 @@ impl App {
         });
 
         self.reset_unread_messages();
+        if with_quote {
+            self.reset_message_selection();
+        }
         self.bubble_up_channel(channel_idx);
         self.save().unwrap();
     }
@@ -744,10 +769,14 @@ impl App {
     }
 
     fn add_message_to_channel(&mut self, channel_idx: usize, message: Message) {
-        self.data.channels.items[channel_idx]
-            .messages
-            .items
-            .push(message);
+        let channel = &mut self.data.channels.items[channel_idx];
+
+        channel.messages.items.push(message);
+        if let Some(idx) = channel.messages.state.selected() {
+            // keep selection on the old message
+            channel.messages.state.select(Some(idx + 1));
+        }
+
         if self.data.channels.state.selected() != Some(channel_idx) {
             self.data.channels.items[channel_idx].unread_messages += 1;
         } else {
