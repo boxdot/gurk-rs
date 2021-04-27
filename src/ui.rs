@@ -13,9 +13,27 @@ use unicode_width::UnicodeWidthStr;
 
 use std::path::PathBuf;
 
+pub const CHANNEL_VIEW_RATIO: u32 = 4;
+
+pub fn coords_within_channels_view<B: Backend>(f: &Frame<B>, x: u16, y: u16) -> Option<(u16, u16)> {
+    let rect = f.size();
+    // 1 offset around the view for taking the border into account
+    if 0 < x && x < rect.width / CHANNEL_VIEW_RATIO as u16 && 0 < y && y + 1 < rect.height {
+        Some((x - 1, y - 1))
+    } else {
+        None
+    }
+}
+
 pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     let chunks = Layout::default()
-        .constraints([Constraint::Ratio(1, 4), Constraint::Ratio(3, 4)].as_ref())
+        .constraints(
+            [
+                Constraint::Ratio(1, CHANNEL_VIEW_RATIO),
+                Constraint::Ratio(3, CHANNEL_VIEW_RATIO),
+            ]
+            .as_ref(),
+        )
         .direction(Direction::Horizontal)
         .split(f.size());
 
