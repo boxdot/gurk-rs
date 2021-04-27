@@ -143,6 +143,20 @@ pub struct Message {
     #[serde(default)]
     pub attachments: Vec<signal::Attachment>,
     pub arrived_at: DateTime<Utc>,
+    #[serde(default)]
+    pub quote: Option<Box<Message>>,
+}
+
+impl Message {
+    fn from_quote(quote: Quote) -> Option<Message> {
+        Some(Message {
+            from_id: quote.author_uuid?.parse().ok()?,
+            message: quote.text,
+            attachments: Default::default(),
+            arrived_at: util::timestamp_msec_to_utc(quote.id?),
+            quote: None,
+        })
+    }
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -301,6 +315,7 @@ impl App {
             message: Some(message),
             attachments: Vec::new(),
             arrived_at: Utc::now(),
+            quote: None,
         });
 
         self.reset_unread_messages();
@@ -453,7 +468,7 @@ impl App {
 
         let self_uuid = self.signal_manager.uuid();
 
-        match (content.metadata, content.body) {
+        let (channel_idx, message) = match (content.metadata, content.body) {
             // Private note message
             (
                 _,
@@ -477,8 +492,9 @@ impl App {
                     message: Some(text),
                     attachments: Default::default(),
                     arrived_at: util::timestamp_msec_to_utc(timestamp),
+                    quote: None,
                 };
-                self.add_message_to_channel(channel_idx, message);
+                (channel_idx, message)
             }
             // Direct/group message by us from a different device
             (
@@ -500,6 +516,7 @@ impl App {
                                 Some(DataMessage {
                                     body: Some(text),
                                     group_v2,
+                                    quote,
                                     ..
                                 }),
                             ..
@@ -513,7 +530,7 @@ impl App {
                     ..
                 }) = group_v2
                 {
-                    // message -> group
+                    // message to a group
                     self.ensure_group_channel_exists(master_key, revision)
                         .await
                         .context("failed to create group channel")?
@@ -521,22 +538,24 @@ impl App {
                     destination_uuid.and_then(|s| s.parse().ok()),
                     destination_e164,
                 ) {
-                    // message -> contact
+                    // message to a contact
                     self.ensure_contact_channel_exists(destination_uuid, &destination_e164)
                         .await
                 } else {
                     return Ok(());
                 };
 
+                let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let message = Message {
                     from_id: self_uuid,
                     message: Some(text),
                     attachments: Default::default(),
                     arrived_at: util::timestamp_msec_to_utc(timestamp),
+                    quote,
                 };
-                self.add_message_to_channel(channel_idx, message);
+                (channel_idx, message)
             }
-            // Direct message
+            // Incoming direct/group message
             (
                 Metadata {
                     sender:
@@ -549,70 +568,58 @@ impl App {
                 },
                 ContentBody::DataMessage(DataMessage {
                     body: Some(text),
-                    group_v2: None,
+                    group_v2,
                     timestamp: Some(timestamp),
                     profile_key: Some(profile_key),
+                    quote,
                     ..
                 }),
             ) => {
-                let name = self
-                    .ensure_user_is_known(uuid, profile_key, phone_number)
-                    .await
-                    .to_string();
-                let channel_idx = self.ensure_contact_channel_exists(uuid, &name).await;
-                let from = self.data.channels.items[channel_idx].name.clone();
+                let (channel_idx, from) = if let Some(GroupContextV2 {
+                    master_key: Some(master_key),
+                    revision: Some(revision),
+                    ..
+                }) = group_v2
+                {
+                    // incoming group message
+                    let channel_idx = self
+                        .ensure_group_channel_exists(master_key, revision)
+                        .await
+                        .context("failed to create group channel")?;
+                    let from = self
+                        .ensure_user_is_known(uuid, profile_key, phone_number)
+                        .await
+                        .to_string();
+
+                    (channel_idx, from)
+                } else {
+                    // incoming direct message
+                    let name = self
+                        .ensure_user_is_known(uuid, profile_key, phone_number)
+                        .await
+                        .to_string();
+                    let channel_idx = self.ensure_contact_channel_exists(uuid, &name).await;
+                    let from = self.data.channels.items[channel_idx].name.clone();
+
+                    (channel_idx, from)
+                };
+
                 self.notify(&from, &text);
+
+                let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let message = Message {
                     from_id: uuid,
                     message: Some(text),
                     attachments: Default::default(),
                     arrived_at: util::timestamp_msec_to_utc(timestamp),
+                    quote,
                 };
-                self.add_message_to_channel(channel_idx, message);
+                (channel_idx, message)
             }
-            // Group message
-            (
-                Metadata {
-                    sender:
-                        ServiceAddress {
-                            uuid: Some(uuid),
-                            phonenumber: Some(phone_number),
-                            ..
-                        },
-                    ..
-                },
-                ContentBody::DataMessage(DataMessage {
-                    body: Some(text),
-                    group_v2:
-                        Some(GroupContextV2 {
-                            master_key: Some(master_key),
-                            revision: Some(revision),
-                            ..
-                        }),
-                    timestamp: Some(timestamp),
-                    profile_key: Some(profile_key),
-                    ..
-                }),
-            ) => {
-                let channel_idx = self
-                    .ensure_group_channel_exists(master_key, revision)
-                    .await
-                    .context("failed to create group channel")?;
-                let from = self
-                    .ensure_user_is_known(uuid, profile_key, phone_number)
-                    .await
-                    .to_string();
-                self.notify(&from, &text);
-                let message = Message {
-                    from_id: uuid,
-                    message: Some(text),
-                    attachments: Default::default(),
-                    arrived_at: util::timestamp_msec_to_utc(timestamp),
-                };
-                self.add_message_to_channel(channel_idx, message);
-            }
-            _ => (),
+            _ => return Ok(()),
         };
+
+        self.add_message_to_channel(channel_idx, message);
 
         Ok(())
     }
