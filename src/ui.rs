@@ -175,12 +175,33 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         let displayed_message = displayed_message(&msg);
 
         let prefix_width = (time.width() + from.width() + delimeter.width()) as u16;
-        let indent = " ".repeat(prefix_width.into());
+        let mut indent = " ".repeat(prefix_width.into());
 
         let wrap_opts = textwrap::Options::new(width.into())
             .initial_indent(&indent)
             .subsequent_indent(&indent);
-        let lines = textwrap::wrap(displayed_message.as_str(), wrap_opts);
+        let mut lines = textwrap::wrap(displayed_message.as_str(), wrap_opts);
+
+        // prepend quote if any
+        let quote = if let Some(displayed_quote) = msg
+            .quote
+            .as_ref()
+            .and_then(|quote| displayed_quote(app, quote))
+        {
+            displayed_quote
+        } else {
+            String::new()
+        };
+
+        if !quote.is_empty() {
+            indent.push_str("> ");
+            let wrap_opts = textwrap::Options::new(width as usize + 2)
+                .initial_indent(&indent)
+                .subsequent_indent(&indent);
+            let mut quote_lines = textwrap::wrap(quote.as_str(), wrap_opts);
+            quote_lines.extend(lines.into_iter());
+            lines = quote_lines;
+        }
 
         let spans: Vec<Spans> = lines
             .into_iter()
@@ -256,6 +277,15 @@ fn displayed_name(name: &str, first_name_only: bool) -> &str {
         &name[0..space_pos]
     } else {
         &name
+    }
+}
+
+fn displayed_quote(app: &App, quote: &app::Message) -> Option<String> {
+    if let Some(name) = app.get_name_by_id(quote.from_id) {
+        let name = displayed_name(name, app.config.first_name_only);
+        Some(format!("> ({}) {}", name, quote.message.as_ref()?))
+    } else {
+        quote.message.as_ref().map(|s| format!("> {}", s))
     }
 }
 
