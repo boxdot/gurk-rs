@@ -159,10 +159,12 @@ async fn run_single_threaded() -> anyhow::Result<()> {
                 KeyCode::Left => {
                     app.on_left();
                 }
+                KeyCode::Up if event.modifiers.contains(KeyModifiers::ALT) => app.on_pgup(),
                 KeyCode::Up => app.on_up(),
                 KeyCode::Right => {
                     app.on_right();
                 }
+                KeyCode::Down if event.modifiers.contains(KeyModifiers::ALT) => app.on_pgdn(),
                 KeyCode::Down => app.on_down(),
                 KeyCode::PageUp => app.on_pgup(),
                 KeyCode::PageDown => app.on_pgdn(),

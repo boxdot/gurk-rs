@@ -73,7 +73,7 @@ pub fn timestamp_msec_to_utc(timestamp: u64) -> DateTime<Utc> {
     Utc.from_utc_datetime(&dt)
 }
 
-pub fn utc_timestamp_msec() -> u64 {
+pub fn utc_now_timestamp_msec() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .expect("Time went backwards")
