@@ -28,6 +28,9 @@ struct Args {
     /// Enable logging to `gurg.log` in the current working directory.
     #[structopt(short, long)]
     verbose: bool,
+    /// Relink the device. Helpful when device was unlinked in the meanwhile.
+    #[structopt(long)]
+    relink: bool,
 }
 
 fn init_file_logger() -> anyhow::Result<()> {
@@ -57,12 +60,12 @@ async fn main() -> anyhow::Result<()> {
     log_panics::init();
 
     tokio::task::LocalSet::new()
-        .run_until(run_single_threaded())
+        .run_until(run_single_threaded(args.relink))
         .await
 }
 
-async fn run_single_threaded() -> anyhow::Result<()> {
-    let mut app = App::try_new().await?;
+async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
+    let mut app = App::try_new(relink).await?;
 
     enable_raw_mode()?;
     let _raw_mode_guard = scopeguard::guard((), |_| {
@@ -100,8 +103,10 @@ async fn run_single_threaded() -> anyhow::Result<()> {
         let messages = match inner_manager.receive_messages_stream().await {
             Ok(messages) => messages,
             Err(e) => {
-                let e = anyhow::Error::from(e)
-                    .context("failed to initialize the stream of Signal messages");
+                let e = anyhow::Error::from(e).context(
+                    "failed to initialize the stream of Signal messages.\n\
+                    Maybe the device was unlinked? Please try to restart with '--relink` flag.",
+                );
                 inner_tx
                     .send(Event::Quit(Some(e)))
                     .await
@@ -120,6 +125,7 @@ async fn run_single_threaded() -> anyhow::Result<()> {
 
     terminal.clear()?;
 
+    let mut res = Ok(()); // result on quit
     loop {
         terminal.draw(|f| ui::draw(f, &mut app))?;
         match rx.recv().await {
@@ -201,7 +207,7 @@ async fn run_single_threaded() -> anyhow::Result<()> {
             }
             Some(Event::Quit(e)) => {
                 if let Some(e) = e {
-                    error!("fatal error: {}", e);
+                    res = Err(e);
                 };
                 break;
             }
@@ -222,5 +228,5 @@ async fn run_single_threaded() -> anyhow::Result<()> {
     .unwrap();
     terminal.show_cursor().unwrap();
 
-    Ok(())
+    res
 }

@@ -168,8 +168,8 @@ pub enum Event {
 }
 
 impl App {
-    pub async fn try_new() -> anyhow::Result<Self> {
-        let (signal_manager, config) = signal::ensure_linked_device().await?;
+    pub async fn try_new(relink: bool) -> anyhow::Result<Self> {
+        let (signal_manager, config) = signal::ensure_linked_device(relink).await?;
 
         let mut load_data_path = config.data_path.clone();
         if !load_data_path.exists() {
