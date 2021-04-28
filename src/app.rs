@@ -3,7 +3,6 @@ use crate::signal;
 use crate::util::{self, StatefulList};
 
 use anyhow::Context;
-use chrono::{DateTime, Utc};
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
 use libsignal_service::{
     content::{ContentBody, Metadata},
@@ -142,7 +141,7 @@ pub struct Message {
     pub message: Option<String>,
     #[serde(default)]
     pub attachments: Vec<signal::Attachment>,
-    pub arrived_at: DateTime<Utc>,
+    pub arrived_at: u64,
     #[serde(default)]
     pub quote: Option<Box<Message>>,
 }
@@ -153,7 +152,7 @@ impl Message {
             from_id: quote.author_uuid?.parse().ok()?,
             message: quote.text,
             attachments: Default::default(),
-            arrived_at: util::timestamp_msec_to_utc(quote.id?),
+            arrived_at: quote.id?,
             quote: None,
         })
     }
@@ -253,7 +252,7 @@ impl App {
 
         let quote = channel.selected_message().map(|message| Quote {
             // Messages are shown in reverse order => selected is reverse
-            id: Some(message.arrived_at.timestamp_millis() as u64),
+            id: Some(message.arrived_at),
             author_uuid: Some(message.from_id.to_string()),
             text: message.message.clone(),
             ..Default::default()
@@ -315,7 +314,7 @@ impl App {
             from_id: self.signal_manager.uuid(),
             message: Some(message),
             attachments: Vec::new(),
-            arrived_at: Utc::now(),
+            arrived_at: timestamp,
             quote: quote_message,
         });
 
@@ -492,7 +491,7 @@ impl App {
                     from_id: self_uuid,
                     message: Some(text),
                     attachments: Default::default(),
-                    arrived_at: util::timestamp_msec_to_utc(timestamp),
+                    arrived_at: timestamp,
                     quote: None,
                 };
                 (channel_idx, message)
@@ -551,7 +550,7 @@ impl App {
                     from_id: self_uuid,
                     message: Some(text),
                     attachments: Default::default(),
-                    arrived_at: util::timestamp_msec_to_utc(timestamp),
+                    arrived_at: timestamp,
                     quote,
                 };
                 (channel_idx, message)
@@ -612,7 +611,7 @@ impl App {
                     from_id: uuid,
                     message: Some(text),
                     attachments: Default::default(),
-                    arrived_at: util::timestamp_msec_to_utc(timestamp),
+                    arrived_at: timestamp,
                     quote,
                 };
                 (channel_idx, message)
