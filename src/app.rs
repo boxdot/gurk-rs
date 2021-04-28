@@ -137,13 +137,12 @@ impl From<Uuid> for ChannelId {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Message {
     pub from_id: Uuid,
-    #[serde(alias = "text")] // remove
     pub message: Option<String>,
-    #[serde(default)]
-    pub attachments: Vec<signal::Attachment>,
     pub arrived_at: u64,
     #[serde(default)]
     pub quote: Option<Box<Message>>,
+    #[serde(default)]
+    pub attachments: Vec<signal::Attachment>,
 }
 
 impl Message {
