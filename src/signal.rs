@@ -3,7 +3,7 @@ use crate::{
     config::{self, Config},
 };
 
-use anyhow::{anyhow, Context as _};
+use anyhow::{anyhow, bail, Context as _};
 use libsignal_service::prelude::GroupMasterKey;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -32,49 +32,67 @@ fn get_signal_manager() -> anyhow::Result<Manager> {
     Ok(manager)
 }
 
-pub async fn ensure_linked_device() -> anyhow::Result<(Manager, Config)> {
+pub async fn ensure_linked_device(relink: bool) -> anyhow::Result<(Manager, Config)> {
     let mut manager = get_signal_manager()?;
-    let config = if let Some(config_path) = config::installed_config() {
-        config::load_from(config_path)?
-    } else {
-        if manager.phone_number().is_none() {
-            // link device
-            let at_hostname = hostname::get()
-                .ok()
-                .and_then(|hostname| {
-                    hostname
-                        .to_string_lossy()
-                        .split('.')
-                        .find(|s| !s.is_empty())
-                        .map(|s| format!("@{}", s))
-                })
-                .unwrap_or_else(String::new);
-            let device_name = format!("gurk{}", at_hostname);
-            println!("Linking new device with device name: {}", device_name);
-            manager
-                .link_secondary_device(
-                    libsignal_service::configuration::SignalServers::Production,
-                    device_name.clone(),
-                )
-                .await?;
+
+    let config = config::installed_config()
+        .map(|path| config::load_from(path))
+        .transpose()?;
+
+    let is_registered = !relink && manager.is_registered();
+
+    if is_registered {
+        if let Some(config) = config {
+            return Ok((manager, config));
         }
+    }
 
-        let phone_number = manager
-            .phone_number()
-            .expect("no phone number after device was linked");
-        let profile = manager.retrieve_profile().await?;
-        let name = profile
-            .name
-            .map(|name| name.given_name)
-            .unwrap_or_else(whoami::username);
+    // link device
+    let at_hostname = hostname::get()
+        .ok()
+        .and_then(|hostname| {
+            hostname
+                .to_string_lossy()
+                .split('.')
+                .find(|s| !s.is_empty())
+                .map(|s| format!("@{}", s))
+        })
+        .unwrap_or_else(String::new);
+    let device_name = format!("gurk{}", at_hostname);
+    println!("Linking new device with device name: {}", device_name);
+    manager
+        .link_secondary_device(
+            libsignal_service::configuration::SignalServers::Production,
+            device_name.clone(),
+        )
+        .await?;
 
+    // get profile
+    let phone_number = manager
+        .phone_number()
+        .expect("no phone number after device was linked");
+    let profile = manager
+        .retrieve_profile()
+        .await
+        .context("failed to get the user profile")?;
+    let name = profile
+        .name
+        .map(|name| name.given_name)
+        .unwrap_or_else(whoami::username);
+
+    let config = if let Some(config) = config {
+        // check that config fits the profile
+        if config.user.phone_number != phone_number.to_string() {
+            bail!("Wrong phone number in the config. Please adjust it.");
+        }
+        config
+    } else {
         let user = config::User {
             name,
             phone_number: phone_number.to_string(),
         };
         let config = config::Config::with_user(user);
         config.save_new().context("failed to init config file")?;
-
         config
     };
 
