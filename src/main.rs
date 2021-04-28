@@ -109,7 +109,7 @@ async fn run_single_threaded() -> anyhow::Result<()> {
                 return;
             }
         };
-        pin_utils::pin_mut!(messages);
+        tokio::pin!(messages);
         while let Some(message) = messages.next().await {
             inner_tx
                 .send(Event::Message(message))

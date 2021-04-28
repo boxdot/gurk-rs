@@ -37,4 +37,3 @@ whoami = "1.1.2"
 libsignal-protocol = { git = "https://github.com/Michael-F-Bryan/libsignal-protocol-rs" }
 libsignal-service = { git = "https://github.com/Michael-F-Bryan/libsignal-service-rs" }
 presage = { git = "https://github.com/whisperfish/presage.git", rev = "1ede250" }
-pin-utils = "0.1.0"
