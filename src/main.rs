@@ -25,10 +25,10 @@ use std::io::Write;
 
 #[derive(Debug, StructOpt)]
 struct Args {
-    /// Enable logging to `gurg.log` in the current working directory.
+    /// Enables logging to `gurk.log` in the current working directory
     #[structopt(short, long)]
     verbose: bool,
-    /// Relink the device. Helpful when device was unlinked in the meanwhile.
+    /// Relinks the device (helpful when device was unlinked)
     #[structopt(long)]
     relink: bool,
 }
