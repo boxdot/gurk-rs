@@ -1037,7 +1037,6 @@ dependencies = [
  "log-panics",
  "log4rs",
  "notify-rust",
- "pin-utils",
  "presage",
  "scopeguard",
  "serde",
