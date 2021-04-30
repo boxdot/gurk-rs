@@ -36,7 +36,7 @@ pub async fn ensure_linked_device(relink: bool) -> anyhow::Result<(Manager, Conf
     let mut manager = get_signal_manager()?;
 
     let config = config::installed_config()
-        .map(|path| config::load_from(path))
+        .map(config::load_from)
         .transpose()?;
 
     let is_registered = !relink && manager.is_registered();
