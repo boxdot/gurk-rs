@@ -1,7 +1,6 @@
+use crate::util;
 use crate::{app, App};
-use crate::{signal, util};
 
-use anyhow::Context;
 use chrono::{Datelike, Timelike};
 use tui::backend::Backend;
 use tui::layout::{Constraint, Corner, Direction, Layout, Rect};
@@ -10,8 +9,6 @@ use tui::text::{Span, Spans, Text};
 use tui::widgets::{Block, Borders, List, ListItem, Paragraph};
 use tui::Frame;
 use unicode_width::UnicodeWidthStr;
-
-use std::path::PathBuf;
 
 pub const CHANNEL_VIEW_RATIO: u32 = 4;
 
@@ -153,7 +150,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let width = area.width - 2; // without borders
 
     let time_style = Style::default().fg(Color::Yellow);
-    let messages = messages.iter().rev().map(|msg| {
+    let messages = messages.iter().rev().filter_map(|msg| {
         let arrived_at = util::timestamp_msec_to_utc(msg.arrived_at);
 
         let time = Span::styled(
@@ -172,15 +169,13 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         );
         let delimeter = Span::from(": ");
 
-        let displayed_message = displayed_message(&msg);
-
         let prefix_width = (time.width() + from.width() + delimeter.width()) as u16;
         let mut indent = " ".repeat(prefix_width.into());
 
         let wrap_opts = textwrap::Options::new(width.into())
             .initial_indent(&indent)
             .subsequent_indent(&indent);
-        let mut lines = textwrap::wrap(displayed_message.as_str(), wrap_opts);
+        let mut lines = textwrap::wrap(msg.message.as_ref()?, wrap_opts);
 
         // prepend quote if any
         let quote = if let Some(displayed_quote) = msg
@@ -220,7 +215,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
                 Spans::from(res)
             })
             .collect();
-        spans
+        Some(spans)
     });
 
     let mut items: Vec<_> = messages.map(|s| ListItem::new(Text::from(s))).collect();
@@ -287,85 +282,4 @@ fn displayed_quote(app: &App, quote: &app::Message) -> Option<String> {
     } else {
         quote.message.as_ref().map(|s| format!("> {}", s))
     }
-}
-
-fn displayed_message(msg: &app::Message) -> String {
-    let symlinks = symlink_attachments(&msg.attachments).unwrap();
-    let displayed_attachments = symlinks
-        .into_iter()
-        .map(|path| format!("[file://{}]", path.display()));
-    let message = msg.message.as_deref().unwrap_or_default();
-    if !message.is_empty() {
-        itertools::join(
-            std::iter::once(message.to_string()).chain(displayed_attachments),
-            "\n",
-        )
-    } else {
-        itertools::join(displayed_attachments, "\n")
-    }
-}
-
-/// Creates symlinks to attachments in default tmp dir with short random file names.
-fn symlink_attachments(attachments: &[signal::Attachment]) -> anyhow::Result<Vec<PathBuf>> {
-    let signal_cli_data_dir = std::env::var("XDG_DATA_HOME")
-        .map(|s| PathBuf::from(s).join("signal-cli"))
-        .or_else(|_| {
-            std::env::var("HOME").map(|s| PathBuf::from(s).join(".local/share/signal-cli"))
-        })
-        .context("could not find signal-cli data path")?;
-
-    let tmp_attachments_dir = std::env::temp_dir().join("gurk");
-    std::fs::create_dir_all(&tmp_attachments_dir)
-        .with_context(|| format!("failed to create {}", tmp_attachments_dir.display()))?;
-
-    attachments
-        .iter()
-        .map(|attachment| {
-            let source = signal_cli_data_dir.join("attachments").join(&attachment.id);
-
-            let filename = id_to_short_random_filename(&attachment.id);
-            let filename = std::str::from_utf8(&filename[..])?;
-            let mut dest = tmp_attachments_dir.join(filename);
-            if let Some(ext) = attachment.filename.extension() {
-                dest.set_extension(ext);
-            };
-
-            match std::fs::read_link(&dest) {
-                Ok(linked) if linked == source => return Ok(dest),
-                Ok(_) => std::fs::remove_file(&dest)?,
-                _ => (),
-            }
-
-            std::os::unix::fs::symlink(&source, &dest).with_context(|| {
-                format!(
-                    "failed to attachment create symlink: {} -> {}",
-                    source.display(),
-                    dest.display(),
-                )
-            })?;
-            Ok(dest)
-        })
-        .collect()
-}
-
-fn xorshift32(mut x: u32) -> u32 {
-    x ^= x << 13;
-    x ^= x >> 17;
-    x ^= x << 5;
-    x
-}
-
-fn id_to_short_random_filename(id: &str) -> [u8; 6] {
-    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    let mut seed = id
-        .chars()
-        .fold(0u32, |acc, c| xorshift32(acc.wrapping_add(c as u32)))
-        .max(1); // must be != 0
-
-    let mut filename = [0; 6];
-    for letter in &mut filename {
-        seed = xorshift32(seed);
-        *letter = CHARSET[seed as usize % CHARSET.len()];
-    }
-    filename
 }
