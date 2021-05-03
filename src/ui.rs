@@ -151,7 +151,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
     let time_style = Style::default().fg(Color::Yellow);
     let messages = messages.iter().rev().filter_map(|msg| {
-        let arrived_at = util::timestamp_msec_to_utc(msg.arrived_at);
+        let arrived_at = util::utc_timestamp_msec_to_local(msg.arrived_at);
 
         let time = Span::styled(
             format!(
