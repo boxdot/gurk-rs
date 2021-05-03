@@ -3,21 +3,6 @@
 version = 3
 
 [[package]]
-name = "addr2line"
-version = "0.14.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a55f82cfe485775d02112886f4169bde0c5894d75e79ead7eafe7e40a25e45f7"
-dependencies = [
- "gimli",
-]
-
-[[package]]
-name = "adler"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f26201604c87b1e01bd3d98f8d5d9a8fcbb815e8cedb41ffccbeb4bf593a35fe"
-
-[[package]]
 name = "adler32"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -257,20 +242,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
 
 [[package]]
-name = "backtrace"
-version = "0.3.57"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78ed203b9ba68b242c62b3fb7480f589dd49829be1edb3fe8fc8b4ffda2dcb8d"
-dependencies = [
- "addr2line",
- "cfg-if 1.0.0",
- "libc",
- "miniz_oxide 0.4.4",
- "object",
- "rustc-demangle",
-]
-
-[[package]]
 name = "base64"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -486,15 +457,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cmake"
-version = "0.1.45"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb6210b637171dfba4cda12e579ac6dc73f5165ad56133e5d72ef3131f320855"
-dependencies = [
- "cc",
-]
-
-[[package]]
 name = "color_quant"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -627,6 +589,16 @@ dependencies = [
 
 [[package]]
 name = "crypto-mac"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "58bcd97a54c7ca5ce2f6eb16f6bede5b0ab5f0055fedc17d2f0b4466e21671ca"
+dependencies = [
+ "generic-array 0.14.4",
+ "subtle 2.4.0",
+]
+
+[[package]]
+name = "crypto-mac"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4857fd85a0c34b3c3297875b747c1e02e06b6a0ea32dd892d8192b9ce0813ea6"
@@ -662,6 +634,32 @@ dependencies = [
  "digest 0.8.1",
  "rand_core 0.5.1",
  "serde",
+ "subtle 2.4.0",
+ "zeroize",
+]
+
+[[package]]
+name = "curve25519-dalek"
+version = "3.0.0"
+source = "git+https://github.com/signalapp/curve25519-dalek.git?branch=3.0.0-lizard2#2694ad3b789635f90f941648ae952f58d59ffc73"
+dependencies = [
+ "byteorder",
+ "digest 0.9.0",
+ "rand_core 0.5.1",
+ "serde",
+ "subtle 2.4.0",
+ "zeroize",
+]
+
+[[package]]
+name = "curve25519-dalek"
+version = "3.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "639891fde0dbea823fc3d798a0fdf9d2f9440a42d64a78ab3488b0ca025117b3"
+dependencies = [
+ "byteorder",
+ "digest 0.9.0",
+ "rand_core 0.5.1",
  "subtle 2.4.0",
  "zeroize",
 ]
@@ -1015,12 +1013,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gimli"
-version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6503fe142514ca4799d4c26297c4248239fe8838d827db6bd6065c6ed29a6ce"
-
-[[package]]
 name = "gurk"
 version = "0.2.0"
 dependencies = [
@@ -1031,8 +1023,6 @@ dependencies = [
  "dirs 3.0.2",
  "hostname",
  "itertools 0.10.0",
- "libsignal-protocol",
- "libsignal-service",
  "log",
  "log-panics",
  "log4rs",
@@ -1115,6 +1105,16 @@ checksum = "5dcb5e64cda4c23119ab41ba960d1e170a774c8e4b9d9e6a9bc18aabf5e59695"
 dependencies = [
  "crypto-mac 0.7.0",
  "digest 0.8.1",
+]
+
+[[package]]
+name = "hmac"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "deae6d9dbb35ec2c502d62b8f7b1c000a0822c3b0794ba36b3149c0a1c840dff"
+dependencies = [
+ "crypto-mac 0.9.1",
+ "digest 0.9.0",
 ]
 
 [[package]]
@@ -1373,36 +1373,33 @@ checksum = "18794a8ad5b29321f790b55d93dfba91e125cb1a9edbd4f8e3150acc771c1a5e"
 
 [[package]]
 name = "libsignal-protocol"
-version = "0.1.1-alpha.0"
-source = "git+https://github.com/Michael-F-Bryan/libsignal-protocol-rs#0fdf7c30ff0e1f207ac219252e7e961b5e14b937"
+version = "0.1.0"
+source = "git+https://github.com/signalapp/libsignal-client#87f205e80cc21ce0b1aa1a0e81f1a291d62fba49"
 dependencies = [
  "aes 0.6.0",
- "aes-ctr",
- "backtrace",
- "base64 0.13.0",
+ "arrayref",
+ "async-trait",
  "block-modes",
- "hmac 0.10.1",
- "libc",
- "libsignal-protocol-sys",
+ "ctr",
+ "curve25519-dalek 3.0.0",
+ "hex",
+ "hmac 0.9.0",
  "log",
- "rand 0.8.3",
+ "num_enum",
+ "prost",
+ "prost-build",
+ "rand 0.7.3",
  "sha2 0.9.3",
- "static_assertions",
- "thiserror",
-]
-
-[[package]]
-name = "libsignal-protocol-sys"
-version = "0.1.1-alpha.0"
-source = "git+https://github.com/Michael-F-Bryan/libsignal-protocol-rs#0fdf7c30ff0e1f207ac219252e7e961b5e14b937"
-dependencies = [
- "cmake",
+ "signal-crypto",
+ "subtle 2.4.0",
+ "uuid",
+ "x25519-dalek",
 ]
 
 [[package]]
 name = "libsignal-service"
 version = "0.1.0"
-source = "git+https://github.com/Michael-F-Bryan/libsignal-service-rs#117998657d4724300b8aa0669406398dc79a4d0c"
+source = "git+https://github.com/gferon/libsignal-service-rs?branch=serde-keys#161884333b03e9afca6e3bd14398680858346b32"
 dependencies = [
  "aes 0.6.0",
  "aes-ctr",
@@ -1423,7 +1420,7 @@ dependencies = [
  "pin-project",
  "prost",
  "prost-build",
- "rand 0.8.3",
+ "rand 0.7.3",
  "serde",
  "sha2 0.9.3",
  "thiserror",
@@ -1435,7 +1432,7 @@ dependencies = [
 [[package]]
 name = "libsignal-service-hyper"
 version = "0.1.0"
-source = "git+https://github.com/Michael-F-Bryan/libsignal-service-rs#117998657d4724300b8aa0669406398dc79a4d0c"
+source = "git+https://github.com/gferon/libsignal-service-rs?branch=serde-keys#161884333b03e9afca6e3bd14398680858346b32"
 dependencies = [
  "async-trait",
  "async-tungstenite",
@@ -1446,7 +1443,6 @@ dependencies = [
  "hyper",
  "hyper-rustls",
  "hyper-timeout",
- "libsignal-protocol",
  "libsignal-service",
  "log",
  "mpart-async",
@@ -1608,16 +1604,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "miniz_oxide"
-version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a92518e98c078586bc6c934028adcca4c92a53d6a958196de835170a01d84e4b"
-dependencies = [
- "adler",
- "autocfg",
-]
-
-[[package]]
 name = "mio"
 version = "0.7.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1775,6 +1761,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "num_enum"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "226b45a5c2ac4dd696ed30fa6b94b057ad909c7b7fc2e0d0808192bced894066"
+dependencies = [
+ "derivative",
+ "num_enum_derive",
+]
+
+[[package]]
+name = "num_enum_derive"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c0fd9eba1d5db0994a239e09c1be402d35622277e35468ba891aa5e3188ce7e"
+dependencies = [
+ "proc-macro-crate",
+ "proc-macro2",
+ "quote 1.0.9",
+ "syn 1.0.70",
+]
+
+[[package]]
 name = "objc"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1802,12 +1810,6 @@ checksum = "c92d4ddb4bd7b50d730c215ff871754d0da6b2178849f8a2a2ab69712d0c073b"
 dependencies = [
  "objc",
 ]
-
-[[package]]
-name = "object"
-version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a9a7ab5d64814df0fe4a4b5ead45ed6c5f181ee3ff04ba344313a6c80446c5d4"
 
 [[package]]
 name = "once_cell"
@@ -1965,7 +1967,7 @@ dependencies = [
  "bitflags 1.2.1",
  "crc32fast",
  "deflate",
- "miniz_oxide 0.3.7",
+ "miniz_oxide",
 ]
 
 [[package]]
@@ -1973,7 +1975,7 @@ name = "poksho"
 version = "0.7.0"
 source = "git+https://github.com/signalapp/poksho.git?tag=v0.7.0#8bb8c61c18e7bbe93c094ed91be52b9f96c1c5cd"
 dependencies = [
- "curve25519-dalek",
+ "curve25519-dalek 2.0.0",
  "hmac 0.7.1",
  "sha2 0.8.2",
 ]
@@ -2021,21 +2023,20 @@ checksum = "ac74c624d6b2d21f425f752262f42188365d7b8ff1aff74c82e45136510a4857"
 [[package]]
 name = "presage"
 version = "0.1.0"
-source = "git+https://github.com/boxdot/presage.git?rev=d75d0af#d75d0afe1bb929099c81d1ec2b55143cec725857"
+source = "git+https://github.com/whisperfish/presage.git?branch=main#84e4686ad8a09b2ef2ea0d56a43ef52c21c96cef"
 dependencies = [
  "anyhow",
+ "async-trait",
  "base64 0.12.3",
  "directories",
  "env_logger",
  "futures",
  "hex",
  "image",
- "libsignal-protocol",
  "libsignal-service",
  "libsignal-service-hyper",
  "log",
  "opener",
- "prost",
  "qrcode",
  "rand 0.7.3",
  "serde",
@@ -2374,12 +2375,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustc-demangle"
-version = "0.1.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e3bad0ee36814ca07d7968269dd4b7ec89ec2da10c4bb613928d3077083c232"
-
-[[package]]
 name = "rustls"
 version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2577,6 +2572,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "signal-crypto"
+version = "0.1.0"
+source = "git+https://github.com/signalapp/libsignal-client#87f205e80cc21ce0b1aa1a0e81f1a291d62fba49"
+dependencies = [
+ "aes-soft 0.6.4",
+ "aesni 0.10.0",
+ "cipher",
+ "generic-array 0.14.4",
+ "hmac 0.9.0",
+ "libc",
+ "polyval 0.4.5",
+ "rand 0.7.3",
+ "sha-1",
+ "sha2 0.9.3",
+ "subtle 2.4.0",
+]
+
+[[package]]
 name = "signal-hook"
 version = "0.1.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2739,6 +2752,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a393066ed9010ebaed60b9eafa373d4b1baac186dd7e008555b0f702b51945b6"
 dependencies = [
  "unicode-xid 0.0.4",
+]
+
+[[package]]
+name = "synstructure"
+version = "0.12.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b834f2d66f734cb897113e34aaff2f1ab4719ca946f9a7358dba8f8064148701"
+dependencies = [
+ "proc-macro2",
+ "quote 1.0.9",
+ "syn 1.0.70",
+ "unicode-xid 0.2.1",
 ]
 
 [[package]]
@@ -3371,6 +3396,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "x25519-dalek"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a0c105152107e3b96f6a00a65e86ce82d9b125230e1c4302940eca58ff71f4f"
+dependencies = [
+ "curve25519-dalek 3.1.0",
+ "rand_core 0.5.1",
+ "zeroize",
+]
+
+[[package]]
 name = "xml-rs"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3428,16 +3464,31 @@ name = "zeroize"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4756f7db3f7b5574938c3eb1c117038b8e07f95ee6718c0efad4ac21508f1efd"
+dependencies = [
+ "zeroize_derive",
+]
+
+[[package]]
+name = "zeroize_derive"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2c1e130bebaeab2f23886bf9acbaca14b092408c452543c857f66399cd6dab1"
+dependencies = [
+ "proc-macro2",
+ "quote 1.0.9",
+ "syn 1.0.70",
+ "synstructure",
+]
 
 [[package]]
 name = "zkgroup"
 version = "0.7.2"
-source = "git+https://github.com/signalapp/zkgroup#d3cb5dbd3098f1e8f82864974eda20c25f5d7d24"
+source = "git+https://github.com/signalapp/zkgroup?tag=v0.7.2#d3cb5dbd3098f1e8f82864974eda20c25f5d7d24"
 dependencies = [
  "aead 0.2.0",
  "aes-gcm-siv",
  "bincode",
- "curve25519-dalek",
+ "curve25519-dalek 2.0.0",
  "hex",
  "jni",
  "poksho",

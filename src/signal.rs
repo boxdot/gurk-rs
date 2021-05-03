@@ -4,7 +4,8 @@ use crate::{
 };
 
 use anyhow::{anyhow, bail, Context as _};
-use libsignal_service::prelude::GroupMasterKey;
+use log::error;
+use presage::libsignal_service::{configuration::SignalServers, prelude::GroupMasterKey};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -25,10 +26,8 @@ pub struct Attachment {
 fn get_signal_manager() -> anyhow::Result<Manager> {
     let data_dir = config::default_data_dir();
     let db_path = data_dir.join("signal-db");
-    let config_store = presage::config::SledConfigStore::new(db_path)?;
-    let signal_context =
-        libsignal_protocol::Context::new(libsignal_protocol::crypto::DefaultCrypto::default())?;
-    let manager = presage::Manager::with_config_store(config_store, signal_context)?;
+    let store = presage::config::SledConfigStore::new(db_path)?;
+    let manager = presage::Manager::with_store(store)?;
     Ok(manager)
 }
 
@@ -61,10 +60,7 @@ pub async fn ensure_linked_device(relink: bool) -> anyhow::Result<(Manager, Conf
     let device_name = format!("gurk{}", at_hostname);
     println!("Linking new device with device name: {}", device_name);
     manager
-        .link_secondary_device(
-            libsignal_service::configuration::SignalServers::Production,
-            device_name.clone(),
-        )
+        .link_secondary_device(SignalServers::Production, device_name.clone())
         .await?;
 
     // get profile
@@ -100,11 +96,13 @@ pub async fn ensure_linked_device(relink: bool) -> anyhow::Result<(Manager, Conf
 }
 
 pub async fn contact_name(manager: &Manager, uuid: Uuid, profile_key: [u8; 32]) -> Option<String> {
-    let profile = manager
-        .retrieve_profile_by_uuid(uuid, profile_key)
-        .await
-        .ok()?;
-    Some(profile.name?.given_name)
+    match manager.retrieve_profile_by_uuid(uuid, profile_key).await {
+        Ok(profile) => Some(profile.name?.given_name),
+        Err(e) => {
+            error!("failed to retrieve profile for {}: {}", uuid, e);
+            None
+        }
+    }
 }
 
 pub async fn try_resolve_group(

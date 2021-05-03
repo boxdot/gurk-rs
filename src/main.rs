@@ -16,7 +16,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use log::error;
+use log::{error, info};
 use structopt::StructOpt;
 use tokio_stream::StreamExt;
 use tui::{backend::CrosstermBackend, Terminal};
@@ -64,6 +64,12 @@ async fn main() -> anyhow::Result<()> {
         .await
 }
 
+async fn is_online() -> bool {
+    tokio::net::TcpStream::connect("detectportal.firefox.com:80")
+        .await
+        .is_ok()
+}
+
 async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
     let mut app = App::try_new(relink).await?;
 
@@ -100,26 +106,38 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
     let inner_manager = app.signal_manager.clone();
     let inner_tx = tx.clone();
     tokio::task::spawn_local(async move {
-        let messages = match inner_manager.receive_messages_stream().await {
-            Ok(messages) => messages,
-            Err(e) => {
-                let e = anyhow::Error::from(e).context(
-                    "failed to initialize the stream of Signal messages.\n\
-                    Maybe the device was unlinked? Please try to restart with '--relink` flag.",
-                );
+        loop {
+            let messages = if !is_online().await {
+                tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+                continue;
+            } else {
+                match inner_manager.receive_messages_stream().await {
+                    Ok(messages) => {
+                        info!("connected and listening for incoming messages");
+                        messages
+                    }
+                    Err(e) => {
+                        let e = anyhow::Error::from(e).context(
+                            "failed to initialize the stream of Signal messages.\n\
+                            Maybe the device was unlinked? Please try to restart with '--relink` flag.",
+                        );
+                        inner_tx
+                            .send(Event::Quit(Some(e)))
+                            .await
+                            .expect("logic error: events channel closed");
+                        return;
+                    }
+                }
+            };
+
+            tokio::pin!(messages);
+            while let Some(message) = messages.next().await {
                 inner_tx
-                    .send(Event::Quit(Some(e)))
+                    .send(Event::Message(message))
                     .await
-                    .expect("logic error: events channel closed");
-                return;
+                    .expect("logic error: events channel closed")
             }
-        };
-        tokio::pin!(messages);
-        while let Some(message) = messages.next().await {
-            inner_tx
-                .send(Event::Message(message))
-                .await
-                .expect("logic error: events channel closed")
+            info!("messages channel disconnected. trying to reconnect.")
         }
     });
 
