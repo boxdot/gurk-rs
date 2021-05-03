@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveDateTime, TimeZone as _, Utc};
+use chrono::{DateTime, Local, NaiveDateTime, TimeZone as _, Utc};
 use presage::libsignal_service::prelude::phonenumber::PhoneNumber;
 use serde::{Deserialize, Serialize};
 use tui::widgets::ListState;
@@ -68,9 +68,9 @@ impl<T> StatefulList<T> {
     }
 }
 
-pub fn timestamp_msec_to_utc(timestamp: u64) -> DateTime<Utc> {
+pub fn utc_timestamp_msec_to_local(timestamp: u64) -> DateTime<Local> {
     let dt = NaiveDateTime::from_timestamp(timestamp as i64 / 1000, (timestamp % 1000) as u32);
-    Utc.from_utc_datetime(&dt)
+    Utc.from_utc_datetime(&dt).with_timezone(&Local)
 }
 
 pub fn utc_now_timestamp_msec() -> u64 {
