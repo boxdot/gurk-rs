@@ -180,15 +180,20 @@ impl App {
             }
         }
 
-        // be conservative and rather fail than overriding and loosing the messages
-        let mut data = AppData::load(&load_data_path).with_context(|| {
-            format!(
-                "failed to load stored data from '{}':\n\
+        // if data file exists, be conservative and fail rather than overriding and losing the messages
+        let mut data: AppData;
+        if load_data_path.exists() {
+            data = AppData::load(&load_data_path).with_context(|| {
+                format!(
+                    "failed to load stored data from '{}':\n\
             This might happen due to incompatible data model when Gurk is upgraded.\n\
             Please consider to backup your messages and then remove the store.",
-                load_data_path.display()
-            )
-        })?;
+                    load_data_path.display()
+                )
+            })?;
+        } else {
+            data = AppData::load(&load_data_path).unwrap_or_default();
+        }
 
         // select the first channel if none is selected
         if data.channels.state.selected().is_none() && !data.channels.items.is_empty() {
