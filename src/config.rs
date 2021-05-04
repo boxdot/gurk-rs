@@ -39,6 +39,8 @@ impl Config {
         }
         println!("{:?}", self);
         let content = toml::ser::to_string(self)?;
+        let path = config_file.parent().unwrap();
+        std::fs::create_dir_all(path).unwrap();
         std::fs::write(config_file, &content)?;
         Ok(())
     }
