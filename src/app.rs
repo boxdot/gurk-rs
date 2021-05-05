@@ -160,6 +160,7 @@ impl Message {
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum Event {
+    Redraw,
     Click(MouseEvent),
     Input(KeyEvent),
     Message(Content),

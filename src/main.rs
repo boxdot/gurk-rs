@@ -22,6 +22,12 @@ use tokio_stream::StreamExt;
 use tui::{backend::CrosstermBackend, Terminal};
 
 use std::io::Write;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+const TARGET_FPS: u64 = 144;
+const FRAME_BUDGET: Duration = Duration::from_millis(1000 / TARGET_FPS);
 
 #[derive(Debug, StructOpt)]
 struct Args {
@@ -144,8 +150,33 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
     terminal.clear()?;
 
     let mut res = Ok(()); // result on quit
+    let mut last_render_at = Instant::now();
+    let is_render_spawned = Arc::new(AtomicBool::new(false));
+
     loop {
-        terminal.draw(|f| ui::draw(f, &mut app))?;
+        // render
+        let left_frame_budget = FRAME_BUDGET.checked_sub(last_render_at.elapsed());
+        if let Some(budget) = left_frame_budget {
+            // skip frames that render too fast
+            if !is_render_spawned.load(Ordering::Relaxed) {
+                let tx = tx.clone();
+                let is_render_spawned = is_render_spawned.clone();
+                is_render_spawned.store(true, Ordering::Relaxed);
+                tokio::spawn(async move {
+                    // Redraw message is needed to make sure that we render the skipped frame
+                    // if it was the last frame in the rendering budget window.
+                    tokio::time::sleep(budget).await;
+                    tx.send(Event::Redraw)
+                        .await
+                        .expect("logic error: events channel closed");
+                    is_render_spawned.store(false, Ordering::Relaxed);
+                });
+            }
+        } else {
+            terminal.draw(|f| ui::draw(f, &mut app))?;
+            last_render_at = Instant::now();
+        }
+
         match rx.recv().await {
             Some(Event::Click(event)) => match event {
                 MouseEvent::Down(_, col, row, _) => {
@@ -220,7 +251,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                     error!("failed on incoming message: {}", e);
                 }
             }
-            Some(Event::Resize { .. }) => {
+            Some(Event::Resize { .. }) | Some(Event::Redraw) => {
                 // will just redraw the app
             }
             Some(Event::Quit(e)) => {
