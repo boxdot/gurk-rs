@@ -1,5 +1,5 @@
 use chrono::{DateTime, Local, NaiveDateTime, TimeZone as _, Utc};
-use presage::libsignal_service::prelude::phonenumber::PhoneNumber;
+use presage::prelude::PhoneNumber;
 use serde::{Deserialize, Serialize};
 use tui::widgets::ListState;
 

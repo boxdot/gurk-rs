@@ -6,12 +6,11 @@ use anyhow::Context;
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
 use log::error;
 use notify_rust::Notification;
-use presage::libsignal_service::{
+use presage::prelude::{
     content::{ContentBody, DataMessage, Metadata, SyncMessage},
-    prelude::Content,
-    ServiceAddress,
+    proto::{data_message::Quote, sync_message::Sent, GroupContextV2},
+    Content, ServiceAddress,
 };
-use presage::proto::{data_message::Quote, sync_message::Sent, GroupContextV2};
 use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
