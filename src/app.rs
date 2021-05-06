@@ -1,8 +1,8 @@
 use crate::config::{self, Config};
-use crate::signal;
+use crate::signal::{self, GroupIdentifierBytes, GroupMasterKeyBytes};
 use crate::util::{self, StatefulList};
 
-use anyhow::Context;
+use anyhow::{anyhow, Context as _};
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
 use log::error;
 use notify_rust::Notification;
@@ -13,14 +13,14 @@ use presage::prelude::{
         sync_message::Sent,
         GroupContextV2,
     },
-    Content, ServiceAddress,
+    Content, GroupMasterKey, GroupSecretParams, ServiceAddress,
 };
 use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
 
 use std::collections::HashMap;
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::path::Path;
 
@@ -62,20 +62,59 @@ impl AppData {
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(try_from = "JsonChannel")]
 pub struct Channel {
+    pub id: ChannelId,
+    pub name: String,
+    pub group_data: Option<GroupData>,
+    #[serde(serialize_with = "Channel::serialize_msgs")]
+    pub messages: StatefulList<Message>,
+    pub unread_messages: usize,
+}
+
+/// Proxy type which allows us to apply post-deserialization conversion.
+///
+/// Used to migrate the schema. Change this type only in backwards-compatible way.
+#[derive(Deserialize)]
+pub struct JsonChannel {
     pub id: ChannelId,
     pub name: String,
     #[serde(default)]
     pub group_data: Option<GroupData>,
-    #[serde(serialize_with = "Channel::serialize_msgs")]
     #[serde(deserialize_with = "Channel::deserialize_msgs")]
     pub messages: StatefulList<Message>,
     #[serde(default)]
     pub unread_messages: usize,
 }
 
+impl TryFrom<JsonChannel> for Channel {
+    type Error = anyhow::Error;
+    fn try_from(channel: JsonChannel) -> anyhow::Result<Self> {
+        let mut channel = Channel {
+            id: channel.id,
+            name: channel.name,
+            group_data: channel.group_data,
+            messages: channel.messages,
+            unread_messages: channel.unread_messages,
+        };
+
+        // 1. The master key in ChannelId::Group was replaced by group identifier,
+        // the former was stored in group_data.
+        match (channel.id, channel.group_data.as_mut()) {
+            (ChannelId::Group(id), Some(group_data)) if group_data.master_key_bytes == [0; 32] => {
+                group_data.master_key_bytes = id;
+                channel.id = ChannelId::from_master_key_bytes(id)?;
+            }
+            _ => (),
+        }
+        Ok(channel)
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct GroupData {
+    #[serde(default)]
+    pub master_key_bytes: GroupMasterKeyBytes,
     pub members: Vec<Uuid>,
     pub revision: u32,
 }
@@ -125,15 +164,28 @@ impl Channel {
     }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ChannelId {
     User(Uuid),
-    Group(Vec<u8>),
+    Group(GroupIdentifierBytes),
 }
 
 impl From<Uuid> for ChannelId {
     fn from(id: Uuid) -> Self {
         ChannelId::User(id)
+    }
+}
+
+impl ChannelId {
+    fn from_master_key_bytes(bytes: impl AsRef<[u8]>) -> anyhow::Result<Self> {
+        let master_key_ar = bytes
+            .as_ref()
+            .try_into()
+            .map_err(|_| anyhow!("invalid group master key"))?;
+        let master_key = GroupMasterKey::new(master_key_ar);
+        let secret_params = GroupSecretParams::derive_from_master_key(master_key);
+        let group_id = secret_params.get_group_identifier();
+        Ok(Self::Group(group_id))
     }
 }
 
@@ -309,13 +361,13 @@ impl App {
                     }
                 });
             }
-            ChannelId::Group(ref master_key) => {
+            ChannelId::Group(_) => {
                 if let Some(group_data) = channel.group_data.as_ref() {
                     let manager = self.signal_manager.clone();
                     let self_uuid = self.signal_manager.uuid();
 
                     data_message.group_v2 = Some(GroupContextV2 {
-                        master_key: Some(master_key.clone()),
+                        master_key: Some(group_data.master_key_bytes.to_vec()),
                         revision: Some(group_data.revision),
                         ..Default::default()
                     });
@@ -553,6 +605,9 @@ impl App {
                 }) = group_v2
                 {
                     // message to a group
+                    let master_key = master_key
+                        .try_into()
+                        .map_err(|_| anyhow!("invalid master key"))?;
                     self.ensure_group_channel_exists(master_key, revision)
                         .await
                         .context("failed to create group channel")?
@@ -601,6 +656,9 @@ impl App {
                 }) = group_v2
                 {
                     // incoming group message
+                    let master_key = master_key
+                        .try_into()
+                        .map_err(|_| anyhow!("invalid group master key"))?;
                     let channel_idx = self
                         .ensure_group_channel_exists(master_key, revision)
                         .await
@@ -669,7 +727,7 @@ impl App {
                     ..
                 }) = group_v2
                 {
-                    ChannelId::Group(master_key)
+                    ChannelId::from_master_key_bytes(master_key)?
                 } else if let Some(uuid) = destination_uuid {
                     ChannelId::User(uuid.parse()?)
                 } else {
@@ -734,10 +792,10 @@ impl App {
 
     async fn ensure_group_channel_exists(
         &mut self,
-        master_key: Vec<u8>,
+        master_key: GroupMasterKeyBytes,
         revision: u32,
     ) -> anyhow::Result<usize> {
-        let id = ChannelId::Group(master_key.clone());
+        let id = ChannelId::from_master_key_bytes(master_key)?;
         if let Some(channel_idx) = self
             .data
             .channels

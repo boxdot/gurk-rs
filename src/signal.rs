@@ -3,13 +3,19 @@ use crate::{
     config::{self, Config},
 };
 
-use anyhow::{anyhow, bail, Context as _};
+use anyhow::{bail, Context as _};
 use log::error;
 use presage::prelude::{GroupMasterKey, SignalServers};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use std::path::PathBuf;
+
+pub const GROUP_MASTER_KEY_LEN: usize = 32;
+pub const GROUP_IDENTIFIER_LEN: usize = 32;
+
+pub type GroupMasterKeyBytes = [u8; GROUP_MASTER_KEY_LEN];
+pub type GroupIdentifierBytes = [u8; GROUP_IDENTIFIER_LEN];
 
 /// Signal Manager backed by a `sled` store.
 pub type Manager = presage::Manager<presage::SledConfigStore>;
@@ -107,16 +113,10 @@ pub async fn contact_name(manager: &Manager, uuid: Uuid, profile_key: [u8; 32]) 
 
 pub async fn try_resolve_group(
     manager: &mut Manager,
-    master_key: Vec<u8>,
+    master_key_bytes: GroupMasterKeyBytes,
 ) -> anyhow::Result<(String, GroupData, Vec<Vec<u8>>)> {
-    use std::convert::TryInto;
-
-    let master_key = master_key
-        .try_into()
-        .map_err(|_| anyhow!("invalid master key"))?;
-    let decrypted_group = manager
-        .get_group_v2(GroupMasterKey::new(master_key))
-        .await?;
+    let master_key = GroupMasterKey::new(master_key_bytes);
+    let decrypted_group = manager.get_group_v2(master_key).await?;
 
     let mut members = Vec::with_capacity(decrypted_group.members.len());
     let mut member_profile_keys = Vec::with_capacity(decrypted_group.members.len());
@@ -131,6 +131,7 @@ pub async fn try_resolve_group(
 
     let title = decrypted_group.title;
     let group_data = GroupData {
+        master_key_bytes,
         members,
         revision: decrypted_group.revision,
     };
