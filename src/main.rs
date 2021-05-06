@@ -117,7 +117,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                 tokio::time::sleep(std::time::Duration::from_secs(10)).await;
                 continue;
             } else {
-                match inner_manager.receive_messages_stream().await {
+                match inner_manager.receive_messages().await {
                     Ok(messages) => {
                         info!("connected and listening for incoming messages");
                         messages

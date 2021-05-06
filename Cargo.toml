@@ -36,6 +36,9 @@ whoami = "1.1.2"
 
 presage = { git = "https://github.com/whisperfish/presage.git", branch = "main" }
 
-# [patch."https://github.com/gferon/libsignal-service-rs"]
+# [patch."https://github.com/whisperfish/presage.git"]
+# presage = { path = "../presage" }
+
+# [patch."https://github.com/whisperfish/libsignal-service-rs"]
 # libsignal-service = { path = "../libsignal-service-rs/libsignal-service" }
 # libsignal-service-hyper = { path = "../libsignal-service-rs/libsignal-service-hyper" }

@@ -5,14 +5,14 @@ use crate::{
 
 use anyhow::{anyhow, bail, Context as _};
 use log::error;
-use presage::libsignal_service::{configuration::SignalServers, prelude::GroupMasterKey};
+use presage::prelude::{GroupMasterKey, SignalServers};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use std::path::PathBuf;
 
 /// Signal Manager backed by a `sled` store.
-pub type Manager = presage::Manager<presage::config::SledConfigStore>;
+pub type Manager = presage::Manager<presage::SledConfigStore>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -26,7 +26,7 @@ pub struct Attachment {
 fn get_signal_manager() -> anyhow::Result<Manager> {
     let data_dir = config::default_data_dir();
     let db_path = data_dir.join("signal-db");
-    let store = presage::config::SledConfigStore::new(db_path)?;
+    let store = presage::SledConfigStore::new(db_path)?;
     let manager = presage::Manager::with_store(store)?;
     Ok(manager)
 }
