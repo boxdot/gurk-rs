@@ -2,6 +2,7 @@ use crate::util;
 use crate::{app, App};
 
 use chrono::{Datelike, Timelike};
+use itertools::Itertools;
 use tui::backend::Backend;
 use tui::layout::{Constraint, Corner, Direction, Layout, Rect};
 use tui::style::{Color, Style};
@@ -9,6 +10,8 @@ use tui::text::{Span, Spans, Text};
 use tui::widgets::{Block, Borders, List, ListItem, Paragraph};
 use tui::Frame;
 use unicode_width::UnicodeWidthStr;
+
+use std::borrow::Cow;
 
 pub const CHANNEL_VIEW_RATIO: u32 = 4;
 
@@ -175,7 +178,18 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         let wrap_opts = textwrap::Options::new(width.into())
             .initial_indent(&indent)
             .subsequent_indent(&indent);
-        let mut lines = textwrap::wrap(msg.message.as_ref()?, wrap_opts);
+
+        let text = if msg.reactions.is_empty() {
+            Cow::from(msg.message.as_ref()?)
+        } else {
+            Cow::from(format!(
+                "{} [{}]",
+                msg.message.as_ref()?,
+                msg.reactions.iter().map(|(_, emoji)| emoji).format(""),
+            ))
+        };
+
+        let mut lines = textwrap::wrap(&text, wrap_opts);
 
         // prepend quote if any
         let quote = if let Some(displayed_quote) = msg

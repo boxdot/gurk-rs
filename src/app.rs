@@ -8,7 +8,11 @@ use log::error;
 use notify_rust::Notification;
 use presage::prelude::{
     content::{ContentBody, DataMessage, Metadata, SyncMessage},
-    proto::{data_message::Quote, sync_message::Sent, GroupContextV2},
+    proto::{
+        data_message::{Quote, Reaction},
+        sync_message::Sent,
+        GroupContextV2,
+    },
     Content, ServiceAddress,
 };
 use serde::{Deserialize, Serialize};
@@ -142,16 +146,30 @@ pub struct Message {
     pub quote: Option<Box<Message>>,
     #[serde(default)]
     pub attachments: Vec<signal::Attachment>,
+    #[serde(default)]
+    pub reactions: Vec<(Uuid, String)>,
 }
 
 impl Message {
+    fn new(from_id: Uuid, message: String, arrived_at: u64) -> Self {
+        Self {
+            from_id,
+            message: Some(message),
+            arrived_at,
+            quote: None,
+            attachments: Default::default(),
+            reactions: Default::default(),
+        }
+    }
+
     fn from_quote(quote: Quote) -> Option<Message> {
         Some(Message {
             from_id: quote.author_uuid?.parse().ok()?,
             message: quote.text,
-            attachments: Default::default(),
             arrived_at: quote.id?,
             quote: None,
+            attachments: Default::default(),
+            reactions: Default::default(),
         })
     }
 }
@@ -325,9 +343,10 @@ impl App {
         channel.messages.items.push(Message {
             from_id: self.signal_manager.uuid(),
             message: Some(message),
-            attachments: Vec::new(),
             arrived_at: timestamp,
             quote: quote_message,
+            attachments: Default::default(),
+            reactions: Default::default(),
         });
 
         self.reset_unread_messages();
@@ -496,13 +515,7 @@ impl App {
                 }),
             ) if destination_uuid.parse() == Ok(self_uuid) => {
                 let channel_idx = self.ensure_own_channel_exists();
-                let message = Message {
-                    from_id: self_uuid,
-                    message: Some(text),
-                    attachments: Default::default(),
-                    arrived_at: timestamp,
-                    quote: None,
-                };
+                let message = Message::new(self_uuid, text, timestamp);
                 (channel_idx, message)
             }
             // Direct/group message by us from a different device
@@ -556,11 +569,8 @@ impl App {
 
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let message = Message {
-                    from_id: self_uuid,
-                    message: Some(text),
-                    attachments: Default::default(),
-                    arrived_at: timestamp,
                     quote,
+                    ..Message::new(self_uuid, text, timestamp)
                 };
                 (channel_idx, message)
             }
@@ -617,13 +627,63 @@ impl App {
 
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let message = Message {
-                    from_id: uuid,
-                    message: Some(text),
-                    attachments: Default::default(),
-                    arrived_at: timestamp,
                     quote,
+                    ..Message::new(uuid, text, timestamp)
                 };
                 (channel_idx, message)
+            }
+            // reactions
+            (
+                Metadata {
+                    sender:
+                        ServiceAddress {
+                            uuid: Some(sender_uuid),
+                            ..
+                        },
+                    ..
+                },
+                ContentBody::SynchronizeMessage(SyncMessage {
+                    sent:
+                        Some(Sent {
+                            destination_uuid,
+                            message:
+                                Some(DataMessage {
+                                    body: None,
+                                    group_v2,
+                                    reaction:
+                                        Some(Reaction {
+                                            emoji: Some(emoji),
+                                            remove,
+                                            target_sent_timestamp: Some(target_sent_timestamp),
+                                            ..
+                                        }),
+                                    ..
+                                }),
+                            ..
+                        }),
+                    ..
+                }),
+            ) => {
+                let channel_id = if let Some(GroupContextV2 {
+                    master_key: Some(master_key),
+                    ..
+                }) = group_v2
+                {
+                    ChannelId::Group(master_key)
+                } else if let Some(uuid) = destination_uuid {
+                    ChannelId::User(uuid.parse()?)
+                } else {
+                    return Ok(());
+                };
+
+                self.handle_reaction(
+                    channel_id,
+                    target_sent_timestamp,
+                    sender_uuid,
+                    remove.unwrap_or(false),
+                    emoji,
+                );
+                return Ok(());
             }
             _ => return Ok(()),
         };
@@ -631,6 +691,45 @@ impl App {
         self.add_message_to_channel(channel_idx, message);
 
         Ok(())
+    }
+
+    fn handle_reaction(
+        &mut self,
+        channel_id: ChannelId,
+        target_sent_timestamp: u64,
+        sender_uuid: Uuid,
+        remove: bool,
+        emoji: String,
+    ) -> Option<()> {
+        let channel_idx = self
+            .data
+            .channels
+            .items
+            .iter()
+            .position(|channel| channel.id == channel_id)?;
+        let channel = &mut self.data.channels.items[channel_idx];
+        let message = channel
+            .messages
+            .items
+            .iter_mut()
+            .find(|m| m.arrived_at == target_sent_timestamp)?;
+        let reaction_idx = message
+            .reactions
+            .iter()
+            .position(|(from_id, _)| from_id == &sender_uuid);
+        if let Some(idx) = reaction_idx {
+            if remove {
+                message.reactions.swap_remove(idx);
+                self.save().unwrap();
+            } else {
+                message.reactions[idx].1 = emoji;
+                self.touch_channel(channel_idx);
+            }
+        } else {
+            message.reactions.push((sender_uuid, emoji));
+            self.touch_channel(channel_idx);
+        }
+        Some(())
     }
 
     async fn ensure_group_channel_exists(
@@ -793,6 +892,10 @@ impl App {
             channel.messages.state.select(Some(idx + 1));
         }
 
+        self.touch_channel(channel_idx);
+    }
+
+    fn touch_channel(&mut self, channel_idx: usize) {
         if self.data.channels.state.selected() != Some(channel_idx) {
             self.data.channels.items[channel_idx].unread_messages += 1;
         } else {
