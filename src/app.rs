@@ -42,14 +42,14 @@ pub struct AppData {
 
 impl AppData {
     fn save(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
-        let f = File::create(path)?;
+        let f = std::io::BufWriter::new(File::create(path)?);
         serde_json::to_writer(f, self)?;
         Ok(())
     }
 
     fn load(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         log::info!("loading app data from: {}", path.as_ref().display());
-        let f = File::open(path)?;
+        let f = std::io::BufReader::new(File::open(path)?);
         let mut data: Self = serde_json::from_reader(f)?;
         data.input_cursor = data.input.len();
         data.input_cursor_chars = data.input.width();
