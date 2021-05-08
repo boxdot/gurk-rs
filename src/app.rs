@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::fs::File;
@@ -283,11 +284,11 @@ impl App {
     }
 
     pub fn name_by_id(&self, id: Uuid) -> &str {
-        self.get_name_by_id(id).unwrap_or("Unknown Name")
+        name_by_id(&self.data.names, id)
     }
 
     pub fn get_name_by_id(&self, id: Uuid) -> Option<&str> {
-        self.data.names.get(&id).map(|s| s.as_ref())
+        get_name_by_id(&self.data.names, id)
     }
 
     pub fn put_char(&mut self, c: char) {
@@ -712,6 +713,7 @@ impl App {
                                         Some(Reaction {
                                             emoji: Some(emoji),
                                             remove,
+                                            target_author_uuid: Some(target_author_uuid),
                                             target_sent_timestamp: Some(target_sent_timestamp),
                                             ..
                                         }),
@@ -731,7 +733,53 @@ impl App {
                 } else if let Some(uuid) = destination_uuid {
                     ChannelId::User(uuid.parse()?)
                 } else {
-                    return Ok(());
+                    ChannelId::User(target_author_uuid.parse()?)
+                };
+
+                self.handle_reaction(
+                    channel_id,
+                    target_sent_timestamp,
+                    sender_uuid,
+                    remove.unwrap_or(false),
+                    emoji,
+                );
+                return Ok(());
+            }
+            (
+                Metadata {
+                    sender:
+                        ServiceAddress {
+                            uuid: Some(sender_uuid),
+                            ..
+                        },
+                    ..
+                },
+                ContentBody::DataMessage(DataMessage {
+                    body: None,
+                    group_v2,
+                    reaction:
+                        Some(Reaction {
+                            emoji: Some(emoji),
+                            remove,
+                            target_sent_timestamp: Some(target_sent_timestamp),
+                            target_author_uuid: Some(target_author_uuid),
+                            ..
+                        }),
+                    ..
+                }),
+            ) => {
+                let channel_id = if let Some(GroupContextV2 {
+                    master_key: Some(master_key),
+                    ..
+                }) = group_v2
+                {
+                    ChannelId::from_master_key_bytes(master_key)?
+                } else if sender_uuid == self.signal_manager.uuid() {
+                    // reaction from us => target author is the user channel
+                    ChannelId::User(target_author_uuid.parse()?)
+                } else {
+                    // reaction is from somebody else => they are the user channel
+                    ChannelId::User(sender_uuid)
                 };
 
                 self.handle_reaction(
@@ -775,18 +823,39 @@ impl App {
             .reactions
             .iter()
             .position(|(from_id, _)| from_id == &sender_uuid);
-        if let Some(idx) = reaction_idx {
+        let is_added = if let Some(idx) = reaction_idx {
             if remove {
                 message.reactions.swap_remove(idx);
-                self.save().unwrap();
+                false
             } else {
-                message.reactions[idx].1 = emoji;
-                self.touch_channel(channel_idx);
+                message.reactions[idx].1 = emoji.clone();
+                true
             }
         } else {
-            message.reactions.push((sender_uuid, emoji));
+            message.reactions.push((sender_uuid, emoji.clone()));
+            true
+        };
+
+        if is_added && channel_id != ChannelId::User(self.signal_manager.uuid()) {
+            // Notification
+            let sender_name = name_by_id(&self.data.names, sender_uuid);
+            let summary = if let ChannelId::Group(_) = channel.id {
+                Cow::from(format!("{} in {}", sender_name, channel.name))
+            } else {
+                Cow::from(sender_name)
+            };
+            let mut notification = format!("{} reacted {}", summary, emoji);
+            if let Some(text) = message.message.as_ref() {
+                notification.push_str(" to: ");
+                notification.push_str(text);
+            }
+            self.notify(&summary, &notification);
+
             self.touch_channel(channel_idx);
+        } else {
+            self.save().unwrap();
         }
+
         Some(())
     }
 
@@ -984,4 +1053,12 @@ impl App {
             error!("failed to send notification: {}", e);
         }
     }
+}
+
+pub fn get_name_by_id(names: &HashMap<Uuid, String>, id: Uuid) -> Option<&str> {
+    names.get(&id).map(|s| s.as_ref())
+}
+
+pub fn name_by_id(names: &HashMap<Uuid, String>, id: Uuid) -> &str {
+    get_name_by_id(names, id).unwrap_or("Unknown Name")
 }
