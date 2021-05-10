@@ -10,6 +10,7 @@ use tui::text::{Span, Spans, Text};
 use tui::widgets::{Block, Borders, List, ListItem, Paragraph};
 use tui::Frame;
 use unicode_width::UnicodeWidthStr;
+use uuid::Uuid;
 
 use std::borrow::Cow;
 
@@ -135,18 +136,24 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 }
 
 fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
-    let messages = app
+    let channel = app
         .data
         .channels
         .state
         .selected()
-        .and_then(|idx| app.data.channels.items.get(idx))
+        .and_then(|idx| app.data.channels.items.get(idx));
+
+    let messages = channel
         .map(|channel| &channel.messages.items[..])
         .unwrap_or(&[]);
 
-    let max_username_width = messages
+    let names_and_colors = channel
+        .map(|c| compute_names_and_colors(&app, c))
+        .unwrap_or_default();
+
+    let max_username_width = names_and_colors
         .iter()
-        .map(|msg| displayed_name(app.name_by_id(msg.from_id), app.config.first_name_only).width())
+        .map(|(_, name, _)| name.width())
         .max()
         .unwrap_or(0);
 
@@ -165,10 +172,15 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
             ),
             time_style,
         );
-        let from = displayed_name(app.name_by_id(msg.from_id), app.config.first_name_only);
+
+        let idx = names_and_colors
+            .binary_search_by_key(&msg.from_id, |&(id, _, _)| id)
+            .unwrap();
+        let (_, from, from_color) = names_and_colors[idx];
+
         let from = Span::styled(
             textwrap::indent(&from, &" ".repeat(max_username_width - from.width())),
-            Style::default().fg(user_color(app.name_by_id(msg.from_id))),
+            Style::default().fg(from_color),
         );
         let delimeter = Span::from(": ");
 
@@ -248,7 +260,6 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
     let list = List::new(items)
         .block(Block::default().title("Messages").borders(Borders::ALL))
-        .style(Style::default().fg(Color::White))
         .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray))
         .start_corner(Corner::BottomLeft);
 
@@ -268,16 +279,56 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     f.render_stateful_widget(list, area, state);
 }
 
-// Randomly but deterministically choose a color for a username
-fn user_color(username: &str) -> Color {
-    use Color::*;
-    const COLORS: &[Color] = &[Red, Green, Yellow, Blue, Magenta, Cyan, Gray];
-    let idx = username
-        .bytes()
-        .map(|b| usize::from(b) % COLORS.len())
-        .sum::<usize>()
-        % COLORS.len();
-    COLORS[idx]
+/// Returns a sorted vector of `(id, name, color)` by id.
+fn compute_names_and_colors<'a, 'b>(
+    app: &'a app::App,
+    channel: &'b app::Channel,
+) -> Vec<(Uuid, &'a str, Color)> {
+    let first_name_only = app.config.first_name_only;
+    let mut res = if let Some(group_data) = channel.group_data.as_ref() {
+        group_data
+            .members
+            .iter()
+            .map(|&uuid| {
+                let name = app.name_by_id(uuid);
+                let color = user_color(name);
+                let name = displayed_name(name, first_name_only);
+                (uuid, name, color)
+            })
+            .collect()
+    } else {
+        let self_uuid = app.self_id();
+        let self_name = app.name_by_id(self_uuid);
+        let mut self_color = user_color(self_name);
+        let self_name = displayed_name(self_name, first_name_only);
+
+        let contact_uuid = match channel.id {
+            app::ChannelId::User(uuid) => uuid,
+            _ => unreachable!("logic error"),
+        };
+
+        if contact_uuid == self_uuid {
+            vec![(self_uuid, self_name, self_color)]
+        } else {
+            let contact_name = app.name_by_id(contact_uuid);
+            let contact_color = user_color(contact_name);
+            let contact_name = displayed_name(contact_name, first_name_only);
+
+            if self_color == contact_color {
+                // use differnt color for our user name
+                if let Some(idx) = USER_COLORS.iter().position(|&c| c == self_color) {
+                    self_color = USER_COLORS[(idx + 1) % USER_COLORS.len()];
+                }
+            }
+
+            vec![
+                (self_uuid, self_name, self_color),
+                (contact_uuid, contact_name, contact_color),
+            ]
+        }
+    };
+    res.sort_unstable_by_key(|&(id, _, _)| id);
+    res
 }
 
 fn displayed_name(name: &str, first_name_only: bool) -> &str {
@@ -287,6 +338,24 @@ fn displayed_name(name: &str, first_name_only: bool) -> &str {
     } else {
         &name
     }
+}
+
+const USER_COLORS: &[Color] = &[
+    Color::Red,
+    Color::Green,
+    Color::Yellow,
+    Color::Blue,
+    Color::Magenta,
+    Color::Cyan,
+    Color::Gray,
+];
+
+// Randomly but deterministically choose a color for a username
+fn user_color(username: &str) -> Color {
+    let idx = username
+        .bytes()
+        .fold(0, |sum, b| (sum + usize::from(b)) % USER_COLORS.len());
+    USER_COLORS[idx]
 }
 
 fn displayed_quote(app: &App, quote: &app::Message) -> Option<String> {
