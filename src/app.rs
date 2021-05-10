@@ -283,6 +283,10 @@ impl App {
         self.data.save(&self.config.data_path)
     }
 
+    pub fn self_id(&self) -> Uuid {
+        self.signal_manager.uuid()
+    }
+
     pub fn name_by_id(&self, id: Uuid) -> &str {
         name_by_id(&self.data.names, id)
     }
