@@ -11,7 +11,7 @@ use app::{App, Event};
 use crossterm::{
     event::{
         DisableMouseCapture, EnableMouseCapture, Event as CEvent, EventStream, KeyCode,
-        KeyModifiers, MouseEvent,
+        KeyModifiers, MouseButton, MouseEventKind,
     },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -21,7 +21,6 @@ use structopt::StructOpt;
 use tokio_stream::StreamExt;
 use tui::{backend::CrosstermBackend, Terminal};
 
-use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -178,8 +177,10 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
         }
 
         match rx.recv().await {
-            Some(Event::Click(event)) => match event {
-                MouseEvent::Down(_, col, row, _) => {
+            Some(Event::Click(event)) => match event.kind {
+                MouseEventKind::Down(MouseButton::Left) => {
+                    let col = event.column;
+                    let row = event.row;
                     if let Some(channel_idx) =
                         ui::coords_within_channels_view(&terminal.get_frame(), col, row)
                             .map(|(_, row)| row as usize)
@@ -191,15 +192,19 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                         }
                     }
                 }
-                MouseEvent::ScrollUp(col, _, _) => {
-                    if col < terminal.get_frame().size().width / ui::CHANNEL_VIEW_RATIO as u16 {
+                MouseEventKind::ScrollUp => {
+                    if event.column
+                        < terminal.get_frame().size().width / ui::CHANNEL_VIEW_RATIO as u16
+                    {
                         app.on_up()
                     } else {
                         app.on_pgup()
                     }
                 }
-                MouseEvent::ScrollDown(col, _, _) => {
-                    if col < terminal.get_frame().size().width / ui::CHANNEL_VIEW_RATIO as u16 {
+                MouseEventKind::ScrollDown => {
+                    if event.column
+                        < terminal.get_frame().size().width / ui::CHANNEL_VIEW_RATIO as u16
+                    {
                         app.on_down()
                     } else {
                         app.on_pgdn()
@@ -238,7 +243,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                 KeyCode::Char('w') if event.modifiers.contains(KeyModifiers::CONTROL) => {
                     app.on_delete_word();
                 }
-                KeyCode::Char('\u{7f}') if event.modifiers.contains(KeyModifiers::ALT) => {
+                KeyCode::Backspace if event.modifiers.contains(KeyModifiers::ALT) => {
                     app.on_delete_word();
                 }
                 KeyCode::Char('k') if event.modifiers.contains(KeyModifiers::CONTROL) => {
