@@ -121,17 +121,6 @@ pub struct GroupData {
 }
 
 impl Channel {
-    /// Used in UI when there is no channel selected.
-    pub fn empty() -> Self {
-        Channel {
-            id: Uuid::default().into(),
-            name: " ".to_string(),
-            group_data: None,
-            messages: util::StatefulList::with_items(Vec::new()),
-            unread_messages: 0,
-        }
-    }
-
     fn user_id(&self) -> Option<Uuid> {
         match self.id {
             ChannelId::User(id) => Some(id),
@@ -291,10 +280,6 @@ impl App {
         name_by_id(&self.data.names, id)
     }
 
-    pub fn get_name_by_id(&self, id: Uuid) -> Option<&str> {
-        get_name_by_id(&self.data.names, id)
-    }
-
     pub fn put_char(&mut self, c: char) {
         let idx = self.data.input_cursor;
         self.data.input.insert(idx, c);
@@ -325,6 +310,7 @@ impl App {
         if let Some(idx) = self.data.channels.state.selected() {
             let channel = &mut self.data.channels.items[idx];
             channel.messages.state.select(None);
+            channel.messages.rendered = Default::default();
         }
     }
 
@@ -1059,10 +1045,6 @@ impl App {
     }
 }
 
-pub fn get_name_by_id(names: &HashMap<Uuid, String>, id: Uuid) -> Option<&str> {
-    names.get(&id).map(|s| s.as_ref())
-}
-
 pub fn name_by_id(names: &HashMap<Uuid, String>, id: Uuid) -> &str {
-    get_name_by_id(names, id).unwrap_or("Unknown Name")
+    names.get(&id).map(|s| s.as_ref()).unwrap_or("Unknown Name")
 }

@@ -142,120 +142,96 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         .state
         .selected()
         .and_then(|idx| app.data.channels.items.get(idx));
+    let channel = match channel {
+        Some(c) if !c.messages.items.is_empty() => c,
+        _ => return,
+    };
 
-    let messages = channel
-        .map(|channel| &channel.messages.items[..])
-        .unwrap_or(&[]);
+    // area without borders
+    let height = area.height.saturating_sub(2) as usize;
+    if height == 0 {
+        return;
+    }
+    let width = area.width.saturating_sub(2) as usize;
 
-    let names_and_colors = channel
-        .map(|c| compute_names_and_colors(&app, c))
-        .unwrap_or_default();
+    // Calculate the offset in messages we start rendering with.
+    // `offset` includes the selected message (if any), and is at most height-many messages to
+    // the selected message, since we can't render more than height-many of them.
+    let offset = if let Some(selected) = channel.messages.state.selected() {
+        channel
+            .messages
+            .rendered
+            .offset
+            .min(selected)
+            .max(selected.saturating_sub(height))
+    } else {
+        channel.messages.rendered.offset
+    };
 
+    let messages = &channel.messages.items[..];
+
+    let names_and_colors = compute_names_and_colors(&app, channel);
     let max_username_width = names_and_colors
         .iter()
         .map(|(_, name, _)| name.width())
         .max()
         .unwrap_or(0);
 
-    let width = area.width - 2; // without borders
+    // message display options
+    let first_name_only = app.config.first_name_only;
+    const TIME_WIDTH: usize = 10;
+    const DELIMITER_WIDTH: usize = 2;
+    let prefix_width = TIME_WIDTH + max_username_width + DELIMITER_WIDTH;
+    let prefix = " ".repeat(prefix_width);
 
-    let time_style = Style::default().fg(Color::Yellow);
-    let messages = messages.iter().rev().filter_map(|msg| {
-        let arrived_at = util::utc_timestamp_msec_to_local(msg.arrived_at);
-
-        let time = Span::styled(
-            format!(
-                "{:02} {:02}:{:02} ",
-                arrived_at.weekday(),
-                arrived_at.hour(),
-                arrived_at.minute()
-            ),
-            time_style,
-        );
-
-        let idx = names_and_colors
-            .binary_search_by_key(&msg.from_id, |&(id, _, _)| id)
-            .unwrap();
-        let (_, from, from_color) = names_and_colors[idx];
-
-        let from = Span::styled(
-            textwrap::indent(&from, &" ".repeat(max_username_width - from.width())),
-            Style::default().fg(from_color),
-        );
-        let delimeter = Span::from(": ");
-
-        let prefix_width = (time.width() + from.width() + delimeter.width()) as u16;
-        let mut indent = " ".repeat(prefix_width.into());
-
-        let wrap_opts = textwrap::Options::new(width.into())
-            .initial_indent(&indent)
-            .subsequent_indent(&indent);
-
-        let text = if msg.reactions.is_empty() {
-            Cow::from(msg.message.as_ref()?)
-        } else {
-            Cow::from(format!(
-                "{} [{}]",
-                msg.message.as_ref()?,
-                msg.reactions.iter().map(|(_, emoji)| emoji).format(""),
-            ))
-        };
-
-        let mut lines = textwrap::wrap(&text, wrap_opts);
-
-        // prepend quote if any
-        let quote = if let Some(displayed_quote) = msg
-            .quote
-            .as_ref()
-            .and_then(|quote| displayed_quote(app, quote))
-        {
-            displayed_quote
-        } else {
-            String::new()
-        };
-
-        if !quote.is_empty() {
-            indent.push_str("> ");
-            let wrap_opts = textwrap::Options::new(width as usize + 2)
-                .initial_indent(&indent)
-                .subsequent_indent(&indent);
-            let mut quote_lines = textwrap::wrap(quote.as_str(), wrap_opts);
-            quote_lines.extend(lines.into_iter());
-            lines = quote_lines;
-        }
-
-        let spans: Vec<Spans> = lines
-            .into_iter()
-            .enumerate()
-            .map(|(idx, line)| {
-                let res = if idx == 0 {
-                    vec![
-                        time.clone(),
-                        from.clone(),
-                        delimeter.clone(),
-                        Span::from(line.strip_prefix(&indent).unwrap().to_string()),
-                    ]
-                } else {
-                    vec![Span::from(line.to_string())]
-                };
-                Spans::from(res)
-            })
-            .collect();
-        Some(spans)
+    let messages_from_offset = messages.iter().rev().skip(offset).filter_map(|msg| {
+        display_message(
+            &msg,
+            &names_and_colors,
+            max_username_width,
+            first_name_only,
+            &prefix,
+            width as usize,
+            height,
+        )
     });
 
-    let mut items: Vec<_> = messages.map(|s| ListItem::new(Text::from(s))).collect();
+    // counters to accumulate messages as long they fit into the list height,
+    // or up to the selected message
+    let mut items_height = 0;
+    let selected = channel.messages.state.selected().unwrap_or(0);
 
-    if let Some(selected_idx) = app.data.channels.state.selected() {
-        let unread_messages = app.data.channels.items[selected_idx].unread_messages;
-        if unread_messages > 0 && unread_messages < items.len() {
-            let prefix_width = max_username_width + 8;
-            let new_message_line = "-".repeat(prefix_width)
-                + "new messages"
-                + &"-".repeat((width as usize).saturating_sub(prefix_width));
+    let mut items: Vec<ListItem<'static>> = messages_from_offset
+        .enumerate()
+        .take_while(|(idx, item)| {
+            items_height += item.height();
+            items_height <= height || offset + *idx <= selected
+        })
+        .map(|(_, item)| item)
+        .collect();
 
-            items.insert(unread_messages, ListItem::new(Span::from(new_message_line)));
+    // calculate the new offset by counting the messages down:
+    // we known that we either stopped at the last fitting message or at the selected message
+    let mut items_height = height;
+    let mut first_idx = 0;
+    for (idx, item) in items.iter().enumerate().rev() {
+        if item.height() <= items_height {
+            items_height -= item.height();
+            first_idx = idx;
+        } else {
+            break;
         }
+    }
+    let offset = offset + first_idx;
+    items = items.split_off(first_idx);
+
+    // add unread messages line
+    let unread_messages = channel.unread_messages;
+    if unread_messages > 0 && unread_messages < items.len() {
+        let new_message_line = "-".repeat(prefix_width)
+            + "new messages"
+            + &"-".repeat(width.saturating_sub(prefix_width));
+        items.insert(unread_messages, ListItem::new(Span::from(new_message_line)));
     }
 
     let list = List::new(items)
@@ -263,20 +239,110 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray))
         .start_corner(Corner::BottomLeft);
 
-    let selected = app.data.channels.state.selected().unwrap_or_default();
+    // re-borrow channel mutably
+    let channel_idx = app.data.channels.state.selected().unwrap_or_default();
+    let channel = &mut app.data.channels.items[channel_idx];
 
-    let init = &mut app::Channel::empty();
-
-    let state = &mut app
-        .data
-        .channels
-        .items
-        .get_mut(selected)
-        .unwrap_or(init)
-        .messages
-        .state;
+    // update selected state to point within `items`
+    let state = &mut channel.messages.state;
+    let selected_global = state.selected();
+    if let Some(selected) = selected_global {
+        state.select(Some(selected - offset));
+    }
 
     f.render_stateful_widget(list, area, state);
+
+    // restore selected state and update offset
+    state.select(selected_global);
+    channel.messages.rendered.offset = offset;
+}
+
+fn display_message(
+    msg: &app::Message,
+    names_and_colors: &[(Uuid, &str, Color)],
+    max_username_width: usize,
+    first_name_only: bool,
+    prefix: &str,
+    width: usize,
+    height: usize,
+) -> Option<ListItem<'static>> {
+    let arrived_at = util::utc_timestamp_msec_to_local(msg.arrived_at);
+
+    let time = Span::styled(
+        format!(
+            "{} {:02}:{:02} ",
+            arrived_at.weekday(),
+            arrived_at.hour(),
+            arrived_at.minute()
+        ),
+        Style::default().fg(Color::Yellow),
+    );
+
+    let idx = names_and_colors
+        .binary_search_by_key(&msg.from_id, |&(id, _, _)| id)
+        .unwrap();
+    let (_, from, from_color) = names_and_colors[idx];
+
+    let from = Span::styled(
+        textwrap::indent(&from, &" ".repeat(max_username_width - from.width())),
+        Style::default().fg(from_color),
+    );
+    let delimeter = Span::from(": ");
+
+    let wrap_opts = textwrap::Options::new(width)
+        .initial_indent(prefix)
+        .subsequent_indent(prefix);
+
+    let text = if msg.reactions.is_empty() {
+        Cow::from(msg.message.as_ref()?)
+    } else {
+        Cow::from(format!(
+            "{} [{}]",
+            msg.message.as_ref()?,
+            msg.reactions.iter().map(|(_, emoji)| emoji).format(""),
+        ))
+    };
+
+    let mut lines = textwrap::wrap(&text, wrap_opts);
+
+    // prepend quote if any
+    let quote_text = msg
+        .quote
+        .as_ref()
+        .and_then(|quote| displayed_quote(quote, names_and_colors, first_name_only));
+    if let Some(text) = quote_text.as_ref() {
+        let quote_prefix = format!("{}> ", prefix);
+        let wrap_opts = textwrap::Options::new(width.saturating_sub(2))
+            .initial_indent(&quote_prefix)
+            .subsequent_indent(&quote_prefix);
+        let mut quote_lines = textwrap::wrap(&text, wrap_opts);
+        quote_lines.extend(lines.into_iter());
+        lines = quote_lines;
+    }
+
+    let mut spans: Vec<Spans> = lines
+        .into_iter()
+        .enumerate()
+        .map(|(idx, line)| {
+            let res = if idx == 0 {
+                vec![
+                    time.clone(),
+                    from.clone(),
+                    delimeter.clone(),
+                    Span::from(line.strip_prefix(prefix).unwrap().to_string()),
+                ]
+            } else {
+                vec![Span::from(line.to_string())]
+            };
+            Spans::from(res)
+        })
+        .collect();
+    if spans.len() > height {
+        // span is too big to be shown fully
+        spans.resize(height - 1, Spans::from(""));
+        spans.push(Spans::from(format!("{}[...]", prefix)));
+    }
+    Some(ListItem::new(Text::from(spans)))
 }
 
 /// Returns a sorted vector of `(id, name, color)` by id.
@@ -358,11 +424,17 @@ fn user_color(username: &str) -> Color {
     USER_COLORS[idx]
 }
 
-fn displayed_quote(app: &App, quote: &app::Message) -> Option<String> {
-    if let Some(name) = app.get_name_by_id(quote.from_id) {
-        let name = displayed_name(name, app.config.first_name_only);
-        Some(format!("> ({}) {}", name, quote.message.as_ref()?))
+fn displayed_quote(
+    quote: &app::Message,
+    names_and_colors: &[(Uuid, &str, Color)],
+    first_name_only: bool,
+) -> Option<String> {
+    let idx = names_and_colors.binary_search_by_key(&quote.from_id, |&(id, _, _)| id);
+    if let Ok(idx) = idx {
+        let name = names_and_colors[idx].1;
+        let name = displayed_name(name, first_name_only);
+        Some(format!("({}) {}", name, quote.message.as_ref()?))
     } else {
-        quote.message.as_ref().map(|s| format!("> {}", s))
+        quote.message.clone()
     }
 }
