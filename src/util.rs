@@ -8,6 +8,13 @@ pub struct StatefulList<T> {
     #[serde(skip)]
     pub state: ListState,
     pub items: Vec<T>,
+    #[serde(skip)]
+    pub rendered: Rendered,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Rendered {
+    pub offset: usize,
 }
 
 impl<T> Default for StatefulList<T> {
@@ -15,6 +22,7 @@ impl<T> Default for StatefulList<T> {
         Self {
             state: Default::default(),
             items: Vec::new(),
+            rendered: Default::default(),
         }
     }
 }
@@ -24,6 +32,7 @@ impl<T> StatefulList<T> {
         StatefulList {
             state: ListState::default(),
             items,
+            rendered: Default::default(),
         }
     }
 
