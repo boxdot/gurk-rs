@@ -1377,7 +1377,7 @@ checksum = "18794a8ad5b29321f790b55d93dfba91e125cb1a9edbd4f8e3150acc771c1a5e"
 [[package]]
 name = "libsignal-protocol"
 version = "0.1.0"
-source = "git+https://github.com/signalapp/libsignal-client#11d9c40cc16611c0cac3356e32beef6f37193031"
+source = "git+https://github.com/signalapp/libsignal-client#c042f16fbb3fe1c12dab4fb6865d971dcc6ffb53"
 dependencies = [
  "aes 0.6.0",
  "arrayref",
@@ -1402,7 +1402,7 @@ dependencies = [
 [[package]]
 name = "libsignal-service"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/libsignal-service-rs#8ae0f0fff08716bb90a8c36b7a323968cb7f360e"
+source = "git+https://github.com/whisperfish/libsignal-service-rs#f1afccd13d110cb4e80f5f330a0384b9af2b12c6"
 dependencies = [
  "aes 0.7.1",
  "aes-gcm",
@@ -1434,7 +1434,7 @@ dependencies = [
 [[package]]
 name = "libsignal-service-hyper"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/libsignal-service-rs#8ae0f0fff08716bb90a8c36b7a323968cb7f360e"
+source = "git+https://github.com/whisperfish/libsignal-service-rs#f1afccd13d110cb4e80f5f330a0384b9af2b12c6"
 dependencies = [
  "async-trait",
  "async-tungstenite",
@@ -2036,7 +2036,7 @@ checksum = "ac74c624d6b2d21f425f752262f42188365d7b8ff1aff74c82e45136510a4857"
 [[package]]
 name = "presage"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/presage.git?rev=c290e49#c290e4952670d9e500d3374cf1f320aff0c9b431"
+source = "git+https://github.com/whisperfish/presage.git?rev=20f8be16#20f8be16dc3b9783a576f60b5d642097283295d4"
 dependencies = [
  "async-trait",
  "base64 0.12.3",
@@ -2576,7 +2576,7 @@ dependencies = [
 [[package]]
 name = "signal-crypto"
 version = "0.1.0"
-source = "git+https://github.com/signalapp/libsignal-client#11d9c40cc16611c0cac3356e32beef6f37193031"
+source = "git+https://github.com/signalapp/libsignal-client#c042f16fbb3fe1c12dab4fb6865d971dcc6ffb53"
 dependencies = [
  "aes-soft 0.6.4",
  "aesni 0.10.0",

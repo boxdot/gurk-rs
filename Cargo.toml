@@ -34,7 +34,7 @@ unicode-width = "0.1.8"
 uuid = "0.8.2"
 whoami = "1.1.2"
 
-presage = { git = "https://github.com/whisperfish/presage.git", rev = "c290e49" }
+presage = { git = "https://github.com/whisperfish/presage.git", rev = "20f8be16" }
 
 # [patch."https://github.com/whisperfish/presage.git"]
 # presage = { path = "../presage" }
