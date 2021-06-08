@@ -186,6 +186,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
     let messages_from_offset = messages.iter().rev().skip(offset).filter_map(|msg| {
         display_message(
+            &app,
             &msg,
             &names_and_colors,
             max_username_width,
@@ -258,6 +259,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 }
 
 fn display_message(
+    app: &App,
     msg: &app::Message,
     names_and_colors: &[(Uuid, &str, Color)],
     max_username_width: usize,
@@ -278,10 +280,20 @@ fn display_message(
         Style::default().fg(Color::Yellow),
     );
 
-    let idx = names_and_colors
-        .binary_search_by_key(&msg.from_id, |&(id, _, _)| id)
-        .unwrap_or_default();
-    let (_, from, from_color) = names_and_colors[idx];
+    let result = names_and_colors.binary_search_by_key(&msg.from_id, |&(id, _, _)| id);
+    let from;
+    let from_color;
+    match result {
+        Ok(idx) => {
+            let (_, f, c) = names_and_colors[idx];
+            from = f;
+            from_color = c;
+        }
+        Err(_) => {
+            from = app::App::name_by_id(app, msg.from_id);
+            from_color = Color::Magenta;
+        }
+    }
 
     let from = Span::styled(
         textwrap::indent(&from, &" ".repeat(max_username_width - from.width())),
