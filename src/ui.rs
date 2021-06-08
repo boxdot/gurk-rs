@@ -280,7 +280,7 @@ fn display_message(
 
     let idx = names_and_colors
         .binary_search_by_key(&msg.from_id, |&(id, _, _)| id)
-        .unwrap();
+        .unwrap_or_default();
     let (_, from, from_color) = names_and_colors[idx];
 
     let from = Span::styled(
