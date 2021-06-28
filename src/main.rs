@@ -217,22 +217,36 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                     break;
                 }
                 KeyCode::Left => {
-                    app.on_left();
+                    if event
+                        .modifiers
+                        .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+                    {
+                        app.move_back_word();
+                    } else {
+                        app.on_left();
+                    }
                 }
                 KeyCode::Up if event.modifiers.contains(KeyModifiers::ALT) => app.on_pgup(),
                 KeyCode::Up => app.on_up(),
                 KeyCode::Right => {
-                    app.on_right();
+                    if event
+                        .modifiers
+                        .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+                    {
+                        app.move_forward_word();
+                    } else {
+                        app.on_right();
+                    }
                 }
                 KeyCode::Down if event.modifiers.contains(KeyModifiers::ALT) => app.on_pgdn(),
                 KeyCode::Down => app.on_down(),
                 KeyCode::PageUp => app.on_pgup(),
                 KeyCode::PageDown => app.on_pgdn(),
                 KeyCode::Char('f') if event.modifiers.contains(KeyModifiers::ALT) => {
-                    app.on_alt_right();
+                    app.move_forward_word();
                 }
                 KeyCode::Char('b') if event.modifiers.contains(KeyModifiers::ALT) => {
-                    app.on_alt_left();
+                    app.move_back_word();
                 }
                 KeyCode::Char('a') if event.modifiers.contains(KeyModifiers::CONTROL) => {
                     app.on_home();
@@ -243,7 +257,11 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                 KeyCode::Char('w') if event.modifiers.contains(KeyModifiers::CONTROL) => {
                     app.on_delete_word();
                 }
-                KeyCode::Backspace if event.modifiers.contains(KeyModifiers::ALT) => {
+                KeyCode::Backspace
+                    if event
+                        .modifiers
+                        .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
+                {
                     app.on_delete_word();
                 }
                 KeyCode::Char('k') if event.modifiers.contains(KeyModifiers::CONTROL) => {

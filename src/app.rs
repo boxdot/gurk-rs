@@ -459,7 +459,7 @@ impl App {
     }
 
     /// Move a word back
-    pub fn on_alt_left(&mut self) {
+    pub fn move_back_word(&mut self) {
         self.on_left();
         self.word_operation(Self::on_left);
         if self.data.input.as_bytes().get(self.data.input_cursor) == Some(&b' ') {
@@ -468,7 +468,7 @@ impl App {
     }
 
     /// Move a word forward
-    pub fn on_alt_right(&mut self) {
+    pub fn move_forward_word(&mut self) {
         self.word_operation(Self::on_right);
         while self.data.input.as_bytes().get(self.data.input_cursor) == Some(&b' ') {
             self.on_right();
