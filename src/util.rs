@@ -2,6 +2,7 @@ use chrono::{DateTime, Local, NaiveDateTime, TimeZone as _, Utc};
 use presage::prelude::PhoneNumber;
 use serde::{Deserialize, Serialize};
 use tui::widgets::ListState;
+use super::MESSAGE_SCROLL_BACK;
 
 #[derive(Serialize, Deserialize)]
 pub struct StatefulList<T> {
@@ -40,7 +41,11 @@ impl<T> StatefulList<T> {
         let i = match self.state.selected() {
             Some(i) => {
                 if i + 1 >= self.items.len() {
-                    0
+                    if MESSAGE_SCROLL_BACK {
+                        0
+                    } else {
+                        i
+                    }
                 } else {
                     i + 1
                 }
@@ -60,7 +65,11 @@ impl<T> StatefulList<T> {
         let i = match self.state.selected() {
             Some(i) => {
                 if i == 0 {
-                    self.items.len() - 1
+                    if MESSAGE_SCROLL_BACK {
+                        self.items.len() - 1
+                    } else {
+                        0
+                    }
                 } else {
                     i - 1
                 }

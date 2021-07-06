@@ -27,6 +27,7 @@ use std::time::{Duration, Instant};
 
 const TARGET_FPS: u64 = 144;
 const FRAME_BUDGET: Duration = Duration::from_millis(1000 / TARGET_FPS);
+const MESSAGE_SCROLL_BACK: bool = false;
 
 #[derive(Debug, StructOpt)]
 struct Args {
