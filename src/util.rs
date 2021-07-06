@@ -1,8 +1,8 @@
+use super::MESSAGE_SCROLL_BACK;
 use chrono::{DateTime, Local, NaiveDateTime, TimeZone as _, Utc};
 use presage::prelude::PhoneNumber;
 use serde::{Deserialize, Serialize};
 use tui::widgets::ListState;
-use super::MESSAGE_SCROLL_BACK;
 
 #[derive(Serialize, Deserialize)]
 pub struct StatefulList<T> {
