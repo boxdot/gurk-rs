@@ -197,7 +197,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                     if event.column
                         < terminal.get_frame().size().width / ui::CHANNEL_VIEW_RATIO as u16
                     {
-                        app.on_up()
+                        app.select_previous_channel()
                     } else {
                         app.on_pgup()
                     }
@@ -206,7 +206,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                     if event.column
                         < terminal.get_frame().size().width / ui::CHANNEL_VIEW_RATIO as u16
                     {
-                        app.on_down()
+                        app.select_next_channel()
                     } else {
                         app.on_pgdn()
                     }
@@ -228,7 +228,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                     }
                 }
                 KeyCode::Up if event.modifiers.contains(KeyModifiers::ALT) => app.on_pgup(),
-                KeyCode::Up => app.on_up(),
+                KeyCode::Up => app.select_previous_channel(),
                 KeyCode::Right => {
                     if event
                         .modifiers
@@ -240,7 +240,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                     }
                 }
                 KeyCode::Down if event.modifiers.contains(KeyModifiers::ALT) => app.on_pgdn(),
-                KeyCode::Down => app.on_down(),
+                KeyCode::Down => app.select_next_channel(),
                 KeyCode::PageUp => app.on_pgup(),
                 KeyCode::PageDown => app.on_pgdn(),
                 KeyCode::Char('f') if event.modifiers.contains(KeyModifiers::ALT) => {
@@ -257,6 +257,12 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                 }
                 KeyCode::Char('w') if event.modifiers.contains(KeyModifiers::CONTROL) => {
                     app.on_delete_word();
+                }
+                KeyCode::Char('j') if event.modifiers.contains(KeyModifiers::CONTROL) => {
+                    app.select_next_channel();
+                }
+                KeyCode::Char('k') if event.modifiers.contains(KeyModifiers::CONTROL) => {
+                    app.select_previous_channel();
                 }
                 KeyCode::Backspace
                     if event
