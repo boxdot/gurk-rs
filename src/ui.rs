@@ -315,40 +315,58 @@ fn display_message(
         ))
     };
 
-    let mut lines = textwrap::wrap(&text, wrap_opts);
+    let mut spans: Vec<Spans> = vec![];
 
     // prepend quote if any
     let quote_text = msg
         .quote
         .as_ref()
         .and_then(|quote| displayed_quote(quote, names_and_colors, first_name_only));
-    if let Some(text) = quote_text.as_ref() {
+    if let Some(quote_text) = quote_text.as_ref() {
         let quote_prefix = format!("{}> ", prefix);
-        let wrap_opts = textwrap::Options::new(width.saturating_sub(2))
+        let quote_wrap_opts = textwrap::Options::new(width.saturating_sub(2))
             .initial_indent(&quote_prefix)
             .subsequent_indent(&quote_prefix);
-        let mut quote_lines = textwrap::wrap(&text, wrap_opts);
-        quote_lines.extend(lines.into_iter());
-        lines = quote_lines;
+        let quote_style = Style::default().fg(Color::Rgb(150, 150, 150));
+        spans = textwrap::wrap(&quote_text, quote_wrap_opts)
+            .into_iter()
+            .enumerate()
+            .map(|(idx, line)| {
+                let res = if idx == 0 {
+                    vec![
+                        time.clone(),
+                        from.clone(),
+                        delimeter.clone(),
+                        Span::styled(line.strip_prefix(prefix).unwrap().to_string(), quote_style),
+                    ]
+                } else {
+                    vec![Span::styled(line.to_string(), quote_style)]
+                };
+                Spans::from(res)
+            })
+            .collect();
     }
 
-    let mut spans: Vec<Spans> = lines
-        .into_iter()
-        .enumerate()
-        .map(|(idx, line)| {
-            let res = if idx == 0 {
-                vec![
-                    time.clone(),
-                    from.clone(),
-                    delimeter.clone(),
-                    Span::from(line.strip_prefix(prefix).unwrap().to_string()),
-                ]
-            } else {
-                vec![Span::from(line.to_string())]
-            };
-            Spans::from(res)
-        })
-        .collect();
+    let spans_is_empty = spans.len() == 0;
+    spans.extend(
+        textwrap::wrap(&text, wrap_opts)
+            .into_iter()
+            .enumerate()
+            .map(|(idx, line)| {
+                let res = if spans_is_empty && idx == 0 {
+                    vec![
+                        time.clone(),
+                        from.clone(),
+                        delimeter.clone(),
+                        Span::from(line.strip_prefix(prefix).unwrap().to_string()),
+                    ]
+                } else {
+                    vec![Span::from(line.to_string())]
+                };
+                Spans::from(res)
+            }),
+    );
+
     if spans.len() > height {
         // span is too big to be shown fully
         spans.resize(height - 1, Spans::from(""));
