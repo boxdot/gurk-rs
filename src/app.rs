@@ -400,14 +400,14 @@ impl App {
         self.save().unwrap();
     }
 
-    pub fn on_up(&mut self) {
+    pub fn select_previous_channel(&mut self) {
         if self.reset_unread_messages() {
             self.save().unwrap();
         }
         self.data.channels.previous();
     }
 
-    pub fn on_down(&mut self) {
+    pub fn select_next_channel(&mut self) {
         if self.reset_unread_messages() {
             self.save().unwrap();
         }
