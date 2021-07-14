@@ -6,6 +6,7 @@ use anyhow::{anyhow, Context as _};
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
 use log::error;
 use notify_rust::Notification;
+use phonenumber::{Mode, PhoneNumber};
 use presage::prelude::{
     content::{ContentBody, DataMessage, Metadata, SyncMessage},
     proto::{
@@ -253,6 +254,10 @@ impl App {
         } else {
             data = AppData::load(&load_data_path).unwrap_or_default();
         }
+
+        // ensure that our name is up to date
+        data.names
+            .insert(signal_manager.uuid(), config.user.name.clone());
 
         // select the first channel if none is selected
         if data.channels.state.selected().is_none() && !data.channels.items.is_empty() {
@@ -912,14 +917,15 @@ impl App {
         &mut self,
         uuid: Uuid,
         profile_key: Vec<u8>,
-        fallback_name: impl std::fmt::Display,
+        phone_number: PhoneNumber,
     ) -> &str {
         if self
             .try_ensure_user_is_known(uuid, profile_key)
             .await
             .is_none()
         {
-            self.data.names.insert(uuid, fallback_name.to_string());
+            let phone_number_name = phone_number.format().mode(Mode::E164).to_string();
+            self.data.names.insert(uuid, phone_number_name);
         }
         self.data.names.get(&uuid).unwrap()
     }
