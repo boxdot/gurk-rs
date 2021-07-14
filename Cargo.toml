@@ -47,6 +47,7 @@ uuid = "0.8.2"
 whoami = "1.1.2"
 
 presage = { git = "https://github.com/whisperfish/presage.git", rev = "20f8be16" }
+phonenumber = "0.3.1"
 
 # [patch."https://github.com/whisperfish/presage.git"]
 # presage = { path = "../presage" }

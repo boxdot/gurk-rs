@@ -962,6 +962,7 @@ dependencies = [
  "log-panics",
  "log4rs",
  "notify-rust",
+ "phonenumber",
  "presage",
  "scopeguard",
  "serde",
