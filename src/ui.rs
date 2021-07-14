@@ -258,6 +258,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     channel.messages.rendered.offset = offset;
 }
 
+#[allow(clippy::too_many_arguments)]
 fn display_message(
     app: &App,
     msg: &app::Message,
@@ -347,13 +348,13 @@ fn display_message(
             .collect();
     }
 
-    let spans_is_empty = spans.len() == 0;
+    let add_time = spans.is_empty();
     spans.extend(
         textwrap::wrap(&text, wrap_opts)
             .into_iter()
             .enumerate()
             .map(|(idx, line)| {
-                let res = if spans_is_empty && idx == 0 {
+                let res = if add_time && idx == 0 {
                     vec![
                         time.clone(),
                         from.clone(),
