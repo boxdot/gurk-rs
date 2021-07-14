@@ -414,6 +414,13 @@ impl App {
         self.data.channels.next();
     }
 
+    pub fn select_channel(&mut self, channel_idx: usize) {
+        if self.reset_unread_messages() {
+            self.save().unwrap();
+        }
+        self.data.channels.select(channel_idx);
+    }
+
     pub fn on_pgup(&mut self) {
         let select = self.data.channels.state.selected().unwrap_or_default();
         self.data.channels.items[select].messages.next();

@@ -84,6 +84,12 @@ impl<T> StatefulList<T> {
         };
         self.state.select(Some(i));
     }
+
+    pub fn select(&mut self, channel_idx: usize) {
+        if channel_idx < self.items.len() {
+            self.state.select(Some(channel_idx));
+        }
+    }
 }
 
 pub fn utc_timestamp_msec_to_local(timestamp: u64) -> DateTime<Local> {

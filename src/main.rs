@@ -268,6 +268,36 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                 KeyCode::Char('k') if event.modifiers.contains(KeyModifiers::CONTROL) => {
                     app.on_delete_suffix();
                 }
+                KeyCode::Char('1') if event.modifiers.contains(KeyModifiers::ALT) => {
+                    app.select_channel(0);
+                }
+                KeyCode::Char('2') if event.modifiers.contains(KeyModifiers::ALT) => {
+                    app.select_channel(1);
+                }
+                KeyCode::Char('3') if event.modifiers.contains(KeyModifiers::ALT) => {
+                    app.select_channel(2);
+                }
+                KeyCode::Char('4') if event.modifiers.contains(KeyModifiers::ALT) => {
+                    app.select_channel(3);
+                }
+                KeyCode::Char('5') if event.modifiers.contains(KeyModifiers::ALT) => {
+                    app.select_channel(4);
+                }
+                KeyCode::Char('6') if event.modifiers.contains(KeyModifiers::ALT) => {
+                    app.select_channel(5);
+                }
+                KeyCode::Char('7') if event.modifiers.contains(KeyModifiers::ALT) => {
+                    app.select_channel(6);
+                }
+                KeyCode::Char('8') if event.modifiers.contains(KeyModifiers::ALT) => {
+                    app.select_channel(7);
+                }
+                KeyCode::Char('9') if event.modifiers.contains(KeyModifiers::ALT) => {
+                    app.select_channel(8);
+                }
+                KeyCode::Char('0') if event.modifiers.contains(KeyModifiers::ALT) => {
+                    app.select_channel(9);
+                }
                 code => app.on_key(code).await,
             },
             Some(Event::Message(content)) => {
