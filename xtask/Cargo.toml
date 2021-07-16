@@ -1,0 +1,16 @@
+[package]
+name = "xtask"
+version = "0.1.0"
+edition = "2018"
+publish = false
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+anyhow = "1.0.42"
+flate2 = "1.0.20"
+pulldown-cmark = "0.8.0"
+semver = "1.0.3"
+tar = "0.4.35"
+write-json = "0.1.2"
+xflags = "0.2.2"
+xshell = "0.1.14"
