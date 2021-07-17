@@ -1,62 +1,178 @@
 on: [push, pull_request]
 
-name: CI
+name: ci
 
 env:
   CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUSTFLAGS: "-D warnings"
+  RUSTUP_MAX_RETRIES: 10
+  FETCH_DEPTH: 0
+  NIGHTLY_VERSION: nightly-2021-06-08
 
 jobs:
-  build_and_test:
-    name: build
-    runs-on: ubuntu-latest
-    env:
-      RUSTFLAGS: -D warnings
-    steps:
-      - name: Install build dependencies for libdbus-sys
-        run: |
-          sudo apt update
-          sudo apt install -y libdbus-1-dev pkg-config
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --all-targets --all-features
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
-
   rustfmt:
     name: rustfmt
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - name: Checkout repository
+        uses: actions/checkout@v2
         with:
-          profile: minimal
+          fetch-depth: ${{ env.FETCH_DEPTH }}
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
           toolchain: stable
+          profile: minimal
           components: rustfmt
-      - uses: actions-rs/cargo@v1
+      - name: Check format
+        uses: actions-rs/cargo@v1
         with:
           command: fmt
           args: -- --check
 
   clippy:
     name: clippy
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     steps:
-      - name: Install build dependencies for libdbus-sys
-        run: |
-          sudo apt update
-          sudo apt install -y libdbus-1-dev pkg-config
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - name: Checkout repository
+        uses: actions/checkout@v2
         with:
-          profile: minimal
+          fetch-depth: ${{ env.FETCH_DEPTH }}
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
           toolchain: stable
+          profile: minimal
           components: clippy
-      - uses: actions-rs/cargo@v1
+      - name: Clippy
+        uses: actions-rs/cargo@v1
         with:
           command: clippy
+
+  build-test-x86_64-unknown-linux-gnu:
+    name: build and test (x86_64-unknown-linux-gnu)
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: ${{ env.FETCH_DEPTH }}
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+      - name: Test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+
+  build-x86_64-unknown-linux-musl:
+    name: build (x86_64-unknown-linux-musl)
+    runs-on: ubuntu-latest
+    container:
+      image: rust:alpine
+      volumes:
+        - /usr/local/cargo/registry
+    env:
+      # For some reason `-crt-static` is not working for clang without lld
+      RUSTFLAGS: "-C link-arg=-fuse-ld=lld -C target-feature=-crt-static"
+    steps:
+      - name: Install dependencies
+        run: apk add --no-cache musl-dev lld protoc
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: ${{ env.FETCH_DEPTH }}
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          target: x86_64-unknown-linux-musl
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --target x86_64-unknown-linux-musl
+
+  build-aarch64-unknown-linux-gnu:
+    name: build (aarch64-unknown-linux-gnu)
+    runs-on: ubuntu-18.04
+    env:
+      CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: ${{ env.FETCH_DEPTH }}
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.NIGHTLY_VERSION }}
+          target: aarch64-unknown-linux-gnu
+          profile: minimal
+          override: true
+      - name: Install target toolchain
+        run: sudo apt-get install gcc-aarch64-linux-gnu
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --target aarch64-unknown-linux-gnu
+
+  build-test-x86_64-apple-darwin:
+    name: build and test (x86_64-apple-darwin)
+    runs-on: macos-latest
+    env:
+      SELECT_XCODE: /Applications/Xcode_12.2.app
+    steps:
+      - name: Select XCode version
+        run: sudo xcode-select -s "${SELECT_XCODE}"
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: ${{ env.FETCH_DEPTH }}
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+      - name: Test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+
+  build-aarch64-apple-darwin:
+    name: build (aarch64-apple-darwin)
+    runs-on: macos-latest
+    env:
+      SELECT_XCODE: /Applications/Xcode_12.2.app
+    steps:
+      - name: Select XCode version
+        run: sudo xcode-select -s "${SELECT_XCODE}"
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: ${{ env.FETCH_DEPTH }}
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.NIGHTLY_VERSION }}
+          target: aarch64-apple-darwin
+          profile: minimal
+          override: true
+      - name: Build
+        run: |
+          export SDKROOT=$(xcrun -sdk macosx11.0 --show-sdk-path)
+          export MACOSX_DEPLOYMENT_TARGET=$(xcrun -sdk macosx11.0 --show-sdk-platform-version)
+          cargo build --target aarch64-apple-darwin

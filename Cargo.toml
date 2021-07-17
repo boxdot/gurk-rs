@@ -8,9 +8,18 @@ keywords = ["signal", "tui"]
 repository = "https://github.com/boxdot/gurk-rs"
 license = "AGPL-3.0-only"
 categories = ["command-line-utilities"]
+resolver = "2"
 
 [workspace]
 members = ["xtask"]
+
+[profile.dev.package]
+# This speeds up `cargo xtask dist`.
+miniz_oxide.opt-level = 3
+
+[profile.release]
+lto = "thin"
+debug = 0
 
 [dependencies]
 anyhow = "1.0.40"

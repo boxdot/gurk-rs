@@ -19,10 +19,6 @@ impl flags::Dist {
 
 fn build() -> Result<()> {
     let target = get_target();
-    if target.contains("-linux-gnu") || target.contains("-linux-musl") {
-        env::set_var("CC", "clang");
-    }
-
     cmd!("cargo build --target {target} --release --locked").run()?;
 
     let suffix = exe_suffix(&target);
@@ -42,8 +38,6 @@ fn get_target() -> String {
         _ => {
             if cfg!(target_os = "linux") {
                 "x86_64-unknown-linux-gnu".to_string()
-            } else if cfg!(target_os = "windows") {
-                "x86_64-pc-windows-msvc".to_string()
             } else if cfg!(target_os = "macos") {
                 "x86_64-apple-darwin".to_string()
             } else {
