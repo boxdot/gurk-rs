@@ -9,6 +9,9 @@ repository = "https://github.com/boxdot/gurk-rs"
 license = "AGPL-3.0-only"
 categories = ["command-line-utilities"]
 
+[workspace]
+members = ["xtask"]
+
 [dependencies]
 anyhow = "1.0.40"
 chrono = { version = "0.4.19", features = ["serde"] }

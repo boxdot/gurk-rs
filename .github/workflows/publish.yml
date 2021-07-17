@@ -1,0 +1,244 @@
+name: release
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUSTFLAGS: "-D warnings -W unreachable-pub"
+  RUSTUP_MAX_RETRIES: 10
+  FETCH_DEPTH: 0 # pull in the tags for the version string
+
+jobs:
+  dist-changelog:
+    name: dist (changelog)
+    runs-on: ubuntu-18.04
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: ${{ env.FETCH_DEPTH }}
+
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        override: true
+        components: rust-src
+
+    - name: Generate checklog
+      run: cargo xtask changelog
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: dist-changelog
+        path: dist
+
+  dist-x86_64-unknown-linux-gnu:
+    name: dist (x86_64-unknown-linux-gnu)
+    runs-on: ubuntu-18.04
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: ${{ env.FETCH_DEPTH }}
+
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        override: true
+        components: rust-src
+
+    - name: Dist
+      run: cargo xtask dist
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: dist-x86_64-unknown-linux-gnu
+        path: dist
+
+  dist-x86_64-unknown-linux-musl:
+    name: dist (x86_64-unknown-linux-musl)
+    runs-on: ubuntu-20.04
+    env:
+      # For some reason `-crt-static` is not working for clang without lld
+      GURK_TARGET: x86_64-unknown-linux-musl
+      RUSTFLAGS: "-C link-arg=-fuse-ld=lld -C target-feature=-crt-static"
+    container:
+      image: rust:alpine
+      volumes:
+      - /usr/local/cargo/registry
+
+    steps:
+    - name: Install dependencies
+      run: apk add --no-cache git clang lld musl-dev
+
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: ${{ env.FETCH_DEPTH }}
+
+    - name: Dist
+      run: cargo xtask dist
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: dist-x86_64-unknown-linux-musl
+        path: dist
+
+  dist-aarch64-unknown-linux-gnu:
+    name: dist (aarch64-unknown-linux-gnu)
+    runs-on: ubuntu-18.04
+    env:
+      GURK_TARGET: aarch64-unknown-linux-gnu
+      CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: ${{ env.FETCH_DEPTH }}
+
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        target: aarch64-unknown-linux-gnu
+        profile: minimal
+        override: true
+
+    - name: Install target toolchain
+      run: sudo apt-get install gcc-aarch64-linux-gnu
+
+    - name: Dist
+      run: cargo xtask dist
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: dist-aarch64-unknown-linux-gnu
+        path: dist
+
+  dist-x86_64-apple-darwin:
+    name: dist (x86_64-apple-darwin)
+    runs-on: macos-latest
+    env:
+      GURK_TARGET: x86_64-apple-darwin
+      SELECT_XCODE: /Applications/Xcode_12.2.app
+
+    steps:
+    - name: Select XCode version
+      run: sudo xcode-select -s "${SELECT_XCODE}"
+
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: ${{ env.FETCH_DEPTH }}
+
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        override: true
+
+    - name: Dist
+      run: cargo xtask dist
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: dist-x86_64-apple-darwin
+        path: dist
+
+  dist-aarch64-apple-darwin:
+    name: dist (aarch64-apple-darwin)
+    runs-on: macos-latest
+    env:
+      GURK_TARGET: aarch64-apple-darwin
+      SELECT_XCODE: /Applications/Xcode_12.2.app
+
+    steps:
+    - name: Select XCode version
+      run: sudo xcode-select -s "${SELECT_XCODE}"
+
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: ${{ env.FETCH_DEPTH }}
+
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        target: aarch64-apple-darwin
+        profile: minimal
+        override: true
+
+    - name: Dist
+      run: SDKROOT=$(xcrun -sdk macosx11.0 --show-sdk-path) MACOSX_DEPLOYMENT_TARGET=$(xcrun -sdk macosx11.0 --show-sdk-platform-version) cargo xtask dist
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: dist-aarch64-apple-darwin
+        path: dist
+
+  publish:
+    name: publish
+    runs-on: ubuntu-18.04
+    needs:
+      - dist-changelog
+      - dist-x86_64-unknown-linux-gnu
+      - dist-x86_64-unknown-linux-musl
+      - dist-aarch64-unknown-linux-gnu
+      - dist-x86_64-apple-darwin
+      - dist-aarch64-apple-darwin
+
+    steps:
+      - uses: actions/download-artifact@v2
+        with:
+          name: dist-changelog
+          path: dist
+      - uses: actions/download-artifact@v2
+        with:
+          name: dist-aarch64-apple-darwin
+          path: dist
+      - uses: actions/download-artifact@v2
+        with:
+          name: dist-x86_64-apple-darwin
+          path: dist
+      - uses: actions/download-artifact@v2
+        with:
+          name: dist-x86_64-unknown-linux-gnu
+          path: dist
+      - uses: actions/download-artifact@v2
+        with:
+          name: dist-x86_64-unknown-linux-musl
+          path: dist
+      - uses: actions/download-artifact@v2
+        with:
+          name: dist-aarch64-unknown-linux-gnu
+          path: dist
+
+      - run: ls -al
+        working-directory: dist
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          body_path: dist/CHANGELOG.md
+          files: dist/*.tar.gz
+          draft: true
