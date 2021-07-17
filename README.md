@@ -10,7 +10,7 @@
 Download a pre-compiled binary from [Releases], or install from source:
 
 ```shell
-cargo install --git https://github.com/boxdot/gurk-rs
+cargo install --git https://github.com/boxdot/gurk-rs gurk
 ```
 
 Run
