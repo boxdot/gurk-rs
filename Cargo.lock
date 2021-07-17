@@ -967,7 +967,7 @@ dependencies = [
  "serde",
  "serde_json",
  "structopt",
- "textwrap 0.13.4",
+ "textwrap 0.14.2",
  "tokio",
  "tokio-stream",
  "toml",
@@ -2726,11 +2726,12 @@ dependencies = [
 
 [[package]]
 name = "textwrap"
-version = "0.13.4"
+version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd05616119e612a8041ef58f2b578906cc2531a6069047ae092cfb86a325d835"
+checksum = "0066c8d12af8b5acd21e00547c3797fde4e8677254a7ee429176ccebbe93dd80"
 dependencies = [
  "smawk",
+ "unicode-linebreak",
  "unicode-width",
 ]
 
@@ -2993,6 +2994,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eeb8be209bb1c96b7c177c7420d26e04eccacb0eeae6b980e35fcb74678107e0"
 dependencies = [
  "matches",
+]
+
+[[package]]
+name = "unicode-linebreak"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05a31f45d18a3213b918019f78fe6a73a14ab896807f0aaf5622aa0684749455"
+dependencies = [
+ "regex",
 ]
 
 [[package]]
