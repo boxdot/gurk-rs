@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.2.1 (Unreleased)
+
+### Fixed
+
+- Fix formatting of phone number and update user name on start. ([#78])
+
+[#78]: https://github.com/boxdot/gurk-rs/pull/78
 
 ## 0.2.0
 
