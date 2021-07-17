@@ -1,6 +1,8 @@
 # Changelog
 
-## 0.2.0 (Unreleased)
+## Unreleased
+
+## 0.2.0
 
 The highlight of this release is the usage of the native implementation of the Signal client
 protocol via [presage]. This removes the dependency on [signal-cli] and makes `gurk` fully
