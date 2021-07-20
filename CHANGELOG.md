@@ -5,6 +5,7 @@
 ### Fixed
 
 - Fix formatting of phone number and update user name on start. ([#78])
+- Fix an overflow error and crash by adding a subtraction check. ([#88])
 
 [#78]: https://github.com/boxdot/gurk-rs/pull/78
 
