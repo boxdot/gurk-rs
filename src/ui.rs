@@ -297,7 +297,14 @@ fn display_message(
     }
 
     let from = Span::styled(
-        textwrap::indent(&from, &" ".repeat(max_username_width - from.width())),
+        textwrap::indent(
+            &from,
+            &" ".repeat(
+                max_username_width
+                    .checked_sub(from.width())
+                    .unwrap_or_default(),
+            ),
+        ),
         Style::default().fg(from_color),
     );
     let delimeter = Span::from(": ");
