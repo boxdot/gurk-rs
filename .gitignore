@@ -1,2 +1,4 @@
 /target
+/xtask/target
+/xtask/Cargo.lock
 gurk.log

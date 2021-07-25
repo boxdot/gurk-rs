@@ -72,7 +72,10 @@ pub async fn ensure_linked_device(relink: bool) -> anyhow::Result<(Manager, Conf
     // get profile
     let phone_number = manager
         .phone_number()
-        .expect("no phone number after device was linked");
+        .expect("no phone number after device was linked")
+        .format()
+        .mode(phonenumber::Mode::E164)
+        .to_string();
     let profile = manager
         .retrieve_profile()
         .await
@@ -84,15 +87,12 @@ pub async fn ensure_linked_device(relink: bool) -> anyhow::Result<(Manager, Conf
 
     let config = if let Some(config) = config {
         // check that config fits the profile
-        if config.user.phone_number != phone_number.to_string() {
+        if config.user.phone_number != phone_number {
             bail!("Wrong phone number in the config. Please adjust it.");
         }
         config
     } else {
-        let user = config::User {
-            name,
-            phone_number: phone_number.to_string(),
-        };
+        let user = config::User { name, phone_number };
         let config = config::Config::with_user(user);
         config.save_new().context("failed to init config file")?;
         config

@@ -258,6 +258,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     channel.messages.rendered.offset = offset;
 }
 
+#[allow(clippy::too_many_arguments)]
 fn display_message(
     app: &App,
     msg: &app::Message,
@@ -296,7 +297,14 @@ fn display_message(
     }
 
     let from = Span::styled(
-        textwrap::indent(&from, &" ".repeat(max_username_width - from.width())),
+        textwrap::indent(
+            &from,
+            &" ".repeat(
+                max_username_width
+                    .checked_sub(from.width())
+                    .unwrap_or_default(),
+            ),
+        ),
         Style::default().fg(from_color),
     );
     let delimeter = Span::from(": ");
@@ -315,40 +323,58 @@ fn display_message(
         ))
     };
 
-    let mut lines = textwrap::wrap(&text, wrap_opts);
+    let mut spans: Vec<Spans> = vec![];
 
     // prepend quote if any
     let quote_text = msg
         .quote
         .as_ref()
         .and_then(|quote| displayed_quote(quote, names_and_colors, first_name_only));
-    if let Some(text) = quote_text.as_ref() {
+    if let Some(quote_text) = quote_text.as_ref() {
         let quote_prefix = format!("{}> ", prefix);
-        let wrap_opts = textwrap::Options::new(width.saturating_sub(2))
+        let quote_wrap_opts = textwrap::Options::new(width.saturating_sub(2))
             .initial_indent(&quote_prefix)
             .subsequent_indent(&quote_prefix);
-        let mut quote_lines = textwrap::wrap(&text, wrap_opts);
-        quote_lines.extend(lines.into_iter());
-        lines = quote_lines;
+        let quote_style = Style::default().fg(Color::Rgb(150, 150, 150));
+        spans = textwrap::wrap(&quote_text, quote_wrap_opts)
+            .into_iter()
+            .enumerate()
+            .map(|(idx, line)| {
+                let res = if idx == 0 {
+                    vec![
+                        time.clone(),
+                        from.clone(),
+                        delimeter.clone(),
+                        Span::styled(line.strip_prefix(prefix).unwrap().to_string(), quote_style),
+                    ]
+                } else {
+                    vec![Span::styled(line.to_string(), quote_style)]
+                };
+                Spans::from(res)
+            })
+            .collect();
     }
 
-    let mut spans: Vec<Spans> = lines
-        .into_iter()
-        .enumerate()
-        .map(|(idx, line)| {
-            let res = if idx == 0 {
-                vec![
-                    time.clone(),
-                    from.clone(),
-                    delimeter.clone(),
-                    Span::from(line.strip_prefix(prefix).unwrap().to_string()),
-                ]
-            } else {
-                vec![Span::from(line.to_string())]
-            };
-            Spans::from(res)
-        })
-        .collect();
+    let add_time = spans.is_empty();
+    spans.extend(
+        textwrap::wrap(&text, wrap_opts)
+            .into_iter()
+            .enumerate()
+            .map(|(idx, line)| {
+                let res = if add_time && idx == 0 {
+                    vec![
+                        time.clone(),
+                        from.clone(),
+                        delimeter.clone(),
+                        Span::from(line.strip_prefix(prefix).unwrap().to_string()),
+                    ]
+                } else {
+                    vec![Span::from(line.to_string())]
+                };
+                Spans::from(res)
+            }),
+    );
+
     if spans.len() > height {
         // span is too big to be shown fully
         spans.resize(height - 1, Spans::from(""));
