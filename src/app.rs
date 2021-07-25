@@ -2,6 +2,7 @@ use crate::config::{self, Config};
 use crate::signal::{self, GroupIdentifierBytes, GroupMasterKeyBytes};
 use crate::util::{self, StatefulList};
 
+use gh_emoji::Replacer;
 use anyhow::{anyhow, Context as _};
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
 use log::error;
@@ -315,9 +316,10 @@ impl App {
     }
 
     async fn send_input(&mut self, channel_idx: usize) {
+        let emoji_replacer = Replacer::new();
         let channel = &mut self.data.channels.items[channel_idx];
 
-        let message: String = self.data.input.drain(..).collect();
+        let message: String = emoji_replacer.replace_all(&(self.data.input.drain(..).collect::<String>())).into_owned();
         self.data.input_cursor = 0;
         self.data.input_cursor_chars = 0;
 

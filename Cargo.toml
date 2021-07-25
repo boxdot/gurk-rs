@@ -15,6 +15,7 @@ chrono = { version = "0.4.19", features = ["serde"] }
 crossterm = { version = "0.19.0", features = ["event-stream"] }
 derivative = "2.2.0"
 dirs = "3.0.2"
+gh-emoji = "1.0.3"
 hostname = "0.3.1"
 itertools = "0.10.0"
 log = "0.4.14"
