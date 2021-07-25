@@ -335,7 +335,19 @@ impl App {
                 body: None,
                 quote: None,
                 reaction: Some(Reaction {
-                    emoji: Some((&reaction).clone()),
+                    emoji: if !remove {
+                        Some((&reaction).clone())
+                    } else {
+                        Some(
+                            selected_message
+                                .reactions
+                                .iter()
+                                .find(|(uuid, _reac)| *uuid == self.self_id())
+                                .unwrap_or(&(Uuid::from_u128(0), String::from("")))
+                                .1
+                                .clone(),
+                        )
+                    },
                     remove: Some(remove),
                     target_author_uuid: Some(target_author_uuid.to_string()),
                     target_sent_timestamp: Some(target_sent_timestamp),
@@ -399,7 +411,7 @@ impl App {
                 self.data.channels.items[channel_idx].id,
                 target_sent_timestamp,
                 target_author_uuid,
-                false,
+                remove,
                 reaction,
             );
         }
