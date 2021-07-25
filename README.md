@@ -7,10 +7,10 @@
 
 ## Usage
 
-Install from source:
+Download a pre-compiled binary from [Releases], or install from source:
 
 ```shell
-cargo install --git https://github.com/boxdot/gurk-rs
+cargo install --git https://github.com/boxdot/gurk-rs gurk
 ```
 
 Run
@@ -19,9 +19,12 @@ Run
 gurk
 ```
 
-On the first run, this will open a QR code in your favorite image viewer, such that you can link the
-device. This will also create a configuration file at the default [config
+On the first run, it will open a QR code in your favorite image viewer, such that you can link the
+client as a new device. This will also create a configuration file at the default [config
 location][config-location]. For the configuration directives, see [`src/config.rs`].
+
+Note: The binary cannot be published on crates.io, because it depends on several official Signal
+libraries that are not available on crates.io.
 
 ## Chat
 
@@ -59,3 +62,4 @@ shall be licensed as above, without any additional terms or conditions.
 [ci-badge]: https://github.com/boxdot/gurk-rs/workflows/CI/badge.svg
 [chat-link]: https://signal.group/#CjQKILaqQTWUZks14mPRSn0m0zyU9A-buNMG6haQBmWrxJHeEhCc7HLIwCFZRNDw63MWj-fA
 [config-location]: https://docs.rs/dirs/3.0.2/dirs/fn.config_dir.html
+[Releases]: https://github.com/boxdot/gurk-rs/releases

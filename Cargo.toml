@@ -1,13 +1,25 @@
 [package]
 name = "gurk"
 description = "Signal messenger client for terminal"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["boxdot <d@zerovolt.org>"]
 edition = "2018"
 keywords = ["signal", "tui"]
 repository = "https://github.com/boxdot/gurk-rs"
 license = "AGPL-3.0-only"
 categories = ["command-line-utilities"]
+resolver = "2"
+
+[workspace]
+members = ["xtask"]
+
+[profile.dev.package]
+# This speeds up `cargo xtask dist`.
+miniz_oxide.opt-level = 3
+
+[profile.release]
+lto = "thin"
+debug = 0
 
 [dependencies]
 anyhow = "1.0.40"
@@ -26,7 +38,7 @@ scopeguard = "1.1.0"
 serde = { version = "1.0.125", features = ["derive"] }
 serde_json = "1.0.64"
 structopt = "0.3.21"
-textwrap = "0.13.4"
+textwrap = "0.14.2"
 tokio = { version = "1.5.0", default-features = false, features = ["rt-multi-thread", "macros", "net", "time"] }
 tokio-stream = "0.1.5"
 toml = "0.5.8"
@@ -36,6 +48,7 @@ uuid = "0.8.2"
 whoami = "1.1.2"
 
 presage = { git = "https://github.com/whisperfish/presage.git", rev = "20f8be16" }
+phonenumber = "0.3.1"
 
 # [patch."https://github.com/whisperfish/presage.git"]
 # presage = { path = "../presage" }
