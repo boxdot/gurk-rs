@@ -308,58 +308,61 @@ impl App {
             }
             KeyCode::Esc => self.reset_message_selection(),
             KeyCode::Char(c) => self.put_char(c),
-            KeyCode::Tab if !self.data.input.is_empty() => {
+            KeyCode::Tab => {
                 if let Some(idx) = self.data.channels.state.selected() {
-                    self.add_reaction(idx).await;
+                    self.add_reaction(idx, self.data.input.is_empty()).await;
                 }
             }
             _ => {}
         }
     }
 
-    pub async fn add_reaction(&mut self, channel_idx: usize) {
+    pub async fn add_reaction(&mut self, channel_idx: usize, remove: bool) {
         let emoji_replacer = Replacer::new();
-        let channel = &mut self.data.channels.items[channel_idx];
 
-        let reaction: String = emoji_replacer
-            .replace_all(&(self.data.input.drain(..).collect::<String>()))
-            .into_owned();
+        let input: String = self.data.input.drain(..).collect();
+        let reaction: String = emoji_replacer.replace_all(&input).to_string();
+        let message_reaction = reaction.clone();
 
         self.data.input_cursor = 0;
         self.data.input_cursor_chars = 0;
 
-        if let Some(selected_message) = channel.selected_message() {
+        if let Some(selected_message) = self.data.channels.items[channel_idx].selected_message() {
             let timestamp = util::utc_now_timestamp_msec();
             let target_author_uuid = selected_message.from_id;
             let target_sent_timestamp = selected_message.arrived_at;
-
             let mut data_message = DataMessage {
                 body: None,
-                timestamp: Some(timestamp),
                 quote: None,
                 reaction: Some(Reaction {
-                    emoji: Some(reaction),
-                    remove: Some(false),
+                    emoji: Some((&reaction).clone()),
+                    remove: Some(remove),
                     target_author_uuid: Some(target_author_uuid.to_string()),
                     target_sent_timestamp: Some(target_sent_timestamp),
                 }),
                 ..Default::default()
             };
 
-            match channel.id {
+            match self.data.channels.items[channel_idx].id {
                 ChannelId::User(uuid) => {
                     let manager = self.signal_manager.clone();
                     let body = ContentBody::DataMessage(data_message);
                     tokio::task::spawn_local(async move {
                         if let Err(e) = manager.send_message(uuid, body, timestamp).await {
-                            // TODO: Proper error handling
-                            log::error!("Failed to send message to {}: {}", uuid, e);
+                            log::error!(
+                                "Failed to send reaction {} to {}: {}",
+                                &message_reaction[..],
+                                uuid,
+                                e
+                            );
                             return;
                         }
                     });
                 }
                 ChannelId::Group(_) => {
-                    if let Some(group_data) = channel.group_data.as_ref() {
+                    if let Some(group_data) =
+                        self.data.channels.items[channel_idx].group_data.as_ref()
+                    {
                         let manager = self.signal_manager.clone();
                         let self_uuid = self.signal_manager.uuid();
 
@@ -379,7 +382,11 @@ impl App {
                                 .await
                             {
                                 // TODO: Proper error handling
-                                log::error!("Failed to send group message: {}", e);
+                                log::error!(
+                                    "Failed to send group reaction {} : {}",
+                                    &message_reaction[..],
+                                    e
+                                );
                                 return;
                             }
                         });
@@ -388,10 +395,19 @@ impl App {
                     }
                 }
             }
+            self.handle_reaction(
+                self.data.channels.items[channel_idx].id,
+                target_sent_timestamp,
+                target_author_uuid,
+                false,
+                reaction,
+            );
         }
+
         self.reset_unread_messages();
         self.bubble_up_channel(channel_idx);
         self.save().unwrap();
+        self.reset_message_selection();
     }
 
     fn reset_message_selection(&mut self) {
