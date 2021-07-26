@@ -21,7 +21,6 @@ use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
 
-use emoji;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
