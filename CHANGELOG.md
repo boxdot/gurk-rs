@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Add basic emojis and reactions support ([#91])
+
+[#91]: https://github.com/boxdot/gurk-rs/pull/91
+
 ## 0.2.1
 
 ### Fixed

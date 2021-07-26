@@ -18,9 +18,11 @@ use presage::prelude::{
     Content, GroupMasterKey, GroupSecretParams, ServiceAddress,
 };
 use serde::{Deserialize, Serialize};
+use tokio::fs::read_link;
 use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
 
+use emoji;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
@@ -317,11 +319,10 @@ impl App {
         }
     }
 
-    pub async fn add_reaction(&mut self, channel_idx: usize, remove: bool) {
-        let emoji_replacer = Replacer::new();
-
+    pub async fn add_reaction(&mut self, channel_idx: usize, remove: bool) -> Option<()> {
         let input: String = self.data.input.drain(..).collect();
-        let reaction: String = emoji_replacer.replace_all(&input).to_string();
+        let reaction = self.take_emoji(&input);
+        log::error!("\"{:?}\"", reaction);
         let message_reaction = reaction.clone();
 
         self.data.input_cursor = 0;
@@ -336,14 +337,13 @@ impl App {
                 quote: None,
                 reaction: Some(Reaction {
                     emoji: if !remove {
-                        Some((&reaction).clone())
+                        Some((reaction.to_owned())?)
                     } else {
                         Some(
                             selected_message
                                 .reactions
                                 .iter()
-                                .find(|(uuid, _reac)| *uuid == self.self_id())
-                                .unwrap_or(&(Uuid::from_u128(0), String::from("")))
+                                .find(|(uuid, _reac)| *uuid == self.self_id())?
                                 .1
                                 .clone(),
                         )
@@ -354,7 +354,7 @@ impl App {
                 }),
                 ..Default::default()
             };
-
+            log::info!("Outcomming reaction message : {:?}", &data_message);
             match self.data.channels.items[channel_idx].id {
                 ChannelId::User(uuid) => {
                     let manager = self.signal_manager.clone();
@@ -362,8 +362,8 @@ impl App {
                     tokio::task::spawn_local(async move {
                         if let Err(e) = manager.send_message(uuid, body, timestamp).await {
                             log::error!(
-                                "Failed to send reaction {} to {}: {}",
-                                &message_reaction[..],
+                                "Failed to send reaction {:?} to {}: {}",
+                                &message_reaction,
                                 uuid,
                                 e
                             );
@@ -395,8 +395,8 @@ impl App {
                             {
                                 // TODO: Proper error handling
                                 log::error!(
-                                    "Failed to send group reaction {} : {}",
-                                    &message_reaction[..],
+                                    "Failed to send group reaction {:?} : {}",
+                                    &message_reaction,
                                     e
                                 );
                                 return;
@@ -407,19 +407,34 @@ impl App {
                     }
                 }
             }
-            self.handle_reaction(
-                self.data.channels.items[channel_idx].id,
-                target_sent_timestamp,
-                target_author_uuid,
-                remove,
-                reaction,
-            );
+            if remove || reaction.is_some() {
+                self.handle_reaction(
+                    self.data.channels.items[channel_idx].id,
+                    target_sent_timestamp,
+                    target_author_uuid,
+                    remove,
+                    reaction.unwrap_or_default(),
+                );
+            }
         }
 
         self.reset_unread_messages();
         self.bubble_up_channel(channel_idx);
         self.save().unwrap();
         self.reset_message_selection();
+        Some(())
+    }
+
+    /// Returns the emoji and leaves the `input` empty if it is of the shape `:some_real_emoji`.
+    fn take_emoji(&self, input: &String) -> Option<String> {
+        let s = input.trim().to_owned();
+        if emoji::lookup_by_glyph::lookup(s.as_str()).is_some() {
+            Some(s)
+        } else {
+            let s = s.strip_prefix(':')?.strip_suffix(':')?;
+            let emoji = gh_emoji::get(s)?.to_string();
+            Some(emoji)
+        }
     }
 
     fn reset_message_selection(&mut self) {
