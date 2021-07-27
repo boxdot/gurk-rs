@@ -184,7 +184,6 @@ impl ChannelId {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub enum BaseStatus {
-    Unavailable,
     Sent,
     Received,
     Seen,
@@ -200,7 +199,6 @@ pub enum Status {
 impl BaseStatus {
     pub fn to_str(&self) -> &'static str {
         match self {
-            Self::Unavailable => "",
             Self::Sent => "X",
             Self::Received => "XX",
             Self::Seen => "XXX",
@@ -211,15 +209,13 @@ impl BaseStatus {
 impl Display for Status {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Unknown => {
-                f.write_str("")
-            }
+            Self::Unknown => f.write_str(""),
             Self::SingleStatus(s) => f.write_str(s.to_str()),
             Self::GroupStatus(v) => f.write_str(
                 v.iter()
                     .map(|(_a, b)| b)
                     .min()
-                    .unwrap_or(&BaseStatus::Unavailable)
+                    .unwrap_or(&BaseStatus::Sent)
                     .to_str(),
             ),
         }
@@ -237,7 +233,7 @@ impl Status {
         if is_group {
             Self::GroupStatus(Vec::new())
         } else {
-            Self::SingleStatus(BaseStatus::Unavailable)
+            Self::SingleStatus(BaseStatus::Sent)
         }
     }
 }
@@ -622,7 +618,7 @@ impl App {
             status: if is_group {
                 Status::GroupStatus(Vec::new())
             } else {
-                Status::SingleStatus(BaseStatus::Unavailable)
+                Status::SingleStatus(BaseStatus::Sent)
             },
         });
 
@@ -1038,13 +1034,14 @@ impl App {
             ) => {
                 for ts in timestamp.iter() {
                     let message = self.find_message_by_timestamp(ts);
+                    log::error!("Received status {:?} on timestamp {}", r#type, ts);
                     if let Some(m) = message {
+                        log::error!("Found message for status");
                         let new_status = match r#type {
-                            Some(0) => BaseStatus::Sent,
-                            Some(1) => BaseStatus::Received,
-                            Some(2) => BaseStatus::Seen,
+                            Some(0) => BaseStatus::Received,
+                            Some(1) => BaseStatus::Seen,
                             _ => {
-                                log::error!("Could not discover type of status in message from {} on timestamped message {:?}", sender_uuid, timestamp);
+                                log::error!("Could not discover type of status in message from {} on timestamped message {:?} : {:?}", sender_uuid, timestamp, r#type);
                                 return Ok(());
                             }
                         };
