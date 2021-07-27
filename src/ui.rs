@@ -170,7 +170,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
     let messages = &channel.messages.items[..];
 
-    let names_and_colors = compute_names_and_colors(&app, channel);
+    let names_and_colors = compute_names_and_colors(app, channel);
     let max_username_width = names_and_colors
         .iter()
         .map(|(_, name, _)| name.width())
@@ -186,8 +186,8 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
     let messages_from_offset = messages.iter().rev().skip(offset).filter_map(|msg| {
         display_message(
-            &app,
-            &msg,
+            app,
+            msg,
             &names_and_colors,
             max_username_width,
             first_name_only,
@@ -298,7 +298,7 @@ fn display_message(
 
     let from = Span::styled(
         textwrap::indent(
-            &from,
+            from,
             &" ".repeat(
                 max_username_width
                     .checked_sub(from.width())
@@ -336,7 +336,7 @@ fn display_message(
             .initial_indent(&quote_prefix)
             .subsequent_indent(&quote_prefix);
         let quote_style = Style::default().fg(Color::Rgb(150, 150, 150));
-        spans = textwrap::wrap(&quote_text, quote_wrap_opts)
+        spans = textwrap::wrap(quote_text, quote_wrap_opts)
             .into_iter()
             .enumerate()
             .map(|(idx, line)| {
@@ -440,7 +440,7 @@ fn displayed_name(name: &str, first_name_only: bool) -> &str {
         let space_pos = name.find(' ').unwrap_or_else(|| name.len());
         &name[0..space_pos]
     } else {
-        &name
+        name
     }
 }
 

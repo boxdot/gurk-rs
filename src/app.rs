@@ -18,11 +18,10 @@ use presage::prelude::{
     Content, GroupMasterKey, GroupSecretParams, ServiceAddress,
 };
 use serde::{Deserialize, Serialize};
-use tokio::fs::read_link;
+
 use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
 
-use emoji;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
@@ -321,8 +320,7 @@ impl App {
 
     pub async fn add_reaction(&mut self, channel_idx: usize, remove: bool) -> Option<()> {
         let input: String = self.data.input.drain(..).collect();
-        let reaction = self.take_emoji(&input);
-        log::error!("\"{:?}\"", reaction);
+        let reaction = Self::take_emoji(&input);
         let message_reaction = reaction.clone();
 
         self.data.input_cursor = 0;
@@ -354,7 +352,6 @@ impl App {
                 }),
                 ..Default::default()
             };
-            log::info!("Outcomming reaction message : {:?}", &data_message);
             match self.data.channels.items[channel_idx].id {
                 ChannelId::User(uuid) => {
                     let manager = self.signal_manager.clone();
@@ -426,7 +423,7 @@ impl App {
     }
 
     /// Returns the emoji and leaves the `input` empty if it is of the shape `:some_real_emoji`.
-    fn take_emoji(&self, input: &String) -> Option<String> {
+    fn take_emoji(input: &str) -> Option<String> {
         let s = input.trim().to_owned();
         if emoji::lookup_by_glyph::lookup(s.as_str()).is_some() {
             Some(s)
@@ -1174,7 +1171,7 @@ impl App {
     }
 
     fn notify(&self, summary: &str, text: &str) {
-        if let Err(e) = Notification::new().summary(&summary).body(&text).show() {
+        if let Err(e) = Notification::new().summary(summary).body(text).show() {
             error!("failed to send notification: {}", e);
         }
     }
