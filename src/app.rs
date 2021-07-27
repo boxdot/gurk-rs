@@ -9,7 +9,7 @@ use log::error;
 use notify_rust::Notification;
 use phonenumber::{Mode, PhoneNumber};
 use presage::prelude::{
-    content::{ContentBody, DataMessage, Metadata, SyncMessage},
+    content::{ContentBody, DataMessage, Metadata, ReceiptMessage, SyncMessage},
     proto::{
         data_message::{Quote, Reaction},
         sync_message::Sent,
@@ -24,6 +24,7 @@ use uuid::Uuid;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
+use std::fmt::Display;
 use std::fs::File;
 use std::path::Path;
 
@@ -181,6 +182,67 @@ impl ChannelId {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub enum BaseStatus {
+    Unavailable,
+    Sent,
+    Received,
+    Seen,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum Status {
+    Unknown,
+    SingleStatus(BaseStatus),
+    GroupStatus(Vec<(Uuid, BaseStatus)>),
+}
+
+impl BaseStatus {
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            Self::Unavailable => "",
+            Self::Sent => "X",
+            Self::Received => "XX",
+            Self::Seen => "XXX",
+        }
+    }
+}
+
+impl Display for Status {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unknown => {
+                log::error!("Failed to display status");
+                f.write_str("")
+            }
+            Self::SingleStatus(s) => f.write_str(s.to_str()),
+            Self::GroupStatus(v) => f.write_str(
+                v.iter()
+                    .map(|(_a, b)| b)
+                    .min()
+                    .unwrap_or(&BaseStatus::Unavailable)
+                    .to_str(),
+            ),
+        }
+    }
+}
+
+impl Default for Status {
+    fn default() -> Self {
+        Self::Unknown
+    }
+}
+
+impl Status {
+    pub fn new(is_group: bool) -> Self {
+        if is_group {
+            Self::GroupStatus(Vec::new())
+        } else {
+            Self::SingleStatus(BaseStatus::Unavailable)
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Message {
     pub from_id: Uuid,
@@ -192,10 +254,12 @@ pub struct Message {
     pub attachments: Vec<signal::Attachment>,
     #[serde(default)]
     pub reactions: Vec<(Uuid, String)>,
+    #[serde(default)]
+    pub status: Status,
 }
 
 impl Message {
-    fn new(from_id: Uuid, message: String, arrived_at: u64) -> Self {
+    fn new(from_id: Uuid, message: String, arrived_at: u64, is_group: bool) -> Self {
         Self {
             from_id,
             message: Some(message),
@@ -203,10 +267,11 @@ impl Message {
             quote: None,
             attachments: Default::default(),
             reactions: Default::default(),
+            status: Status::new(is_group),
         }
     }
 
-    fn from_quote(quote: Quote) -> Option<Message> {
+    fn from_quote(quote: Quote, is_group: bool) -> Option<Message> {
         Some(Message {
             from_id: quote.author_uuid?.parse().ok()?,
             message: quote.text,
@@ -214,7 +279,28 @@ impl Message {
             quote: None,
             attachments: Default::default(),
             reactions: Default::default(),
+            status: Status::new(is_group),
         })
+    }
+
+    pub fn update_status(&mut self, uuid: Uuid, new_status: BaseStatus) -> Option<()> {
+        match self.status {
+            Status::Unknown => {
+                log::warn!("Could not update status of message");
+            }
+            Status::SingleStatus(ref mut s) => {
+                assert!(new_status >= *s);
+                *s = new_status
+            }
+            Status::GroupStatus(ref mut v) => match v.iter_mut().find(|(u, _s)| *u == uuid) {
+                Some((_u, _s)) => {
+                    assert!(new_status >= *_s);
+                    *_s = new_status;
+                }
+                None => v.push((uuid, new_status)),
+            },
+        }
+        todo!()
     }
 }
 
@@ -460,7 +546,11 @@ impl App {
             text: message.message.clone(),
             ..Default::default()
         });
-        let quote_message = quote.clone().and_then(Message::from_quote).map(Box::new);
+
+        let quote_message = quote
+            .clone()
+            .and_then(|q| Message::from_quote(q, channel.group_data.is_some()))
+            .map(Box::new);
         let with_quote = quote.is_some();
 
         let mut data_message = DataMessage {
@@ -520,6 +610,7 @@ impl App {
             quote: quote_message,
             attachments: Default::default(),
             reactions: Default::default(),
+            status: Default::default(),
         });
 
         self.reset_unread_messages();
@@ -688,7 +779,7 @@ impl App {
                 }),
             ) if destination_uuid.parse() == Ok(self_uuid) => {
                 let channel_idx = self.ensure_own_channel_exists();
-                let message = Message::new(self_uuid, text, timestamp);
+                let message = Message::new(self_uuid, text, timestamp, false);
                 (channel_idx, message)
             }
             // Direct/group message by us from a different device
@@ -719,7 +810,7 @@ impl App {
                     ..
                 }),
             ) if sender_uuid == self_uuid => {
-                let channel_idx = if let Some(GroupContextV2 {
+                let (channel_idx, is_group) = if let Some(GroupContextV2 {
                     master_key: Some(master_key),
                     revision: Some(revision),
                     ..
@@ -729,24 +820,32 @@ impl App {
                     let master_key = master_key
                         .try_into()
                         .map_err(|_| anyhow!("invalid master key"))?;
-                    self.ensure_group_channel_exists(master_key, revision)
-                        .await
-                        .context("failed to create group channel")?
+                    (
+                        self.ensure_group_channel_exists(master_key, revision)
+                            .await
+                            .context("failed to create group channel")?,
+                        true,
+                    )
                 } else if let (Some(destination_uuid), Some(destination_e164)) = (
                     destination_uuid.and_then(|s| s.parse().ok()),
                     destination_e164,
                 ) {
                     // message to a contact
-                    self.ensure_contact_channel_exists(destination_uuid, &destination_e164)
-                        .await
+                    (
+                        self.ensure_contact_channel_exists(destination_uuid, &destination_e164)
+                            .await,
+                        false,
+                    )
                 } else {
                     return Ok(());
                 };
 
-                let quote = quote.and_then(Message::from_quote).map(Box::new);
+                let quote = quote
+                    .and_then(|q| Message::from_quote(q, is_group))
+                    .map(Box::new);
                 let message = Message {
                     quote,
-                    ..Message::new(self_uuid, text, timestamp)
+                    ..Message::new(self_uuid, text, timestamp, is_group)
                 };
                 (channel_idx, message)
             }
@@ -770,7 +869,7 @@ impl App {
                     ..
                 }),
             ) => {
-                let (channel_idx, from) = if let Some(GroupContextV2 {
+                let (channel_idx, from, is_group) = if let Some(GroupContextV2 {
                     master_key: Some(master_key),
                     revision: Some(revision),
                     ..
@@ -789,7 +888,7 @@ impl App {
                         .await
                         .to_string();
 
-                    (channel_idx, from)
+                    (channel_idx, from, true)
                 } else {
                     // incoming direct message
                     let name = self
@@ -799,15 +898,17 @@ impl App {
                     let channel_idx = self.ensure_contact_channel_exists(uuid, &name).await;
                     let from = self.data.channels.items[channel_idx].name.clone();
 
-                    (channel_idx, from)
+                    (channel_idx, from, false)
                 };
 
                 self.notify(&from, &text);
 
-                let quote = quote.and_then(Message::from_quote).map(Box::new);
+                let quote = quote
+                    .and_then(|q| Message::from_quote(q, is_group))
+                    .map(Box::new);
                 let message = Message {
                     quote,
-                    ..Message::new(uuid, text, timestamp)
+                    ..Message::new(uuid, text, timestamp, is_group)
                 };
                 (channel_idx, message)
             }
@@ -911,12 +1012,55 @@ impl App {
                 );
                 return Ok(());
             }
+            (
+                Metadata {
+                    sender:
+                        ServiceAddress {
+                            uuid: Some(sender_uuid),
+                            ..
+                        },
+                    ..
+                },
+                ContentBody::ReceiptMessage(ReceiptMessage { r#type, timestamp }),
+            ) => {
+                for ts in timestamp.iter() {
+                    let message = self.find_message_by_timestamp(ts);
+                    if let Some(m) = message {
+                        let new_status = match r#type {
+                            Some(0) => BaseStatus::Sent,
+                            Some(1) => BaseStatus::Received,
+                            Some(2) => BaseStatus::Seen,
+                            _ => {
+                                log::error!("Could not discover type of status in message from {} on timestamped message {:?}", sender_uuid, timestamp);
+                                return Ok(());
+                            }
+                        };
+                        m.update_status(sender_uuid, new_status);
+                    }
+                }
+                return Ok(());
+            }
             _ => return Ok(()),
         };
 
         self.add_message_to_channel(channel_idx, message);
 
         Ok(())
+    }
+
+    fn find_message_by_timestamp(&mut self, timestamp: &u64) -> Option<&mut Message> {
+        let channel = self.data.channels.items.iter_mut().find(|c| {
+            c.messages
+                .items
+                .iter()
+                .any(|m| m.arrived_at == *timestamp)
+        })?;
+        let message = channel
+            .messages
+            .items
+            .iter_mut()
+            .find(|m| m.arrived_at == *timestamp)?;
+        Some(message)
     }
 
     fn handle_reaction(

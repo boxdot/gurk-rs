@@ -314,12 +314,13 @@ fn display_message(
         .subsequent_indent(prefix);
 
     let text = if msg.reactions.is_empty() {
-        Cow::from(msg.message.as_ref()?)
+        Cow::from(format!("{} {}", msg.message.as_ref()?, msg.status))
     } else {
         Cow::from(format!(
-            "{} [{}]",
+            "{} [{}] {}",
             msg.message.as_ref()?,
             msg.reactions.iter().map(|(_, emoji)| emoji).format(""),
+            msg.status
         ))
     };
 
