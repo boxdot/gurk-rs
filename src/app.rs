@@ -4,6 +4,7 @@ use crate::util::{self, StatefulList};
 
 use anyhow::{anyhow, Context as _};
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
+use gh_emoji::Replacer;
 use log::error;
 use notify_rust::Notification;
 use phonenumber::{Mode, PhoneNumber};
@@ -307,7 +308,128 @@ impl App {
             }
             KeyCode::Esc => self.reset_message_selection(),
             KeyCode::Char(c) => self.put_char(c),
+            KeyCode::Tab => {
+                if let Some(idx) = self.data.channels.state.selected() {
+                    self.add_reaction(idx, self.data.input.is_empty()).await;
+                }
+            }
             _ => {}
+        }
+    }
+
+    pub async fn add_reaction(&mut self, channel_idx: usize, remove: bool) -> Option<()> {
+        let input: String = self.data.input.drain(..).collect();
+        let reaction = Self::take_emoji(&input);
+        let message_reaction = reaction.clone();
+
+        self.data.input_cursor = 0;
+        self.data.input_cursor_chars = 0;
+
+        if let Some(selected_message) = self.data.channels.items[channel_idx].selected_message() {
+            let timestamp = util::utc_now_timestamp_msec();
+            let target_author_uuid = selected_message.from_id;
+            let target_sent_timestamp = selected_message.arrived_at;
+            let mut data_message = DataMessage {
+                body: None,
+                quote: None,
+                reaction: Some(Reaction {
+                    emoji: if !remove {
+                        Some((reaction.to_owned())?)
+                    } else {
+                        Some(
+                            selected_message
+                                .reactions
+                                .iter()
+                                .find(|(uuid, _reac)| *uuid == self.self_id())?
+                                .1
+                                .clone(),
+                        )
+                    },
+                    remove: Some(remove),
+                    target_author_uuid: Some(target_author_uuid.to_string()),
+                    target_sent_timestamp: Some(target_sent_timestamp),
+                }),
+                ..Default::default()
+            };
+            match self.data.channels.items[channel_idx].id {
+                ChannelId::User(uuid) => {
+                    let manager = self.signal_manager.clone();
+                    let body = ContentBody::DataMessage(data_message);
+                    tokio::task::spawn_local(async move {
+                        if let Err(e) = manager.send_message(uuid, body, timestamp).await {
+                            log::error!(
+                                "Failed to send reaction {:?} to {}: {}",
+                                &message_reaction,
+                                uuid,
+                                e
+                            );
+                            return;
+                        }
+                    });
+                }
+                ChannelId::Group(_) => {
+                    if let Some(group_data) =
+                        self.data.channels.items[channel_idx].group_data.as_ref()
+                    {
+                        let manager = self.signal_manager.clone();
+                        let self_uuid = self.signal_manager.uuid();
+
+                        data_message.group_v2 = Some(GroupContextV2 {
+                            master_key: Some(group_data.master_key_bytes.to_vec()),
+                            revision: Some(group_data.revision),
+                            ..Default::default()
+                        });
+
+                        let recipients = group_data.members.clone().into_iter();
+
+                        tokio::task::spawn_local(async move {
+                            let recipients =
+                                recipients.filter(|uuid| *uuid != self_uuid).map(Into::into);
+                            if let Err(e) = manager
+                                .send_message_to_group(recipients, data_message, timestamp)
+                                .await
+                            {
+                                // TODO: Proper error handling
+                                log::error!(
+                                    "Failed to send group reaction {:?} : {}",
+                                    &message_reaction,
+                                    e
+                                );
+                                return;
+                            }
+                        });
+                    } else {
+                        error!("cannot send to broken channel without group data");
+                    }
+                }
+            }
+            if remove || reaction.is_some() {
+                self.handle_reaction(
+                    self.data.channels.items[channel_idx].id,
+                    target_sent_timestamp,
+                    target_author_uuid,
+                    remove,
+                    reaction.unwrap_or_default(),
+                );
+            }
+        }
+
+        self.reset_unread_messages();
+        self.bubble_up_channel(channel_idx);
+        self.save().unwrap();
+        self.reset_message_selection();
+        Some(())
+    }
+
+    /// Returns the emoji and leaves the `input` empty if it is of the shape `:some_real_emoji`.
+    fn take_emoji(input: &str) -> Option<String> {
+        let s = input.trim().to_owned();
+        if emoji::lookup_by_glyph::lookup(s.as_str()).is_some() {
+            Some(s)
+        } else {
+            let s = s.strip_prefix(':')?.strip_suffix(':')?;
+            let emoji = gh_emoji::get(s)?.to_string();
+            Some(emoji)
         }
     }
 
@@ -320,9 +442,12 @@ impl App {
     }
 
     async fn send_input(&mut self, channel_idx: usize) {
+        let emoji_replacer = Replacer::new();
         let channel = &mut self.data.channels.items[channel_idx];
 
-        let message: String = self.data.input.drain(..).collect();
+        let message: String = emoji_replacer
+            .replace_all(&(self.data.input.drain(..).collect::<String>()))
+            .into_owned();
         self.data.input_cursor = 0;
         self.data.input_cursor_chars = 0;
 
@@ -1045,7 +1170,7 @@ impl App {
     }
 
     fn notify(&self, summary: &str, text: &str) {
-        if let Err(e) = Notification::new().summary(&summary).body(&text).show() {
+        if let Err(e) = Notification::new().summary(summary).body(text).show() {
             error!("failed to send notification: {}", e);
         }
     }
