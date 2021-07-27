@@ -18,7 +18,6 @@ use presage::prelude::{
     Content, GroupMasterKey, GroupSecretParams, ServiceAddress,
 };
 use serde::{Deserialize, Serialize};
-
 use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
 
