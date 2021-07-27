@@ -182,7 +182,7 @@ impl ChannelId {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub enum BaseStatus {
     Unavailable,
     Sent,
@@ -190,7 +190,7 @@ pub enum BaseStatus {
     Seen,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Status {
     Unknown,
     SingleStatus(BaseStatus),
@@ -212,7 +212,6 @@ impl Display for Status {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Unknown => {
-                log::error!("Failed to display status");
                 f.write_str("")
             }
             Self::SingleStatus(s) => f.write_str(s.to_str()),
@@ -284,6 +283,7 @@ impl Message {
     }
 
     pub fn update_status(&mut self, uuid: Uuid, new_status: BaseStatus) -> Option<()> {
+        let debug = self.status.clone();
         match self.status {
             Status::Unknown => {
                 log::warn!("Could not update status of message");
@@ -300,7 +300,12 @@ impl Message {
                 None => v.push((uuid, new_status)),
             },
         }
-        todo!()
+        log::error!(
+            "Updated message status from {:?} to {:?}",
+            debug,
+            self.status
+        );
+        Some(())
     }
 }
 
@@ -560,6 +565,8 @@ impl App {
             ..Default::default()
         };
 
+        let mut is_group = false;
+
         match channel.id {
             ChannelId::User(uuid) => {
                 let manager = self.signal_manager.clone();
@@ -569,10 +576,12 @@ impl App {
                         // TODO: Proper error handling
                         log::error!("Failed to send message to {}: {}", uuid, e);
                         return;
+                    } else {
                     }
                 });
             }
             ChannelId::Group(_) => {
+                is_group = true;
                 if let Some(group_data) = channel.group_data.as_ref() {
                     let manager = self.signal_manager.clone();
                     let self_uuid = self.signal_manager.uuid();
@@ -610,7 +619,11 @@ impl App {
             quote: quote_message,
             attachments: Default::default(),
             reactions: Default::default(),
-            status: Default::default(),
+            status: if is_group {
+                Status::GroupStatus(Vec::new())
+            } else {
+                Status::SingleStatus(BaseStatus::Unavailable)
+            },
         });
 
         self.reset_unread_messages();
@@ -1049,12 +1062,12 @@ impl App {
     }
 
     fn find_message_by_timestamp(&mut self, timestamp: &u64) -> Option<&mut Message> {
-        let channel = self.data.channels.items.iter_mut().find(|c| {
-            c.messages
-                .items
-                .iter()
-                .any(|m| m.arrived_at == *timestamp)
-        })?;
+        let channel = self
+            .data
+            .channels
+            .items
+            .iter_mut()
+            .find(|c| c.messages.items.iter().any(|m| m.arrived_at == *timestamp))?;
         let message = channel
             .messages
             .items
