@@ -192,8 +192,8 @@ pub enum BaseStatus {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Status {
     Unknown,
-    SingleStatus(BaseStatus),
-    GroupStatus(Vec<(Uuid, BaseStatus)>),
+    SingleStatusData(BaseStatus),
+    GroupStatusData(Vec<(Uuid, BaseStatus)>),
 }
 
 impl BaseStatus {
@@ -210,8 +210,8 @@ impl Display for Status {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Unknown => f.write_str(""),
-            Self::SingleStatus(s) => f.write_str(s.to_str()),
-            Self::GroupStatus(v) => f.write_str(
+            Self::SingleStatusData(s) => f.write_str(s.to_str()),
+            Self::GroupStatusData(v) => f.write_str(
                 v.iter()
                     .map(|(_a, b)| b)
                     .min()
@@ -231,9 +231,9 @@ impl Default for Status {
 impl Status {
     pub fn new(is_group: bool) -> Self {
         if is_group {
-            Self::GroupStatus(Vec::new())
+            Self::GroupStatusData(Vec::new())
         } else {
-            Self::SingleStatus(BaseStatus::Sent)
+            Self::SingleStatusData(BaseStatus::Sent)
         }
     }
 }
@@ -284,11 +284,11 @@ impl Message {
             Status::Unknown => {
                 log::warn!("Could not update status of message");
             }
-            Status::SingleStatus(ref mut s) => {
+            Status::SingleStatusData(ref mut s) => {
                 assert!(new_status >= *s);
                 *s = new_status
             }
-            Status::GroupStatus(ref mut v) => match v.iter_mut().find(|(u, _s)| *u == uuid) {
+            Status::GroupStatusData(ref mut v) => match v.iter_mut().find(|(u, _s)| *u == uuid) {
                 Some((_u, _s)) => {
                     assert!(new_status >= *_s);
                     *_s = new_status;
@@ -571,8 +571,6 @@ impl App {
                     if let Err(e) = manager.send_message(uuid, body, timestamp).await {
                         // TODO: Proper error handling
                         log::error!("Failed to send message to {}: {}", uuid, e);
-                        return;
-                    } else {
                     }
                 });
             }
@@ -616,9 +614,9 @@ impl App {
             attachments: Default::default(),
             reactions: Default::default(),
             status: if is_group {
-                Status::GroupStatus(Vec::new())
+                Status::GroupStatusData(Vec::new())
             } else {
-                Status::SingleStatus(BaseStatus::Sent)
+                Status::SingleStatusData(BaseStatus::Sent)
             },
         });
 
