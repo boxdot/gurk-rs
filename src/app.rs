@@ -1,11 +1,12 @@
 use crate::config::Config;
-use crate::signal::{self, GroupIdentifierBytes, GroupMasterKeyBytes};
+use crate::signal::{
+    self, GroupIdentifierBytes, GroupMasterKeyBytes, ResolvedGroup, SignalManager,
+};
 use crate::storage::Storage;
 use crate::util::{self, StatefulList};
 
 use anyhow::{anyhow, Context as _};
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
-use gh_emoji::Replacer;
 use log::error;
 use notify_rust::Notification;
 use phonenumber::{Mode, PhoneNumber};
@@ -28,10 +29,11 @@ use std::convert::{TryFrom, TryInto};
 
 pub struct App {
     pub config: Config,
-    pub should_quit: bool,
-    pub signal_manager: signal::Manager,
+    signal_manager: Box<dyn SignalManager>,
+    storage: Box<dyn Storage>,
+    pub user_id: Uuid,
     pub data: AppData,
-    pub storage: Box<dyn Storage>,
+    pub should_quit: bool,
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -164,7 +166,7 @@ impl ChannelId {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Message {
     pub from_id: Uuid,
     pub message: Option<String>,
@@ -189,7 +191,7 @@ impl Message {
         }
     }
 
-    fn from_quote(quote: Quote) -> Option<Message> {
+    pub fn from_quote(quote: Quote) -> Option<Message> {
         Some(Message {
             from_id: quote.author_uuid?.parse().ok()?,
             message: quote.text,
@@ -215,25 +217,23 @@ pub enum Event {
 impl App {
     pub fn try_new(
         config: Config,
-        signal_manager: signal::Manager,
+        signal_manager: Box<dyn SignalManager>,
         storage: Box<dyn Storage>,
     ) -> anyhow::Result<Self> {
-        let data = storage.load_app_data(signal_manager.uuid(), config.user.name.clone())?;
+        let user_id = signal_manager.user_id();
+        let data = storage.load_app_data(user_id, config.user.name.clone())?;
         Ok(Self {
             config,
-            data,
-            should_quit: false,
             signal_manager,
             storage,
+            user_id,
+            data,
+            should_quit: false,
         })
     }
 
     pub fn save(&self) -> anyhow::Result<()> {
         self.storage.save_app_data(&self.data)
-    }
-
-    pub fn self_id(&self) -> Uuid {
-        self.signal_manager.uuid()
     }
 
     pub fn name_by_id(&self, id: Uuid) -> &str {
@@ -247,12 +247,12 @@ impl App {
         self.data.input_cursor_chars += 1;
     }
 
-    pub async fn on_key(&mut self, key: KeyCode) {
+    pub fn on_key(&mut self, key: KeyCode) -> anyhow::Result<()> {
         match key {
             KeyCode::Char('\r') => self.put_char('\n'),
             KeyCode::Enter if !self.data.input.is_empty() => {
                 if let Some(idx) = self.data.channels.state.selected() {
-                    self.send_input(idx).await;
+                    self.send_input(idx)?;
                 }
             }
             KeyCode::Home => self.on_home(),
@@ -264,127 +264,64 @@ impl App {
             KeyCode::Char(c) => self.put_char(c),
             KeyCode::Tab => {
                 if let Some(idx) = self.data.channels.state.selected() {
-                    self.add_reaction(idx, self.data.input.is_empty()).await;
+                    self.add_reaction(idx);
                 }
             }
             _ => {}
         }
+        Ok(())
     }
 
-    pub async fn add_reaction(&mut self, channel_idx: usize, remove: bool) -> Option<()> {
-        let input: String = self.data.input.drain(..).collect();
-        let reaction = Self::take_emoji(&input);
-        let message_reaction = reaction.clone();
-
-        self.data.input_cursor = 0;
-        self.data.input_cursor_chars = 0;
-
-        if let Some(selected_message) = self.data.channels.items[channel_idx].selected_message() {
-            let timestamp = util::utc_now_timestamp_msec();
-            let target_author_uuid = selected_message.from_id;
-            let target_sent_timestamp = selected_message.arrived_at;
-            let mut data_message = DataMessage {
-                body: None,
-                quote: None,
-                reaction: Some(Reaction {
-                    emoji: if !remove {
-                        Some((reaction.to_owned())?)
-                    } else {
-                        Some(
-                            selected_message
-                                .reactions
-                                .iter()
-                                .find(|(uuid, _reac)| *uuid == self.self_id())?
-                                .1
-                                .clone(),
-                        )
-                    },
-                    remove: Some(remove),
-                    target_author_uuid: Some(target_author_uuid.to_string()),
-                    target_sent_timestamp: Some(target_sent_timestamp),
-                }),
-                ..Default::default()
-            };
-            match self.data.channels.items[channel_idx].id {
-                ChannelId::User(uuid) => {
-                    let manager = self.signal_manager.clone();
-                    let body = ContentBody::DataMessage(data_message);
-                    tokio::task::spawn_local(async move {
-                        if let Err(e) = manager.send_message(uuid, body, timestamp).await {
-                            log::error!(
-                                "Failed to send reaction {:?} to {}: {}",
-                                &message_reaction,
-                                uuid,
-                                e
-                            );
-                            return;
-                        }
-                    });
-                }
-                ChannelId::Group(_) => {
-                    if let Some(group_data) =
-                        self.data.channels.items[channel_idx].group_data.as_ref()
-                    {
-                        let manager = self.signal_manager.clone();
-                        let self_uuid = self.signal_manager.uuid();
-
-                        data_message.group_v2 = Some(GroupContextV2 {
-                            master_key: Some(group_data.master_key_bytes.to_vec()),
-                            revision: Some(group_data.revision),
-                            ..Default::default()
-                        });
-
-                        let recipients = group_data.members.clone().into_iter();
-
-                        tokio::task::spawn_local(async move {
-                            let recipients =
-                                recipients.filter(|uuid| *uuid != self_uuid).map(Into::into);
-                            if let Err(e) = manager
-                                .send_message_to_group(recipients, data_message, timestamp)
-                                .await
-                            {
-                                // TODO: Proper error handling
-                                log::error!(
-                                    "Failed to send group reaction {:?} : {}",
-                                    &message_reaction,
-                                    e
-                                );
-                                return;
-                            }
-                        });
-                    } else {
-                        error!("cannot send to broken channel without group data");
-                    }
-                }
-            }
-            if remove || reaction.is_some() {
-                self.handle_reaction(
-                    self.data.channels.items[channel_idx].id,
-                    target_sent_timestamp,
-                    target_author_uuid,
-                    remove,
-                    reaction.unwrap_or_default(),
-                );
-            }
+    /// Returns Some(_) reaction if input is a reaction.
+    ///
+    /// Inner is None, if the reaction should be removed.
+    fn take_reaction(&mut self) -> Option<Option<String>> {
+        if self.data.input.is_empty() {
+            Some(None)
+        } else {
+            let emoji = to_emoji(&self.data.input)?.to_string();
+            self.take_input();
+            Some(Some(emoji))
         }
+    }
+
+    pub fn add_reaction(&mut self, channel_idx: usize) -> Option<()> {
+        let reaction = self.take_reaction()?;
+        let channel = &self.data.channels.items[channel_idx];
+        let message = channel.selected_message()?;
+        let remove = reaction.is_none();
+        let emoji = reaction.or_else(|| {
+            // find emoji which should be removed
+            // if no emoji found => there is no reaction from us => nothing to remove
+            message.reactions.iter().find_map(|(id, emoji)| {
+                if id == &self.signal_manager.user_id() {
+                    Some(emoji.clone())
+                } else {
+                    None
+                }
+            })
+        })?;
+
+        self.signal_manager
+            .send_reaction(channel, message, emoji.clone(), remove);
+
+        let channel_id = channel.id;
+        let arrived_at = message.arrived_at;
+        self.handle_reaction(
+            channel_id,
+            arrived_at,
+            self.signal_manager.user_id(),
+            emoji,
+            remove,
+            false,
+        );
 
         self.reset_unread_messages();
         self.bubble_up_channel(channel_idx);
-        self.save().unwrap();
         self.reset_message_selection();
-        Some(())
-    }
 
-    /// Returns the emoji and leaves the `input` empty if it is of the shape `:some_real_emoji`.
-    fn take_emoji(input: &str) -> Option<String> {
-        let s = input.trim().to_owned();
-        if emoji::lookup_by_glyph::lookup(s.as_str()).is_some() {
-            Some(s)
-        } else {
-            let s = s.strip_prefix(':')?.strip_suffix(':')?;
-            let emoji = gh_emoji::get(s)?.to_string();
-            Some(emoji)
-        }
+        self.save().unwrap();
+        Some(())
     }
 
     fn reset_message_selection(&mut self) {
@@ -395,93 +332,27 @@ impl App {
         }
     }
 
-    async fn send_input(&mut self, channel_idx: usize) {
-        let emoji_replacer = Replacer::new();
-        let channel = &mut self.data.channels.items[channel_idx];
-
-        let message: String = emoji_replacer
-            .replace_all(&(self.data.input.drain(..).collect::<String>()))
-            .into_owned();
+    fn take_input(&mut self) -> String {
         self.data.input_cursor = 0;
         self.data.input_cursor_chars = 0;
+        std::mem::take(&mut self.data.input)
+    }
 
-        let timestamp = util::utc_now_timestamp_msec();
+    fn send_input(&mut self, channel_idx: usize) -> anyhow::Result<()> {
+        let input = self.take_input();
+        let channel = &mut self.data.channels.items[channel_idx];
+        let quote = channel.selected_message();
+        let sent_message = self.signal_manager.send_text(channel, input, quote);
 
-        let quote = channel.selected_message().map(|message| Quote {
-            // Messages are shown in reverse order => selected is reverse
-            id: Some(message.arrived_at),
-            author_uuid: Some(message.from_id.to_string()),
-            text: message.message.clone(),
-            ..Default::default()
-        });
-        let quote_message = quote.clone().and_then(Message::from_quote).map(Box::new);
-        let with_quote = quote.is_some();
-
-        let mut data_message = DataMessage {
-            body: Some(message.clone()),
-            timestamp: Some(timestamp),
-            quote,
-            ..Default::default()
-        };
-
-        match channel.id {
-            ChannelId::User(uuid) => {
-                let manager = self.signal_manager.clone();
-                let body = ContentBody::DataMessage(data_message);
-                tokio::task::spawn_local(async move {
-                    if let Err(e) = manager.send_message(uuid, body, timestamp).await {
-                        // TODO: Proper error handling
-                        log::error!("Failed to send message to {}: {}", uuid, e);
-                        return;
-                    }
-                });
-            }
-            ChannelId::Group(_) => {
-                if let Some(group_data) = channel.group_data.as_ref() {
-                    let manager = self.signal_manager.clone();
-                    let self_uuid = self.signal_manager.uuid();
-
-                    data_message.group_v2 = Some(GroupContextV2 {
-                        master_key: Some(group_data.master_key_bytes.to_vec()),
-                        revision: Some(group_data.revision),
-                        ..Default::default()
-                    });
-
-                    let recipients = group_data.members.clone().into_iter();
-
-                    tokio::task::spawn_local(async move {
-                        let recipients =
-                            recipients.filter(|uuid| *uuid != self_uuid).map(Into::into);
-                        if let Err(e) = manager
-                            .send_message_to_group(recipients, data_message, timestamp)
-                            .await
-                        {
-                            // TODO: Proper error handling
-                            log::error!("Failed to send group message: {}", e);
-                            return;
-                        }
-                    });
-                } else {
-                    error!("cannot send to broken channel without group data");
-                }
-            }
-        }
-
-        channel.messages.items.push(Message {
-            from_id: self.signal_manager.uuid(),
-            message: Some(message),
-            arrived_at: timestamp,
-            quote: quote_message,
-            attachments: Default::default(),
-            reactions: Default::default(),
-        });
+        let sent_with_quote = sent_message.quote.is_some();
+        channel.messages.items.push(sent_message);
 
         self.reset_unread_messages();
-        if with_quote {
+        if sent_with_quote {
             self.reset_message_selection();
         }
         self.bubble_up_channel(channel_idx);
-        self.save().unwrap();
+        self.save()
     }
 
     pub fn select_previous_channel(&mut self) {
@@ -621,7 +492,7 @@ impl App {
     pub async fn on_message(&mut self, content: Content) -> anyhow::Result<()> {
         log::info!("incoming: {:?}", content);
 
-        let self_uuid = self.signal_manager.uuid();
+        let user_id = self.user_id;
 
         let (channel_idx, message) = match (content.metadata, content.body) {
             // Private note message
@@ -640,9 +511,9 @@ impl App {
                         }),
                     ..
                 }),
-            ) if destination_uuid.parse() == Ok(self_uuid) => {
+            ) if destination_uuid.parse() == Ok(user_id) => {
                 let channel_idx = self.ensure_own_channel_exists();
-                let message = Message::new(self_uuid, text, timestamp);
+                let message = Message::new(user_id, text, timestamp);
                 (channel_idx, message)
             }
             // Direct/group message by us from a different device
@@ -672,7 +543,7 @@ impl App {
                         }),
                     ..
                 }),
-            ) if sender_uuid == self_uuid => {
+            ) if sender_uuid == user_id => {
                 let channel_idx = if let Some(GroupContextV2 {
                     master_key: Some(master_key),
                     revision: Some(revision),
@@ -700,7 +571,7 @@ impl App {
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let message = Message {
                     quote,
-                    ..Message::new(self_uuid, text, timestamp)
+                    ..Message::new(user_id, text, timestamp)
                 };
                 (channel_idx, message)
             }
@@ -814,8 +685,9 @@ impl App {
                     channel_id,
                     target_sent_timestamp,
                     sender_uuid,
-                    remove.unwrap_or(false),
                     emoji,
+                    remove.unwrap_or(false),
+                    true,
                 );
                 return Ok(());
             }
@@ -848,7 +720,7 @@ impl App {
                 }) = group_v2
                 {
                     ChannelId::from_master_key_bytes(master_key)?
-                } else if sender_uuid == self.signal_manager.uuid() {
+                } else if sender_uuid == self.user_id {
                     // reaction from us => target author is the user channel
                     ChannelId::User(target_author_uuid.parse()?)
                 } else {
@@ -860,8 +732,9 @@ impl App {
                     channel_id,
                     target_sent_timestamp,
                     sender_uuid,
-                    remove.unwrap_or(false),
                     emoji,
+                    remove.unwrap_or(false),
+                    true,
                 );
                 return Ok(());
             }
@@ -878,8 +751,9 @@ impl App {
         channel_id: ChannelId,
         target_sent_timestamp: u64,
         sender_uuid: Uuid,
-        remove: bool,
         emoji: String,
+        remove: bool,
+        notify: bool,
     ) -> Option<()> {
         let channel_idx = self
             .data
@@ -910,7 +784,7 @@ impl App {
             true
         };
 
-        if is_added && channel_id != ChannelId::User(self.signal_manager.uuid()) {
+        if is_added && channel_id != ChannelId::User(self.user_id) {
             // Notification
             let sender_name = name_by_id(&self.data.names, sender_uuid);
             let summary = if let ChannelId::Group(_) = channel.id {
@@ -923,7 +797,9 @@ impl App {
                 notification.push_str(" to: ");
                 notification.push_str(text);
             }
-            self.notify(&summary, &notification);
+            if notify {
+                self.notify(&summary, &notification);
+            }
 
             self.touch_channel(channel_idx);
         } else {
@@ -951,8 +827,11 @@ impl App {
                 None => true,
             };
             if is_stale {
-                let (name, group_data, profile_keys) =
-                    signal::try_resolve_group(&mut self.signal_manager, master_key).await?;
+                let ResolvedGroup {
+                    name,
+                    group_data,
+                    profile_keys,
+                } = self.signal_manager.resolve_group(master_key).await?;
 
                 self.try_ensure_users_are_known(
                     group_data
@@ -969,8 +848,11 @@ impl App {
             }
             Ok(channel_idx)
         } else {
-            let (name, group_data, profile_keys) =
-                signal::try_resolve_group(&mut self.signal_manager, master_key).await?;
+            let ResolvedGroup {
+                name,
+                group_data,
+                profile_keys,
+            } = self.signal_manager.resolve_group(master_key).await?;
 
             self.try_ensure_users_are_known(
                 group_data
@@ -1018,7 +900,7 @@ impl App {
             .unwrap_or(true);
         if is_phone_number_or_unknown {
             let name = match profile_key.try_into() {
-                Ok(key) => signal::contact_name(&self.signal_manager, uuid, key).await,
+                Ok(key) => self.signal_manager.contact_name(uuid, key).await,
                 Err(_) => None,
             };
             self.data.names.insert(uuid, name?);
@@ -1037,18 +919,18 @@ impl App {
     }
 
     fn ensure_own_channel_exists(&mut self) -> usize {
-        let self_uuid = self.signal_manager.uuid();
+        let user_id = self.user_id;
         if let Some(channel_idx) = self
             .data
             .channels
             .items
             .iter_mut()
-            .position(|channel| channel.user_id() == Some(self_uuid))
+            .position(|channel| channel.user_id() == Some(user_id))
         {
             channel_idx
         } else {
             self.data.channels.items.push(Channel {
-                id: self_uuid.into(),
+                id: user_id.into(),
                 name: self.config.user.name.clone(),
                 group_data: None,
                 messages: StatefulList::with_items(Vec::new()),
@@ -1132,4 +1014,181 @@ impl App {
 
 pub fn name_by_id(names: &HashMap<Uuid, String>, id: Uuid) -> &str {
     names.get(&id).map(|s| s.as_ref()).unwrap_or("Unknown Name")
+}
+
+/// Returns an emoji string if `s` is an emoji or if `s` is a GitHub emoji shortcode.
+fn to_emoji(s: &str) -> Option<&str> {
+    let s = s.trim();
+    if emoji::lookup_by_glyph::lookup(s).is_some() {
+        Some(s)
+    } else {
+        let s = s.strip_prefix(':')?.strip_suffix(':')?;
+        let emoji = gh_emoji::get(s)?;
+        Some(emoji)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::config::User;
+    use crate::signal::test::SignalManagerMock;
+    use crate::storage::test::InMemoryStorage;
+
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    fn test_app() -> (App, Rc<RefCell<Vec<Message>>>) {
+        let signal_manager = SignalManagerMock::new();
+        let sent_messages = signal_manager.sent_messages.clone();
+
+        let mut app = App::try_new(
+            Config::with_user(User {
+                name: "Tyler Durden".to_string(),
+                phone_number: "+0000000000".to_string(),
+            }),
+            Box::new(signal_manager),
+            Box::new(InMemoryStorage::new()),
+        )
+        .unwrap();
+
+        app.data.channels.items.push(Channel {
+            id: ChannelId::User(Uuid::new_v4()),
+            name: "test".to_string(),
+            group_data: Some(GroupData {
+                master_key_bytes: GroupMasterKeyBytes::default(),
+                members: vec![app.user_id],
+                revision: 1,
+            }),
+            messages: StatefulList::with_items(vec![Message {
+                from_id: app.user_id,
+                message: Some("First message".to_string()),
+                arrived_at: 0,
+                quote: Default::default(),
+                attachments: Default::default(),
+                reactions: Default::default(),
+            }]),
+            unread_messages: 1,
+        });
+        app.data.channels.state.select(Some(0));
+
+        (app, sent_messages)
+    }
+
+    #[test]
+    fn test_send_input() {
+        let (mut app, sent_messages) = test_app();
+        let input = "Hello, World!";
+        for c in input.chars() {
+            app.put_char(c);
+        }
+        app.send_input(0).unwrap();
+
+        let sent = sent_messages.borrow();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].message.as_ref().unwrap(), input);
+
+        assert_eq!(app.data.channels.items[0].unread_messages, 0);
+
+        assert_eq!(app.data.input, "");
+        assert_eq!(app.data.input_cursor, 0);
+        assert_eq!(app.data.input_cursor_chars, 0);
+    }
+
+    #[test]
+    fn test_send_input_with_emoji() {
+        let (mut app, sent_messages) = test_app();
+        let input = "👻";
+        for c in input.chars() {
+            app.put_char(c);
+        }
+        assert_eq!(app.data.input_cursor, 4);
+        assert_eq!(app.data.input_cursor_chars, 1);
+
+        app.send_input(0).unwrap();
+
+        let sent = sent_messages.borrow();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].message.as_ref().unwrap(), input);
+
+        assert_eq!(app.data.input, "");
+        assert_eq!(app.data.input_cursor, 0);
+        assert_eq!(app.data.input_cursor_chars, 0);
+    }
+
+    #[test]
+    fn test_send_input_with_emoji_codepoint() {
+        let (mut app, sent_messages) = test_app();
+        let input = ":thumbsup:";
+        for c in input.chars() {
+            app.put_char(c);
+        }
+
+        app.send_input(0).unwrap();
+
+        let sent = sent_messages.borrow();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].message.as_ref().unwrap(), "👍");
+    }
+
+    #[test]
+    fn test_add_reaction_with_emoji() {
+        let (mut app, _sent_messages) = test_app();
+
+        app.data.channels.items[0].messages.state.select(Some(0));
+
+        app.put_char('👍');
+        app.add_reaction(0);
+
+        let reactions = &app.data.channels.items[0].messages.items[0].reactions;
+        assert_eq!(reactions.len(), 1);
+        assert_eq!(reactions[0], (app.user_id, "👍".to_string()));
+    }
+
+    #[test]
+    fn test_add_reaction_with_emoji_codepoint() {
+        let (mut app, _sent_messages) = test_app();
+
+        app.data.channels.items[0].messages.state.select(Some(0));
+
+        for c in ":thumbsup:".chars() {
+            app.put_char(c);
+        }
+        app.add_reaction(0);
+
+        let reactions = &app.data.channels.items[0].messages.items[0].reactions;
+        assert_eq!(reactions.len(), 1);
+        assert_eq!(reactions[0], (app.user_id, "👍".to_string()));
+    }
+
+    #[test]
+    fn test_remove_reaction() {
+        let (mut app, _sent_messages) = test_app();
+
+        app.data.channels.items[0].messages.state.select(Some(0));
+        let reactions = &mut app.data.channels.items[0].messages.items[0].reactions;
+        reactions.push((app.user_id, "👍".to_string()));
+
+        app.add_reaction(0);
+
+        let reactions = &app.data.channels.items[0].messages.items[0].reactions;
+        assert!(reactions.is_empty());
+    }
+
+    #[test]
+    fn test_add_invalid_reaction() {
+        let (mut app, _sent_messages) = test_app();
+
+        app.data.channels.items[0].messages.state.select(Some(0));
+
+        for c in ":thumbsup".chars() {
+            app.put_char(c);
+        }
+        app.add_reaction(0);
+
+        assert_eq!(app.data.input, ":thumbsup");
+        let reactions = &app.data.channels.items[0].messages.items[0].reactions;
+        assert!(reactions.is_empty());
+    }
 }
