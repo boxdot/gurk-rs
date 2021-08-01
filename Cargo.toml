@@ -13,9 +13,9 @@ version = "0.2.1"
 [workspace]
 members = ["xtask"]
 
-[profile.dev.package]
+[profile.dev.package.miniz_oxide]
 # This speeds up `cargo xtask dist`.
-miniz_oxide.opt-level = 3
+opt-level = 3
 
 [profile.release]
 debug = 0
@@ -50,6 +50,9 @@ whoami = "1.1.2"
 
 phonenumber = "0.3.1"
 presage = {git = "https://github.com/whisperfish/presage.git", rev = "20f8be16"}
+
+[dev-dependencies]
+tempfile = "3.2.0"
 
 # [patch."https://github.com/whisperfish/presage.git"]
 # presage = { path = "../presage" }

@@ -29,20 +29,29 @@ pub struct Attachment {
     pub size: u64,
 }
 
-fn get_signal_manager() -> anyhow::Result<Manager> {
-    let data_dir = config::default_data_dir();
-    let db_path = data_dir.join("signal-db");
+/// If `db_path` does not exist, it will be created (including parent directories).
+fn get_signal_manager(db_path: PathBuf) -> anyhow::Result<Manager> {
     let store = presage::SledConfigStore::new(db_path)?;
     let manager = presage::Manager::with_store(store)?;
     Ok(manager)
 }
 
+/// Makes sure that we have linked device.
+///
+/// Either,
+///
+/// 1. links a new device (if no config file found), and writes a new config file with username
+///    and phone number, or
+/// 2. loads the config file and tries to create the Signal manager from configured Signal database
+///    path.
 pub async fn ensure_linked_device(relink: bool) -> anyhow::Result<(Manager, Config)> {
-    let mut manager = get_signal_manager()?;
+    let config = Config::load_installed()?;
+    let db_path = config
+        .as_ref()
+        .map(|c| c.signal_db_path.clone())
+        .unwrap_or_else(config::default_signal_db_path);
 
-    let config = config::installed_config()
-        .map(config::load_from)
-        .transpose()?;
+    let mut manager = get_signal_manager(db_path)?;
 
     let is_registered = !relink && manager.is_registered();
 
