@@ -3,6 +3,7 @@
 mod app;
 mod config;
 mod signal;
+mod storage;
 mod ui;
 mod util;
 
@@ -24,6 +25,8 @@ use tui::{backend::CrosstermBackend, Terminal};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+use crate::storage::JsonStorage;
 
 const TARGET_FPS: u64 = 144;
 const FRAME_BUDGET: Duration = Duration::from_millis(1000 / TARGET_FPS);
@@ -77,7 +80,9 @@ async fn is_online() -> bool {
 }
 
 async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
-    let mut app = App::try_new(relink).await?;
+    let (signal_manager, config) = signal::ensure_linked_device(relink).await?;
+    let storage = JsonStorage::new(config.data_path.clone(), config::fallback_data_path());
+    let mut app = App::try_new(config, signal_manager, Box::new(storage))?;
 
     enable_raw_mode()?;
     let _raw_mode_guard = scopeguard::guard((), |_| {

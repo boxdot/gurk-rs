@@ -20,7 +20,7 @@ pub type GroupIdentifierBytes = [u8; GROUP_IDENTIFIER_LEN];
 /// Signal Manager backed by a `sled` store.
 pub type Manager = presage::Manager<presage::SledConfigStore>;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Attachment {
     pub id: String,

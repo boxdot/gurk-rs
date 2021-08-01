@@ -53,6 +53,7 @@ presage = {git = "https://github.com/whisperfish/presage.git", rev = "20f8be16"}
 
 [dev-dependencies]
 tempfile = "3.2.0"
+uuid = { version = "0.8.2", features = ["v4"] }
 
 # [patch."https://github.com/whisperfish/presage.git"]
 # presage = { path = "../presage" }

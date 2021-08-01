@@ -4,7 +4,7 @@ use presage::prelude::PhoneNumber;
 use serde::{Deserialize, Serialize};
 use tui::widgets::ListState;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct StatefulList<T> {
     #[serde(skip)]
     pub state: ListState,
@@ -12,6 +12,14 @@ pub struct StatefulList<T> {
     #[serde(skip)]
     pub rendered: Rendered,
 }
+
+impl<T: PartialEq> PartialEq for StatefulList<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.items == other.items
+    }
+}
+
+impl<T: Eq> Eq for StatefulList<T> {}
 
 #[derive(Debug, Clone, Default)]
 pub struct Rendered {
