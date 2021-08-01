@@ -1,5 +1,6 @@
-use crate::config::{self, Config};
+use crate::config::Config;
 use crate::signal::{self, GroupIdentifierBytes, GroupMasterKeyBytes};
+use crate::storage::Storage;
 use crate::util::{self, StatefulList};
 
 use anyhow::{anyhow, Context as _};
@@ -24,17 +25,16 @@ use uuid::Uuid;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
-use std::fs::File;
-use std::path::Path;
 
 pub struct App {
     pub config: Config,
     pub should_quit: bool,
     pub signal_manager: signal::Manager,
     pub data: AppData,
+    pub storage: Box<dyn Storage>,
 }
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppData {
     pub channels: StatefulList<Channel>,
     pub names: HashMap<Uuid, String>,
@@ -47,24 +47,7 @@ pub struct AppData {
     pub input_cursor_chars: usize,
 }
 
-impl AppData {
-    fn save(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
-        let f = std::io::BufWriter::new(File::create(path)?);
-        serde_json::to_writer(f, self)?;
-        Ok(())
-    }
-
-    fn load(path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        log::info!("loading app data from: {}", path.as_ref().display());
-        let f = std::io::BufReader::new(File::open(path)?);
-        let mut data: Self = serde_json::from_reader(f)?;
-        data.input_cursor = data.input.len();
-        data.input_cursor_chars = data.input.width();
-        Ok(data)
-    }
-}
-
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "JsonChannel")]
 pub struct Channel {
     pub id: ChannelId,
@@ -114,7 +97,7 @@ impl TryFrom<JsonChannel> for Channel {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GroupData {
     #[serde(default)]
     pub master_key_bytes: GroupMasterKeyBytes,
@@ -156,7 +139,7 @@ impl Channel {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ChannelId {
     User(Uuid),
     Group(GroupIdentifierBytes),
@@ -181,7 +164,7 @@ impl ChannelId {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Message {
     pub from_id: Uuid,
     pub message: Option<String>,
@@ -230,52 +213,23 @@ pub enum Event {
 }
 
 impl App {
-    pub async fn try_new(relink: bool) -> anyhow::Result<Self> {
-        let (signal_manager, config) = signal::ensure_linked_device(relink).await?;
-
-        let mut load_data_path = config.data_path.clone();
-        if !load_data_path.exists() {
-            // try also to load from legacy data path
-            if let Some(fallback_data_path) = config::fallback_data_path() {
-                load_data_path = fallback_data_path;
-            }
-        }
-
-        // if data file exists, be conservative and fail rather than overriding and losing the messages
-        let mut data: AppData;
-        if load_data_path.exists() {
-            data = AppData::load(&load_data_path).with_context(|| {
-                format!(
-                    "failed to load stored data from '{}':\n\
-            This might happen due to incompatible data model when Gurk is upgraded.\n\
-            Please consider to backup your messages and then remove the store.",
-                    load_data_path.display()
-                )
-            })?;
-        } else {
-            data = AppData::load(&load_data_path).unwrap_or_default();
-        }
-
-        // ensure that our name is up to date
-        data.names
-            .insert(signal_manager.uuid(), config.user.name.clone());
-
-        // select the first channel if none is selected
-        if data.channels.state.selected().is_none() && !data.channels.items.is_empty() {
-            data.channels.state.select(Some(0));
-            data.save(&config.data_path)?;
-        }
-
+    pub fn try_new(
+        config: Config,
+        signal_manager: signal::Manager,
+        storage: Box<dyn Storage>,
+    ) -> anyhow::Result<Self> {
+        let data = storage.load_app_data(signal_manager.uuid(), config.user.name.clone())?;
         Ok(Self {
             config,
             data,
             should_quit: false,
             signal_manager,
+            storage,
         })
     }
 
     pub fn save(&self) -> anyhow::Result<()> {
-        self.data.save(&self.config.data_path)
+        self.storage.save_app_data(&self.data)
     }
 
     pub fn self_id(&self) -> Uuid {
