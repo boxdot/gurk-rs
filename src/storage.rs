@@ -15,9 +15,19 @@ use std::path::{Path, PathBuf};
 /// to split it in more granular operations.
 pub trait Storage {
     fn save_app_data(&self, data: &AppData) -> anyhow::Result<()>;
+
+    /// Loads the app data.
+    ///
+    /// In case, the app data exists, but can't be deserialized/loaded, this method should fail with
+    /// an error, instead of returning a *new* app data which would override the old incompatible
+    /// one.
+    ///
+    /// After the app data is loaded, this method must ensure that the user with the given`user_id`
+    /// and `user_name` is indexed in the app data names.
     fn load_app_data(&self, user_id: Uuid, user_name: String) -> anyhow::Result<AppData>;
 }
 
+/// Storage based on a single JSON file.
 pub struct JsonStorage {
     data_path: PathBuf,
     fallback_data_path: Option<PathBuf>,
