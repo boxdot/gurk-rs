@@ -107,6 +107,35 @@ impl JsonStorage {
 }
 
 #[cfg(test)]
+pub mod test {
+    use super::Storage;
+
+    use crate::app::AppData;
+
+    /// In-memory storage used for testing.
+    pub struct InMemoryStorage {}
+
+    impl InMemoryStorage {
+        pub fn new() -> Self {
+            Self {}
+        }
+    }
+
+    impl Storage for InMemoryStorage {
+        fn save_app_data(&self, _data: &crate::app::AppData) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        fn load_app_data(&self, user_id: uuid::Uuid, user_name: String) -> anyhow::Result<AppData> {
+            Ok(AppData {
+                names: IntoIterator::into_iter([(user_id, user_name)]).collect(),
+                ..Default::default()
+            })
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use crate::{
         app::{Channel, ChannelId},

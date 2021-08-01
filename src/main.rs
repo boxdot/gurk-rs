@@ -26,7 +26,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::storage::JsonStorage;
+use crate::{signal::PresageManager, storage::JsonStorage};
 
 const TARGET_FPS: u64 = 144;
 const FRAME_BUDGET: Duration = Duration::from_millis(1000 / TARGET_FPS);
@@ -82,7 +82,11 @@ async fn is_online() -> bool {
 async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
     let (signal_manager, config) = signal::ensure_linked_device(relink).await?;
     let storage = JsonStorage::new(config.data_path.clone(), config::fallback_data_path());
-    let mut app = App::try_new(config, signal_manager, Box::new(storage))?;
+    let mut app = App::try_new(
+        config,
+        Box::new(PresageManager::new(signal_manager.clone())),
+        Box::new(storage),
+    )?;
 
     enable_raw_mode()?;
     let _raw_mode_guard = scopeguard::guard((), |_| {
@@ -114,7 +118,6 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
 
     let mut terminal = Terminal::new(backend)?;
 
-    let inner_manager = app.signal_manager.clone();
     let inner_tx = tx.clone();
     tokio::task::spawn_local(async move {
         loop {
@@ -122,7 +125,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                 tokio::time::sleep(std::time::Duration::from_secs(10)).await;
                 continue;
             } else {
-                match inner_manager.receive_messages().await {
+                match signal_manager.receive_messages().await {
                     Ok(messages) => {
                         info!("connected and listening for incoming messages");
                         messages
@@ -279,7 +282,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                 KeyCode::Char('k') if event.modifiers.contains(KeyModifiers::CONTROL) => {
                     app.on_delete_suffix();
                 }
-                code => app.on_key(code).await,
+                code => app.on_key(code)?,
             },
             Some(Event::Message(content)) => {
                 if let Err(e) = app.on_message(content).await {

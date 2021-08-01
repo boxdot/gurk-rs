@@ -50,6 +50,7 @@ whoami = "1.1.2"
 
 phonenumber = "0.3.1"
 presage = {git = "https://github.com/whisperfish/presage.git", rev = "20f8be16"}
+async-trait = "0.1.51"
 
 [dev-dependencies]
 tempfile = "3.2.0"
