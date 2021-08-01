@@ -1001,6 +1001,7 @@ dependencies = [
  "serde",
  "serde_json",
  "structopt",
+ "tempfile",
  "textwrap 0.14.2",
  "tokio",
  "tokio-stream",
