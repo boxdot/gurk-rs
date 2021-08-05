@@ -5,9 +5,10 @@
 ### Added
 
 - Add basic emojis and reactions support. ([#91])
-- Open URL (if any) in selected message on Enter when input is empty.
+- Open URL (if any) in selected message on Enter when input is empty. ([#99])
 
 [#91]: https://github.com/boxdot/gurk-rs/pull/91
+[#99]: https://github.com/boxdot/gurk-rs/pull/99
 
 ## 0.2.1
 
@@ -17,6 +18,7 @@
 - Fix an overflow error and crash by adding a subtraction check. ([#88])
 
 [#78]: https://github.com/boxdot/gurk-rs/pull/78
+[#88]: https://github.com/boxdot/gurk-rs/pull/88
 
 ## 0.2.0
 
