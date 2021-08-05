@@ -1,10 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.2.2 (Unreleased)
 
 ### Added
 
-- Add basic emojis and reactions support ([#91])
+- Add basic emojis and reactions support. ([#91])
+- Open URL (if any) in selected message on Enter when input is empty.
 
 [#91]: https://github.com/boxdot/gurk-rs/pull/91
 

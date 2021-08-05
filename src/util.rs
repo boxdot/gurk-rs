@@ -1,6 +1,7 @@
 use super::MESSAGE_SCROLL_BACK;
 use chrono::{DateTime, Local, NaiveDateTime, TimeZone as _, Utc};
 use presage::prelude::PhoneNumber;
+use regex_automata::Regex;
 use serde::{Deserialize, Serialize};
 use tui::widgets::ListState;
 
@@ -113,6 +114,40 @@ pub fn is_phone_number(s: impl AsRef<str>) -> bool {
     // the formatting now is correct.
     let stripped = s.as_ref().replace(&[' ', '-'][..], "");
     PhoneNumber::from_str(&stripped).is_ok()
+}
+
+// Based on Alacritty, APACHE-2.0 License
+pub const URL_REGEX: &str =
+    "(ipfs:|ipns:|magnet:|mailto:|gemini:|gopher:|https:|http:|news:|file:|git:|ssh:|ftp:)\
+     [^\u{0000}-\u{001F}\u{007F}-\u{009F}<>\"\\s{-}\\^⟨⟩`]+";
+
+/// Regex which is compiled on demand, to avoid expensive computations at startup.
+///
+/// Based on Alacritty, APACHE-2.0 License
+#[derive(Clone, Debug)]
+pub enum LazyRegex {
+    Pattern(&'static str),
+    Compiled(Box<Regex>),
+}
+
+impl LazyRegex {
+    pub fn new(pattern: &'static str) -> Self {
+        Self::Pattern(pattern)
+    }
+
+    /// Get a reference to the compiled regex.
+    ///
+    /// Compiles regex on the first call.
+    pub fn compiled(&mut self) -> &Regex {
+        if let Self::Pattern(pattern) = self {
+            let regex = Regex::new(pattern).expect("invalid regex");
+            *self = Self::Compiled(Box::new(regex));
+        }
+        match self {
+            Self::Compiled(regex) => regex,
+            Self::Pattern(_) => unreachable!(),
+        }
+    }
 }
 
 #[cfg(test)]

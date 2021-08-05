@@ -42,7 +42,8 @@ libraries that are not available on crates.io.
 * [ ] Multiline messages; the `Enter` key sends the message.
 * [ ] Viewing/sending of attachments.
 * [ ] Support for blocked contacts/groups.
-* [ ] Reactions with emojis.
+* [x] Reactions with emojis.
+* [x] Open URL in selected message.
 
 ## License
 
