@@ -3,7 +3,7 @@ use crate::signal::{
     self, GroupIdentifierBytes, GroupMasterKeyBytes, ResolvedGroup, SignalManager,
 };
 use crate::storage::Storage;
-use crate::util::{self, StatefulList};
+use crate::util::{self, LazyRegex, StatefulList, URL_REGEX};
 
 use anyhow::{anyhow, Context as _};
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
@@ -19,6 +19,7 @@ use presage::prelude::{
     },
     Content, GroupMasterKey, GroupSecretParams, ServiceAddress,
 };
+use regex_automata::Regex;
 use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
@@ -34,6 +35,7 @@ pub struct App {
     pub user_id: Uuid,
     pub data: AppData,
     pub should_quit: bool,
+    url_regex: LazyRegex,
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -229,6 +231,7 @@ impl App {
             user_id,
             data,
             should_quit: false,
+            url_regex: LazyRegex::new(URL_REGEX),
         })
     }
 
@@ -255,6 +258,10 @@ impl App {
                     self.send_input(idx)?;
                 }
             }
+            KeyCode::Enter => {
+                // input is empty
+                self.try_open_url();
+            }
             KeyCode::Home => self.on_home(),
             KeyCode::End => self.on_end(),
             KeyCode::Backspace => {
@@ -270,6 +277,19 @@ impl App {
             _ => {}
         }
         Ok(())
+    }
+
+    /// Tries to open the first url in the selected message.
+    ///
+    /// Does nothing if no message is selected and no url is contained in the message.
+    fn try_open_url(&mut self) -> Option<()> {
+        let channel_idx = self.data.channels.state.selected()?;
+        let channel = &self.data.channels.items[channel_idx];
+        let message = channel.selected_message()?;
+        let re = self.url_regex.compiled();
+        open_url(message, re)?;
+        self.reset_message_selection();
+        Some(())
     }
 
     /// Returns Some(_) reaction if input is a reaction.
@@ -1026,6 +1046,16 @@ fn to_emoji(s: &str) -> Option<&str> {
         let emoji = gh_emoji::get(s)?;
         Some(emoji)
     }
+}
+
+fn open_url(message: &Message, url_regex: &Regex) -> Option<()> {
+    let text = message.message.as_ref()?;
+    let (start, end) = url_regex.find(text.as_bytes())?;
+    let url = &text[start..end];
+    if let Err(e) = opener::open(url) {
+        error!("failed to open {}: {}", url, e);
+    }
+    Some(())
 }
 
 #[cfg(test)]

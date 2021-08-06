@@ -1,14 +1,14 @@
 [package]
-authors = ["boxdot <d@zerovolt.org>"]
-categories = ["command-line-utilities"]
+name = "gurk"
 description = "Signal messenger client for terminal"
+version = "0.2.2"
+authors = ["boxdot <d@zerovolt.org>"]
 edition = "2018"
 keywords = ["signal", "tui"]
-license = "AGPL-3.0-only"
-name = "gurk"
 repository = "https://github.com/boxdot/gurk-rs"
+license = "AGPL-3.0-only"
+categories = ["command-line-utilities"]
 resolver = "2"
-version = "0.2.1"
 
 [workspace]
 members = ["xtask"]
@@ -22,9 +22,12 @@ debug = 0
 lto = "thin"
 
 [dependencies]
+presage = { git = "https://github.com/whisperfish/presage.git", rev = "20f8be16" }
+
 anyhow = "1.0.40"
-chrono = {version = "0.4.19", features = ["serde"]}
-crossterm = {version = "0.19.0", features = ["event-stream"]}
+async-trait = "0.1.51"
+chrono = { version = "0.4.19", features = ["serde"] }
+crossterm = { version = "0.19.0", features = ["event-stream"] }
 derivative = "2.2.0"
 dirs = "3.0.2"
 emoji = "0.2.1"
@@ -35,22 +38,21 @@ log = "0.4.14"
 log-panics = "2.0.0"
 log4rs = "1.0.0"
 notify-rust = "4.5.0"
+opener = "0.5.0"
+phonenumber = "0.3.1"
+regex-automata = "0.1.10"
 scopeguard = "1.1.0"
-serde = {version = "1.0.125", features = ["derive"]}
+serde = { version = "1.0.125", features = ["derive"] }
 serde_json = "1.0.64"
 structopt = "0.3.21"
 textwrap = "0.14.2"
-tokio = {version = "1.5.0", default-features = false, features = ["rt-multi-thread", "macros", "net", "time"]}
+tokio = { version = "1.5.0", default-features = false, features = ["rt-multi-thread", "macros", "net", "time"] }
 tokio-stream = "0.1.5"
 toml = "0.5.8"
 tui = {version = "0.15.0", default-features = false, features = ["crossterm"]}
 unicode-width = "0.1.8"
 uuid = "0.8.2"
 whoami = "1.1.2"
-
-phonenumber = "0.3.1"
-presage = {git = "https://github.com/whisperfish/presage.git", rev = "20f8be16"}
-async-trait = "0.1.51"
 
 [dev-dependencies]
 tempfile = "3.2.0"
@@ -62,3 +64,6 @@ uuid = { version = "0.8.2", features = ["v4"] }
 # [patch."https://github.com/whisperfish/libsignal-service-rs"]
 # libsignal-service = { path = "../libsignal-service-rs/libsignal-service" }
 # libsignal-service-hyper = { path = "../libsignal-service-rs/libsignal-service-hyper" }
+
+# [patch."https://github.com/signalapp/libsignal-client"]
+# libsignal-protocol = { path = "../libsignal-client/rust/protocol" }
