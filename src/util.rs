@@ -120,6 +120,7 @@ pub fn is_phone_number(s: impl AsRef<str>) -> bool {
 pub const URL_REGEX: &str =
     "(ipfs:|ipns:|magnet:|mailto:|gemini:|gopher:|https:|http:|news:|file:|git:|ssh:|ftp:)\
      [^\u{0000}-\u{001F}\u{007F}-\u{009F}<>\"\\s{-}\\^⟨⟩`]+";
+pub const ATTACHMENT_REGEX: &str = "file:[^\u{0000}-\u{001F}\u{007F}-\u{009F}<>\"\\s{-}\\^⟨⟩`]+";
 
 /// Regex which is compiled on demand, to avoid expensive computations at startup.
 ///

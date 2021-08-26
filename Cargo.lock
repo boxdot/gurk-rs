@@ -1006,6 +1006,7 @@ dependencies = [
  "log",
  "log-panics",
  "log4rs",
+ "mime_guess",
  "notify-rust",
  "opener 0.5.0",
  "phonenumber",
@@ -1349,7 +1350,7 @@ checksum = "320cfe77175da3a483efed4bc0adc1968ca050b098ce4f2f1c13a56626128790"
 [[package]]
 name = "libsignal-protocol"
 version = "0.1.0"
-source = "git+https://github.com/signalapp/libsignal-client#528aec7e26f96411d9236011303f1c441f6e7b70"
+source = "git+https://github.com/signalapp/libsignal-client#72ba4e6959d80b4f091fade5373e5d9aae966c01"
 dependencies = [
  "aes",
  "aes-gcm-siv",
@@ -1373,7 +1374,7 @@ dependencies = [
 [[package]]
 name = "libsignal-service"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/libsignal-service-rs#4e32da1e6fdb23fb1c43700ee5ec577da1c23175"
+source = "git+https://github.com/whisperfish/libsignal-service-rs#7d6fce5f56fdcc554545e60852f9750ebd52ef29"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -1405,7 +1406,7 @@ dependencies = [
 [[package]]
 name = "libsignal-service-hyper"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/libsignal-service-rs#4e32da1e6fdb23fb1c43700ee5ec577da1c23175"
+source = "git+https://github.com/whisperfish/libsignal-service-rs#7d6fce5f56fdcc554545e60852f9750ebd52ef29"
 dependencies = [
  "async-trait",
  "async-tungstenite",
@@ -2051,7 +2052,7 @@ checksum = "ac74c624d6b2d21f425f752262f42188365d7b8ff1aff74c82e45136510a4857"
 [[package]]
 name = "presage"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/presage.git?rev=20f8be16#20f8be16dc3b9783a576f60b5d642097283295d4"
+source = "git+https://github.com/whisperfish/presage.git?rev=b07abef#b07abeffc8682313d896b0b6c153b21a59c0ca1e"
 dependencies = [
  "async-trait",
  "base64 0.12.3",

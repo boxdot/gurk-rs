@@ -22,7 +22,7 @@ debug = 0
 lto = "thin"
 
 [dependencies]
-presage = { git = "https://github.com/whisperfish/presage.git", rev = "20f8be16" }
+presage = { git = "https://github.com/whisperfish/presage.git", rev = "b07abef" }
 
 anyhow = "1.0.40"
 async-trait = "0.1.51"
@@ -37,6 +37,7 @@ itertools = "0.10.0"
 log = "0.4.14"
 log-panics = "2.0.0"
 log4rs = "1.0.0"
+mime_guess = "2.0.3"
 notify-rust = "4.5.0"
 opener = "0.5.0"
 phonenumber = "0.3.1"

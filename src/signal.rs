@@ -8,7 +8,9 @@ use gh_emoji::Replacer;
 use log::error;
 use presage::prelude::content::Reaction;
 use presage::prelude::proto::data_message::Quote;
-use presage::prelude::{ContentBody, DataMessage, GroupContextV2, GroupMasterKey, SignalServers};
+use presage::prelude::{
+    AttachmentSpec, ContentBody, DataMessage, GroupContextV2, GroupMasterKey, SignalServers,
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -39,6 +41,7 @@ pub trait SignalManager {
         channel: &Channel,
         text: String,
         quote_message: Option<&Message>,
+        attachments: Vec<(AttachmentSpec, Vec<u8>)>,
     ) -> Message;
 
     fn send_reaction(&self, channel: &Channel, message: &Message, emoji: String, remove: bool);
@@ -75,8 +78,10 @@ impl SignalManager for PresageManager {
         channel: &Channel,
         text: String,
         quote_message: Option<&Message>,
+        attachments: Vec<(AttachmentSpec, Vec<u8>)>,
     ) -> Message {
-        let message: String = self.emoji_replacer.replace_all(&text).into_owned();
+        let mut message: String = self.emoji_replacer.replace_all(&text).into_owned();
+        let has_attachments = !attachments.is_empty();
 
         let timestamp = utc_now_timestamp_msec();
 
@@ -98,8 +103,10 @@ impl SignalManager for PresageManager {
         match channel.id {
             ChannelId::User(uuid) => {
                 let manager = self.manager.clone();
-                let body = ContentBody::DataMessage(data_message);
                 tokio::task::spawn_local(async move {
+                    upload_attachments(&manager, attachments, &mut data_message).await;
+
+                    let body = ContentBody::DataMessage(data_message);
                     if let Err(e) = manager.send_message(uuid, body, timestamp).await {
                         // TODO: Proper error handling
                         log::error!("Failed to send message to {}: {}", uuid, e);
@@ -121,6 +128,8 @@ impl SignalManager for PresageManager {
                     let recipients = group_data.members.clone().into_iter();
 
                     tokio::task::spawn_local(async move {
+                        upload_attachments(&manager, attachments, &mut data_message).await;
+
                         let recipients =
                             recipients.filter(|uuid| *uuid != self_uuid).map(Into::into);
                         if let Err(e) = manager
@@ -136,6 +145,11 @@ impl SignalManager for PresageManager {
                     error!("cannot send to broken channel without group data");
                 }
             }
+        }
+
+        if has_attachments && message.is_empty() {
+            // TODO: Temporary solution until we start rendering attachments
+            message = "<attachment>".to_string();
         }
 
         Message {
@@ -245,6 +259,29 @@ impl SignalManager for PresageManager {
             group_data,
             profile_keys,
         })
+    }
+}
+
+async fn upload_attachments(
+    manager: &presage::Manager<presage::SledConfigStore>,
+    attachments: Vec<(AttachmentSpec, Vec<u8>)>,
+    data_message: &mut DataMessage,
+) {
+    match manager.upload_attachments(attachments).await {
+        Ok(attachment_pointers) => {
+            data_message.attachments = attachment_pointers
+                .into_iter()
+                .filter_map(|res| {
+                    if let Err(e) = res.as_ref() {
+                        error!("failed to upload attachment: {}", e);
+                    }
+                    res.ok()
+                })
+                .collect();
+        }
+        Err(e) => {
+            error!("failed to upload attachments: {}", e);
+        }
     }
 }
 
@@ -383,6 +420,7 @@ pub mod test {
             _channel: &crate::app::Channel,
             text: String,
             quote_message: Option<&crate::app::Message>,
+            _attachments: Vec<(AttachmentSpec, Vec<u8>)>,
         ) -> Message {
             let message: String = self.emoji_replacer.replace_all(&text).into_owned();
             let timestamp = utc_now_timestamp_msec();
