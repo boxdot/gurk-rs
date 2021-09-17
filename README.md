@@ -40,7 +40,7 @@ libraries that are not available on crates.io.
 * [ ] Mouse navigation (works for channels, missing for the messages list).
 * [ ] Search of messages/chats. Add quick switch between chats by name.
 * [ ] Multiline messages; the `Enter` key sends the message.
-* [ ] Viewing/sending of attachments.
+* [ ] Viewing/sending of attachments (sending works).
 * [ ] Support for blocked contacts/groups.
 * [x] Reactions with emojis.
 * [x] Open URL in selected message.

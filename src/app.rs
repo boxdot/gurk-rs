@@ -3,7 +3,7 @@ use crate::signal::{
     self, GroupIdentifierBytes, GroupMasterKeyBytes, ResolvedGroup, SignalManager,
 };
 use crate::storage::Storage;
-use crate::util::{self, LazyRegex, StatefulList, URL_REGEX};
+use crate::util::{self, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX};
 
 use anyhow::{anyhow, Context as _};
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
@@ -17,7 +17,7 @@ use presage::prelude::{
         sync_message::Sent,
         GroupContextV2,
     },
-    Content, GroupMasterKey, GroupSecretParams, ServiceAddress,
+    AttachmentSpec, Content, GroupMasterKey, GroupSecretParams, ServiceAddress,
 };
 use regex_automata::Regex;
 use serde::{Deserialize, Serialize};
@@ -27,6 +27,7 @@ use uuid::Uuid;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
+use std::path::Path;
 
 pub struct App {
     pub config: Config,
@@ -36,6 +37,7 @@ pub struct App {
     pub data: AppData,
     pub should_quit: bool,
     url_regex: LazyRegex,
+    attachment_regex: LazyRegex,
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -232,6 +234,7 @@ impl App {
             data,
             should_quit: false,
             url_regex: LazyRegex::new(URL_REGEX),
+            attachment_regex: LazyRegex::new(ATTACHMENT_REGEX),
         })
     }
 
@@ -360,9 +363,12 @@ impl App {
 
     fn send_input(&mut self, channel_idx: usize) -> anyhow::Result<()> {
         let input = self.take_input();
+        let (input, attachments) = self.extract_attachments(&input);
         let channel = &mut self.data.channels.items[channel_idx];
         let quote = channel.selected_message();
-        let sent_message = self.signal_manager.send_text(channel, input, quote);
+        let sent_message = self
+            .signal_manager
+            .send_text(channel, input, quote, attachments);
 
         let sent_with_quote = sent_message.quote.is_some();
         channel.messages.items.push(sent_message);
@@ -1029,6 +1035,48 @@ impl App {
         if let Err(e) = Notification::new().summary(summary).body(text).show() {
             error!("failed to send notification: {}", e);
         }
+    }
+
+    fn extract_attachments(&mut self, input: &str) -> (String, Vec<(AttachmentSpec, Vec<u8>)>) {
+        let mut offset = 0;
+        let mut clean_input = String::new();
+
+        let re = self.attachment_regex.compiled();
+        let attachments = re.find_iter(input.as_bytes()).filter_map(|(start, end)| {
+            let path_str = &input[start..end].strip_prefix("file://")?;
+
+            let path = Path::new(path_str);
+            let contents = std::fs::read(path).ok()?;
+
+            clean_input.push_str(input[offset..start].trim_end_matches(""));
+            offset = end;
+
+            let content_type = mime_guess::from_path(path)
+                .first()
+                .map(|mime| mime.essence_str().to_string())
+                .unwrap_or_default();
+            let spec = AttachmentSpec {
+                content_type,
+                length: contents.len(),
+                file_name: Path::new(path)
+                    .file_name()
+                    .map(|f| f.to_string_lossy().into()),
+                preview: None,
+                voice_note: None,
+                borderless: None,
+                width: None,
+                height: None,
+                caption: None,
+                blur_hash: None,
+            };
+            Some((spec, contents))
+        });
+
+        let attachments = attachments.collect();
+        clean_input.push_str(&input[offset..]);
+        let clean_input = clean_input.trim().to_string();
+
+        (clean_input, attachments)
     }
 }
 

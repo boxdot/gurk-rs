@@ -6,9 +6,11 @@
 
 - Add basic emojis and reactions support. ([#91])
 - Open URL (if any) in selected message on Enter when input is empty. ([#99])
+- Send attachments from file:// paths (#[100]).
 
 [#91]: https://github.com/boxdot/gurk-rs/pull/91
 [#99]: https://github.com/boxdot/gurk-rs/pull/99
+[#100]: https://github.com/boxdot/gurk-rs/pull/100
 
 ## 0.2.1
 
