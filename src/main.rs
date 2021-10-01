@@ -35,14 +35,14 @@ const MESSAGE_SCROLL_BACK: bool = false;
 #[derive(Debug, StructOpt)]
 struct Args {
     /// Enables logging to `gurk.log` in the current working directory
-    #[structopt(short, long)]
-    verbose: bool,
+    #[structopt(short, long = "verbose", parse(from_occurrences))]
+    verbosity: u8,
     /// Relinks the device (helpful when device was unlinked)
     #[structopt(long)]
     relink: bool,
 }
 
-fn init_file_logger() -> anyhow::Result<()> {
+fn init_file_logger(verbosity: u8) -> anyhow::Result<()> {
     use log::LevelFilter;
     use log4rs::append::file::FileAppender;
     use log4rs::config::{Appender, Config, Root};
@@ -54,7 +54,11 @@ fn init_file_logger() -> anyhow::Result<()> {
 
     let config = Config::builder()
         .appender(Appender::builder().build("logfile", Box::new(logfile)))
-        .build(Root::builder().appender("logfile").build(LevelFilter::Info))?;
+        .build(Root::builder().appender("logfile").build(match verbosity {
+            1 => LevelFilter::Info,
+            2 => LevelFilter::Debug,
+            _ => LevelFilter::Trace,
+        }))?;
 
     log4rs::init_config(config)?;
     Ok(())
@@ -63,8 +67,8 @@ fn init_file_logger() -> anyhow::Result<()> {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::from_args();
-    if args.verbose {
-        init_file_logger()?;
+    if args.verbosity > 0 {
+        init_file_logger(args.verbosity)?;
     }
     log_panics::init();
 
