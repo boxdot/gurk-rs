@@ -573,19 +573,6 @@ dependencies = [
 
 [[package]]
 name = "curve25519-dalek"
-version = "3.0.0"
-source = "git+https://github.com/signalapp/curve25519-dalek.git?branch=3.0.0-lizard2#2694ad3b789635f90f941648ae952f58d59ffc73"
-dependencies = [
- "byteorder",
- "digest 0.9.0",
- "rand_core 0.5.1",
- "serde",
- "subtle 2.4.1",
- "zeroize",
-]
-
-[[package]]
-name = "curve25519-dalek"
 version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "639891fde0dbea823fc3d798a0fdf9d2f9440a42d64a78ab3488b0ca025117b3"
@@ -593,6 +580,7 @@ dependencies = [
  "byteorder",
  "digest 0.9.0",
  "rand_core 0.5.1",
+ "serde",
  "subtle 2.4.1",
  "zeroize",
 ]
@@ -1350,16 +1338,17 @@ checksum = "320cfe77175da3a483efed4bc0adc1968ca050b098ce4f2f1c13a56626128790"
 [[package]]
 name = "libsignal-protocol"
 version = "0.1.0"
-source = "git+https://github.com/signalapp/libsignal-client#72ba4e6959d80b4f091fade5373e5d9aae966c01"
+source = "git+https://github.com/signalapp/libsignal-client#33a783c28fc8e85ff6ce690efda5d777e8ba4188"
 dependencies = [
  "aes",
  "aes-gcm-siv",
  "arrayref",
  "async-trait",
  "block-modes",
- "curve25519-dalek 3.0.0",
+ "curve25519-dalek 3.1.0",
  "hex",
  "hmac 0.9.0",
+ "itertools 0.10.1",
  "log",
  "num_enum",
  "prost",
@@ -1374,7 +1363,7 @@ dependencies = [
 [[package]]
 name = "libsignal-service"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/libsignal-service-rs#7d6fce5f56fdcc554545e60852f9750ebd52ef29"
+source = "git+https://github.com/whisperfish/libsignal-service-rs#34b9e43da26ff8821e0540ea722735d7f3db21b7"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -1406,7 +1395,7 @@ dependencies = [
 [[package]]
 name = "libsignal-service-hyper"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/libsignal-service-rs#7d6fce5f56fdcc554545e60852f9750ebd52ef29"
+source = "git+https://github.com/whisperfish/libsignal-service-rs#34b9e43da26ff8821e0540ea722735d7f3db21b7"
 dependencies = [
  "async-trait",
  "async-tungstenite",
