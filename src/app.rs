@@ -1,6 +1,9 @@
-use crate::config::{self, Config};
-use crate::signal::{self, GroupIdentifierBytes, GroupMasterKeyBytes};
-use crate::util::{self, StatefulList};
+use crate::config::Config;
+use crate::signal::{
+    self, GroupIdentifierBytes, GroupMasterKeyBytes, ResolvedGroup, SignalManager,
+};
+use crate::storage::Storage;
+use crate::util::{self, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX};
 
 use anyhow::{anyhow, Context as _};
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
@@ -15,8 +18,9 @@ use presage::prelude::{
         sync_message::Sent,
         GroupContextV2,
     },
-    Content, GroupMasterKey, GroupSecretParams, ServiceAddress,
+    AttachmentSpec, Content, GroupMasterKey, GroupSecretParams, ServiceAddress,
 };
+use regex_automata::Regex;
 use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
@@ -30,12 +34,16 @@ use std::path::Path;
 
 pub struct App {
     pub config: Config,
-    pub should_quit: bool,
-    pub signal_manager: signal::Manager,
+    signal_manager: Box<dyn SignalManager>,
+    storage: Box<dyn Storage>,
+    pub user_id: Uuid,
     pub data: AppData,
+    pub should_quit: bool,
+    url_regex: LazyRegex,
+    attachment_regex: LazyRegex,
 }
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppData {
     pub channels: StatefulList<Channel>,
     pub names: HashMap<Uuid, String>,
@@ -48,24 +56,7 @@ pub struct AppData {
     pub input_cursor_chars: usize,
 }
 
-impl AppData {
-    fn save(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
-        let f = std::io::BufWriter::new(File::create(path)?);
-        serde_json::to_writer(f, self)?;
-        Ok(())
-    }
-
-    fn load(path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        log::info!("loading app data from: {}", path.as_ref().display());
-        let f = std::io::BufReader::new(File::open(path)?);
-        let mut data: Self = serde_json::from_reader(f)?;
-        data.input_cursor = data.input.len();
-        data.input_cursor_chars = data.input.width();
-        Ok(data)
-    }
-}
-
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "JsonChannel")]
 pub struct Channel {
     pub id: ChannelId,
@@ -115,7 +106,7 @@ impl TryFrom<JsonChannel> for Channel {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GroupData {
     #[serde(default)]
     pub master_key_bytes: GroupMasterKeyBytes,
@@ -157,7 +148,7 @@ impl Channel {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ChannelId {
     User(Uuid),
     Group(GroupIdentifierBytes),
@@ -317,56 +308,27 @@ pub enum Event {
 }
 
 impl App {
-    pub async fn try_new(relink: bool) -> anyhow::Result<Self> {
-        let (signal_manager, config) = signal::ensure_linked_device(relink).await?;
-
-        let mut load_data_path = config.data_path.clone();
-        if !load_data_path.exists() {
-            // try also to load from legacy data path
-            if let Some(fallback_data_path) = config::fallback_data_path() {
-                load_data_path = fallback_data_path;
-            }
-        }
-
-        // if data file exists, be conservative and fail rather than overriding and losing the messages
-        let mut data: AppData;
-        if load_data_path.exists() {
-            data = AppData::load(&load_data_path).with_context(|| {
-                format!(
-                    "failed to load stored data from '{}':\n\
-            This might happen due to incompatible data model when Gurk is upgraded.\n\
-            Please consider to backup your messages and then remove the store.",
-                    load_data_path.display()
-                )
-            })?;
-        } else {
-            data = AppData::load(&load_data_path).unwrap_or_default();
-        }
-
-        // ensure that our name is up to date
-        data.names
-            .insert(signal_manager.uuid(), config.user.name.clone());
-
-        // select the first channel if none is selected
-        if data.channels.state.selected().is_none() && !data.channels.items.is_empty() {
-            data.channels.state.select(Some(0));
-            data.save(&config.data_path)?;
-        }
-
+    pub fn try_new(
+        config: Config,
+        signal_manager: Box<dyn SignalManager>,
+        storage: Box<dyn Storage>,
+    ) -> anyhow::Result<Self> {
+        let user_id = signal_manager.user_id();
+        let data = storage.load_app_data(user_id, config.user.name.clone())?;
         Ok(Self {
             config,
+            signal_manager,
+            storage,
+            user_id,
             data,
             should_quit: false,
-            signal_manager,
+            url_regex: LazyRegex::new(URL_REGEX),
+            attachment_regex: LazyRegex::new(ATTACHMENT_REGEX),
         })
     }
 
     pub fn save(&self) -> anyhow::Result<()> {
-        self.data.save(&self.config.data_path)
-    }
-
-    pub fn self_id(&self) -> Uuid {
-        self.signal_manager.uuid()
+        self.storage.save_app_data(&self.data)
     }
 
     pub fn name_by_id(&self, id: Uuid) -> &str {
@@ -380,13 +342,17 @@ impl App {
         self.data.input_cursor_chars += 1;
     }
 
-    pub async fn on_key(&mut self, key: KeyCode) {
+    pub fn on_key(&mut self, key: KeyCode) -> anyhow::Result<()> {
         match key {
             KeyCode::Char('\r') => self.put_char('\n'),
             KeyCode::Enter if !self.data.input.is_empty() => {
                 if let Some(idx) = self.data.channels.state.selected() {
-                    self.send_input(idx).await;
+                    self.send_input(idx)?;
                 }
+            }
+            KeyCode::Enter => {
+                // input is empty
+                self.try_open_url();
             }
             KeyCode::Home => self.on_home(),
             KeyCode::End => self.on_end(),
@@ -402,6 +368,7 @@ impl App {
             }
             _ => {}
         }
+        Ok(())
     }
 
     pub async fn add_reaction(&mut self, channel_idx: usize, remove: bool) -> Option<()> {
@@ -537,8 +504,17 @@ impl App {
             .into_owned();
         self.data.input_cursor = 0;
         self.data.input_cursor_chars = 0;
+        std::mem::take(&mut self.data.input)
+    }
 
-        let timestamp = util::utc_now_timestamp_msec();
+    fn send_input(&mut self, channel_idx: usize) -> anyhow::Result<()> {
+        let input = self.take_input();
+        let (input, attachments) = self.extract_attachments(&input);
+        let channel = &mut self.data.channels.items[channel_idx];
+        let quote = channel.selected_message();
+        let sent_message = self
+            .signal_manager
+            .send_text(channel, input, quote, attachments);
 
         let quote = channel.selected_message().map(|message| Quote {
             // Messages are shown in reverse order => selected is reverse
@@ -621,11 +597,11 @@ impl App {
         });
 
         self.reset_unread_messages();
-        if with_quote {
+        if sent_with_quote {
             self.reset_message_selection();
         }
         self.bubble_up_channel(channel_idx);
-        self.save().unwrap();
+        self.save()
     }
 
     pub fn select_previous_channel(&mut self) {
@@ -765,7 +741,7 @@ impl App {
     pub async fn on_message(&mut self, content: Content) -> anyhow::Result<()> {
         log::info!("incoming: {:?}", content);
 
-        let self_uuid = self.signal_manager.uuid();
+        let user_id = self.user_id;
 
         let (channel_idx, message) = match (content.metadata, content.body) {
             // Private note message
@@ -784,7 +760,7 @@ impl App {
                         }),
                     ..
                 }),
-            ) if destination_uuid.parse() == Ok(self_uuid) => {
+            ) if destination_uuid.parse() == Ok(user_id) => {
                 let channel_idx = self.ensure_own_channel_exists();
                 let message = Message::new(self_uuid, text, timestamp, false);
                 (channel_idx, message)
@@ -968,8 +944,9 @@ impl App {
                     channel_id,
                     target_sent_timestamp,
                     sender_uuid,
-                    remove.unwrap_or(false),
                     emoji,
+                    remove.unwrap_or(false),
+                    true,
                 );
                 return Ok(());
             }
@@ -1002,7 +979,7 @@ impl App {
                 }) = group_v2
                 {
                     ChannelId::from_master_key_bytes(master_key)?
-                } else if sender_uuid == self.signal_manager.uuid() {
+                } else if sender_uuid == self.user_id {
                     // reaction from us => target author is the user channel
                     ChannelId::User(target_author_uuid.parse()?)
                 } else {
@@ -1014,8 +991,9 @@ impl App {
                     channel_id,
                     target_sent_timestamp,
                     sender_uuid,
-                    remove.unwrap_or(false),
                     emoji,
+                    remove.unwrap_or(false),
+                    true,
                 );
                 return Ok(());
             }
@@ -1076,8 +1054,9 @@ impl App {
         channel_id: ChannelId,
         target_sent_timestamp: u64,
         sender_uuid: Uuid,
-        remove: bool,
         emoji: String,
+        remove: bool,
+        notify: bool,
     ) -> Option<()> {
         let channel_idx = self
             .data
@@ -1108,7 +1087,7 @@ impl App {
             true
         };
 
-        if is_added && channel_id != ChannelId::User(self.signal_manager.uuid()) {
+        if is_added && channel_id != ChannelId::User(self.user_id) {
             // Notification
             let sender_name = name_by_id(&self.data.names, sender_uuid);
             let summary = if let ChannelId::Group(_) = channel.id {
@@ -1121,7 +1100,9 @@ impl App {
                 notification.push_str(" to: ");
                 notification.push_str(text);
             }
-            self.notify(&summary, &notification);
+            if notify {
+                self.notify(&summary, &notification);
+            }
 
             self.touch_channel(channel_idx);
         } else {
@@ -1149,8 +1130,11 @@ impl App {
                 None => true,
             };
             if is_stale {
-                let (name, group_data, profile_keys) =
-                    signal::try_resolve_group(&mut self.signal_manager, master_key).await?;
+                let ResolvedGroup {
+                    name,
+                    group_data,
+                    profile_keys,
+                } = self.signal_manager.resolve_group(master_key).await?;
 
                 self.try_ensure_users_are_known(
                     group_data
@@ -1167,8 +1151,11 @@ impl App {
             }
             Ok(channel_idx)
         } else {
-            let (name, group_data, profile_keys) =
-                signal::try_resolve_group(&mut self.signal_manager, master_key).await?;
+            let ResolvedGroup {
+                name,
+                group_data,
+                profile_keys,
+            } = self.signal_manager.resolve_group(master_key).await?;
 
             self.try_ensure_users_are_known(
                 group_data
@@ -1216,7 +1203,7 @@ impl App {
             .unwrap_or(true);
         if is_phone_number_or_unknown {
             let name = match profile_key.try_into() {
-                Ok(key) => signal::contact_name(&self.signal_manager, uuid, key).await,
+                Ok(key) => self.signal_manager.contact_name(uuid, key).await,
                 Err(_) => None,
             };
             self.data.names.insert(uuid, name?);
@@ -1235,18 +1222,18 @@ impl App {
     }
 
     fn ensure_own_channel_exists(&mut self) -> usize {
-        let self_uuid = self.signal_manager.uuid();
+        let user_id = self.user_id;
         if let Some(channel_idx) = self
             .data
             .channels
             .items
             .iter_mut()
-            .position(|channel| channel.user_id() == Some(self_uuid))
+            .position(|channel| channel.user_id() == Some(user_id))
         {
             channel_idx
         } else {
             self.data.channels.items.push(Channel {
-                id: self_uuid.into(),
+                id: user_id.into(),
                 name: self.config.user.name.clone(),
                 group_data: None,
                 messages: StatefulList::with_items(Vec::new()),
@@ -1326,8 +1313,237 @@ impl App {
             error!("failed to send notification: {}", e);
         }
     }
+
+    fn extract_attachments(&mut self, input: &str) -> (String, Vec<(AttachmentSpec, Vec<u8>)>) {
+        let mut offset = 0;
+        let mut clean_input = String::new();
+
+        let re = self.attachment_regex.compiled();
+        let attachments = re.find_iter(input.as_bytes()).filter_map(|(start, end)| {
+            let path_str = &input[start..end].strip_prefix("file://")?;
+
+            let path = Path::new(path_str);
+            let contents = std::fs::read(path).ok()?;
+
+            clean_input.push_str(input[offset..start].trim_end_matches(""));
+            offset = end;
+
+            let content_type = mime_guess::from_path(path)
+                .first()
+                .map(|mime| mime.essence_str().to_string())
+                .unwrap_or_default();
+            let spec = AttachmentSpec {
+                content_type,
+                length: contents.len(),
+                file_name: Path::new(path)
+                    .file_name()
+                    .map(|f| f.to_string_lossy().into()),
+                preview: None,
+                voice_note: None,
+                borderless: None,
+                width: None,
+                height: None,
+                caption: None,
+                blur_hash: None,
+            };
+            Some((spec, contents))
+        });
+
+        let attachments = attachments.collect();
+        clean_input.push_str(&input[offset..]);
+        let clean_input = clean_input.trim().to_string();
+
+        (clean_input, attachments)
+    }
 }
 
 pub fn name_by_id(names: &HashMap<Uuid, String>, id: Uuid) -> &str {
     names.get(&id).map(|s| s.as_ref()).unwrap_or("Unknown Name")
+}
+
+/// Returns an emoji string if `s` is an emoji or if `s` is a GitHub emoji shortcode.
+fn to_emoji(s: &str) -> Option<&str> {
+    let s = s.trim();
+    if emoji::lookup_by_glyph::lookup(s).is_some() {
+        Some(s)
+    } else {
+        let s = s.strip_prefix(':')?.strip_suffix(':')?;
+        let emoji = gh_emoji::get(s)?;
+        Some(emoji)
+    }
+}
+
+fn open_url(message: &Message, url_regex: &Regex) -> Option<()> {
+    let text = message.message.as_ref()?;
+    let (start, end) = url_regex.find(text.as_bytes())?;
+    let url = &text[start..end];
+    if let Err(e) = opener::open(url) {
+        error!("failed to open {}: {}", url, e);
+    }
+    Some(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::config::User;
+    use crate::signal::test::SignalManagerMock;
+    use crate::storage::test::InMemoryStorage;
+
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    fn test_app() -> (App, Rc<RefCell<Vec<Message>>>) {
+        let signal_manager = SignalManagerMock::new();
+        let sent_messages = signal_manager.sent_messages.clone();
+
+        let mut app = App::try_new(
+            Config::with_user(User {
+                name: "Tyler Durden".to_string(),
+                phone_number: "+0000000000".to_string(),
+            }),
+            Box::new(signal_manager),
+            Box::new(InMemoryStorage::new()),
+        )
+        .unwrap();
+
+        app.data.channels.items.push(Channel {
+            id: ChannelId::User(Uuid::new_v4()),
+            name: "test".to_string(),
+            group_data: Some(GroupData {
+                master_key_bytes: GroupMasterKeyBytes::default(),
+                members: vec![app.user_id],
+                revision: 1,
+            }),
+            messages: StatefulList::with_items(vec![Message {
+                from_id: app.user_id,
+                message: Some("First message".to_string()),
+                arrived_at: 0,
+                quote: Default::default(),
+                attachments: Default::default(),
+                reactions: Default::default(),
+            }]),
+            unread_messages: 1,
+        });
+        app.data.channels.state.select(Some(0));
+
+        (app, sent_messages)
+    }
+
+    #[test]
+    fn test_send_input() {
+        let (mut app, sent_messages) = test_app();
+        let input = "Hello, World!";
+        for c in input.chars() {
+            app.put_char(c);
+        }
+        app.send_input(0).unwrap();
+
+        let sent = sent_messages.borrow();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].message.as_ref().unwrap(), input);
+
+        assert_eq!(app.data.channels.items[0].unread_messages, 0);
+
+        assert_eq!(app.data.input, "");
+        assert_eq!(app.data.input_cursor, 0);
+        assert_eq!(app.data.input_cursor_chars, 0);
+    }
+
+    #[test]
+    fn test_send_input_with_emoji() {
+        let (mut app, sent_messages) = test_app();
+        let input = "👻";
+        for c in input.chars() {
+            app.put_char(c);
+        }
+        assert_eq!(app.data.input_cursor, 4);
+        assert_eq!(app.data.input_cursor_chars, 1);
+
+        app.send_input(0).unwrap();
+
+        let sent = sent_messages.borrow();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].message.as_ref().unwrap(), input);
+
+        assert_eq!(app.data.input, "");
+        assert_eq!(app.data.input_cursor, 0);
+        assert_eq!(app.data.input_cursor_chars, 0);
+    }
+
+    #[test]
+    fn test_send_input_with_emoji_codepoint() {
+        let (mut app, sent_messages) = test_app();
+        let input = ":thumbsup:";
+        for c in input.chars() {
+            app.put_char(c);
+        }
+
+        app.send_input(0).unwrap();
+
+        let sent = sent_messages.borrow();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].message.as_ref().unwrap(), "👍");
+    }
+
+    #[test]
+    fn test_add_reaction_with_emoji() {
+        let (mut app, _sent_messages) = test_app();
+
+        app.data.channels.items[0].messages.state.select(Some(0));
+
+        app.put_char('👍');
+        app.add_reaction(0);
+
+        let reactions = &app.data.channels.items[0].messages.items[0].reactions;
+        assert_eq!(reactions.len(), 1);
+        assert_eq!(reactions[0], (app.user_id, "👍".to_string()));
+    }
+
+    #[test]
+    fn test_add_reaction_with_emoji_codepoint() {
+        let (mut app, _sent_messages) = test_app();
+
+        app.data.channels.items[0].messages.state.select(Some(0));
+
+        for c in ":thumbsup:".chars() {
+            app.put_char(c);
+        }
+        app.add_reaction(0);
+
+        let reactions = &app.data.channels.items[0].messages.items[0].reactions;
+        assert_eq!(reactions.len(), 1);
+        assert_eq!(reactions[0], (app.user_id, "👍".to_string()));
+    }
+
+    #[test]
+    fn test_remove_reaction() {
+        let (mut app, _sent_messages) = test_app();
+
+        app.data.channels.items[0].messages.state.select(Some(0));
+        let reactions = &mut app.data.channels.items[0].messages.items[0].reactions;
+        reactions.push((app.user_id, "👍".to_string()));
+
+        app.add_reaction(0);
+
+        let reactions = &app.data.channels.items[0].messages.items[0].reactions;
+        assert!(reactions.is_empty());
+    }
+
+    #[test]
+    fn test_add_invalid_reaction() {
+        let (mut app, _sent_messages) = test_app();
+
+        app.data.channels.items[0].messages.state.select(Some(0));
+
+        for c in ":thumbsup".chars() {
+            app.put_char(c);
+        }
+        app.add_reaction(0);
+
+        assert_eq!(app.data.input, ":thumbsup");
+        let reactions = &app.data.channels.items[0].messages.items[0].reactions;
+        assert!(reactions.is_empty());
+    }
 }

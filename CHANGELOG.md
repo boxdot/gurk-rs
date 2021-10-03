@@ -1,12 +1,22 @@
 # Changelog
 
-## Unreleased
+## 0.2.2
 
 ### Added
 
-- Add basic emojis and reactions support ([#91])
+- Add basic emojis and reactions support. ([#91])
+- Open URL (if any) in selected message on Enter when input is empty. ([#99])
+- Send attachments from file:// paths (#[100]).
+
+### Fixed
+
+- Fix linking device ([#101], [#102])
 
 [#91]: https://github.com/boxdot/gurk-rs/pull/91
+[#99]: https://github.com/boxdot/gurk-rs/pull/99
+[#100]: https://github.com/boxdot/gurk-rs/pull/100
+[#101]: https://github.com/boxdot/gurk-rs/pull/101
+[#102]: https://github.com/boxdot/gurk-rs/pull/102
 
 ## 0.2.1
 
@@ -16,6 +26,7 @@
 - Fix an overflow error and crash by adding a subtraction check. ([#88])
 
 [#78]: https://github.com/boxdot/gurk-rs/pull/78
+[#88]: https://github.com/boxdot/gurk-rs/pull/88
 
 ## 0.2.0
 

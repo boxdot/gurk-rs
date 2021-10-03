@@ -402,18 +402,18 @@ fn compute_names_and_colors<'a, 'b>(
             })
             .collect()
     } else {
-        let self_uuid = app.self_id();
-        let self_name = app.name_by_id(self_uuid);
-        let mut self_color = user_color(self_name);
-        let self_name = displayed_name(self_name, first_name_only);
+        let user_id = app.user_id;
+        let user_name = app.name_by_id(user_id);
+        let mut self_color = user_color(user_name);
+        let user_name = displayed_name(user_name, first_name_only);
 
         let contact_uuid = match channel.id {
             app::ChannelId::User(uuid) => uuid,
             _ => unreachable!("logic error"),
         };
 
-        if contact_uuid == self_uuid {
-            vec![(self_uuid, self_name, self_color)]
+        if contact_uuid == user_id {
+            vec![(user_id, user_name, self_color)]
         } else {
             let contact_name = app.name_by_id(contact_uuid);
             let contact_color = user_color(contact_name);
@@ -427,7 +427,7 @@ fn compute_names_and_colors<'a, 'b>(
             }
 
             vec![
-                (self_uuid, self_name, self_color),
+                (user_id, user_name, self_color),
                 (contact_uuid, contact_name, contact_color),
             ]
         }

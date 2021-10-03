@@ -134,9 +134,9 @@ dependencies = [
 
 [[package]]
 name = "async-trait"
-version = "0.1.50"
+version = "0.1.51"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b98e84bbb4cbcdd97da190ba0c58a1bb0de2c1fdf67d159e192ed766aeca722"
+checksum = "44318e776df68115a881de9a8fd1b9e53368d7a4a5ce4cc48517da3393233a5e"
 dependencies = [
  "proc-macro2",
  "quote 1.0.9",
@@ -271,6 +271,17 @@ name = "block-padding"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d696c370c750c948ada61c69a0ee2cbbb9c50b1019ddb86d9317157a99c2cae"
+
+[[package]]
+name = "bstr"
+version = "0.2.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90682c8d613ad3373e66de8c6411e0ae2ab2571e879d2efbf73558cc66f21279"
+dependencies = [
+ "lazy_static",
+ "memchr",
+ "regex-automata",
+]
 
 [[package]]
 name = "bumpalo"
@@ -562,19 +573,6 @@ dependencies = [
 
 [[package]]
 name = "curve25519-dalek"
-version = "3.0.0"
-source = "git+https://github.com/signalapp/curve25519-dalek.git?branch=3.0.0-lizard2#2694ad3b789635f90f941648ae952f58d59ffc73"
-dependencies = [
- "byteorder",
- "digest 0.9.0",
- "rand_core 0.5.1",
- "serde",
- "subtle 2.4.1",
- "zeroize",
-]
-
-[[package]]
-name = "curve25519-dalek"
 version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "639891fde0dbea823fc3d798a0fdf9d2f9440a42d64a78ab3488b0ca025117b3"
@@ -582,6 +580,7 @@ dependencies = [
  "byteorder",
  "digest 0.9.0",
  "rand_core 0.5.1",
+ "serde",
  "subtle 2.4.1",
  "zeroize",
 ]
@@ -980,9 +979,10 @@ dependencies = [
 
 [[package]]
 name = "gurk"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
+ "async-trait",
  "chrono",
  "crossterm",
  "derivative",
@@ -994,13 +994,17 @@ dependencies = [
  "log",
  "log-panics",
  "log4rs",
+ "mime_guess",
  "notify-rust",
+ "opener 0.5.0",
  "phonenumber",
  "presage",
+ "regex-automata",
  "scopeguard",
  "serde",
  "serde_json",
  "structopt",
+ "tempfile",
  "textwrap 0.14.2",
  "tokio",
  "tokio-stream",
@@ -1334,16 +1338,17 @@ checksum = "320cfe77175da3a483efed4bc0adc1968ca050b098ce4f2f1c13a56626128790"
 [[package]]
 name = "libsignal-protocol"
 version = "0.1.0"
-source = "git+https://github.com/signalapp/libsignal-client#528aec7e26f96411d9236011303f1c441f6e7b70"
+source = "git+https://github.com/signalapp/libsignal-client#33a783c28fc8e85ff6ce690efda5d777e8ba4188"
 dependencies = [
  "aes",
  "aes-gcm-siv",
  "arrayref",
  "async-trait",
  "block-modes",
- "curve25519-dalek 3.0.0",
+ "curve25519-dalek 3.1.0",
  "hex",
  "hmac 0.9.0",
+ "itertools 0.10.1",
  "log",
  "num_enum",
  "prost",
@@ -1358,7 +1363,7 @@ dependencies = [
 [[package]]
 name = "libsignal-service"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/libsignal-service-rs#4e32da1e6fdb23fb1c43700ee5ec577da1c23175"
+source = "git+https://github.com/whisperfish/libsignal-service-rs#34b9e43da26ff8821e0540ea722735d7f3db21b7"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -1390,7 +1395,7 @@ dependencies = [
 [[package]]
 name = "libsignal-service-hyper"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/libsignal-service-rs#4e32da1e6fdb23fb1c43700ee5ec577da1c23175"
+source = "git+https://github.com/whisperfish/libsignal-service-rs#34b9e43da26ff8821e0540ea722735d7f3db21b7"
 dependencies = [
  "async-trait",
  "async-tungstenite",
@@ -1813,6 +1818,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "opener"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ea3ebcd72a54701f56345f16785a6d3ac2df7e986d273eb4395c0b01db17952"
+dependencies = [
+ "bstr",
+ "winapi",
+]
+
+[[package]]
 name = "openssl-probe"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2026,7 +2041,7 @@ checksum = "ac74c624d6b2d21f425f752262f42188365d7b8ff1aff74c82e45136510a4857"
 [[package]]
 name = "presage"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/presage.git?rev=20f8be16#20f8be16dc3b9783a576f60b5d642097283295d4"
+source = "git+https://github.com/whisperfish/presage.git?rev=b07abef#b07abeffc8682313d896b0b6c153b21a59c0ca1e"
 dependencies = [
  "async-trait",
  "base64 0.12.3",
@@ -2036,7 +2051,7 @@ dependencies = [
  "libsignal-service",
  "libsignal-service-hyper",
  "log",
- "opener",
+ "opener 0.4.1",
  "qrcode",
  "rand 0.7.3",
  "serde",
@@ -2341,6 +2356,15 @@ checksum = "d07a8629359eb56f1e2fb1652bb04212c072a87ba68546a04065d525673ac461"
 dependencies = [
  "aho-corasick",
  "memchr",
+ "regex-syntax",
+]
+
+[[package]]
+name = "regex-automata"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c230d73fb8d8c1b9c0b3135c5142a8acee3a0558fb8db5cf1cb65f8d7862132"
+dependencies = [
  "regex-syntax",
 ]
 
@@ -3200,6 +3224,7 @@ version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
 dependencies = [
+ "getrandom 0.2.3",
  "serde",
 ]
 

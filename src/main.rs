@@ -3,6 +3,7 @@
 mod app;
 mod config;
 mod signal;
+mod storage;
 mod ui;
 mod util;
 
@@ -25,6 +26,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use crate::{signal::PresageManager, storage::JsonStorage};
+
 const TARGET_FPS: u64 = 144;
 const FRAME_BUDGET: Duration = Duration::from_millis(1000 / TARGET_FPS);
 const MESSAGE_SCROLL_BACK: bool = false;
@@ -32,14 +35,14 @@ const MESSAGE_SCROLL_BACK: bool = false;
 #[derive(Debug, StructOpt)]
 struct Args {
     /// Enables logging to `gurk.log` in the current working directory
-    #[structopt(short, long)]
-    verbose: bool,
+    #[structopt(short, long = "verbose", parse(from_occurrences))]
+    verbosity: u8,
     /// Relinks the device (helpful when device was unlinked)
     #[structopt(long)]
     relink: bool,
 }
 
-fn init_file_logger() -> anyhow::Result<()> {
+fn init_file_logger(verbosity: u8) -> anyhow::Result<()> {
     use log::LevelFilter;
     use log4rs::append::file::FileAppender;
     use log4rs::config::{Appender, Config, Root};
@@ -51,7 +54,11 @@ fn init_file_logger() -> anyhow::Result<()> {
 
     let config = Config::builder()
         .appender(Appender::builder().build("logfile", Box::new(logfile)))
-        .build(Root::builder().appender("logfile").build(LevelFilter::Info))?;
+        .build(Root::builder().appender("logfile").build(match verbosity {
+            1 => LevelFilter::Info,
+            2 => LevelFilter::Debug,
+            _ => LevelFilter::Trace,
+        }))?;
 
     log4rs::init_config(config)?;
     Ok(())
@@ -60,8 +67,8 @@ fn init_file_logger() -> anyhow::Result<()> {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::from_args();
-    if args.verbose {
-        init_file_logger()?;
+    if args.verbosity > 0 {
+        init_file_logger(args.verbosity)?;
     }
     log_panics::init();
 
@@ -77,7 +84,13 @@ async fn is_online() -> bool {
 }
 
 async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
-    let mut app = App::try_new(relink).await?;
+    let (signal_manager, config) = signal::ensure_linked_device(relink).await?;
+    let storage = JsonStorage::new(config.data_path.clone(), config::fallback_data_path());
+    let mut app = App::try_new(
+        config,
+        Box::new(PresageManager::new(signal_manager.clone())),
+        Box::new(storage),
+    )?;
 
     enable_raw_mode()?;
     let _raw_mode_guard = scopeguard::guard((), |_| {
@@ -109,7 +122,6 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
 
     let mut terminal = Terminal::new(backend)?;
 
-    let inner_manager = app.signal_manager.clone();
     let inner_tx = tx.clone();
     tokio::task::spawn_local(async move {
         loop {
@@ -117,7 +129,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                 tokio::time::sleep(std::time::Duration::from_secs(10)).await;
                 continue;
             } else {
-                match inner_manager.receive_messages().await {
+                match signal_manager.receive_messages().await {
                     Ok(messages) => {
                         info!("connected and listening for incoming messages");
                         messages
@@ -274,7 +286,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                 KeyCode::Char('k') if event.modifiers.contains(KeyModifiers::CONTROL) => {
                     app.on_delete_suffix();
                 }
-                code => app.on_key(code).await,
+                code => app.on_key(code)?,
             },
             Some(Event::Message(content)) => {
                 if let Err(e) = app.on_message(content).await {
