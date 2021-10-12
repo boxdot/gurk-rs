@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.3
+
+### Fixed
+
+- Fix linking device ([#101], [#102])
+
+[#101]: https://github.com/boxdot/gurk-rs/pull/101
+[#102]: https://github.com/boxdot/gurk-rs/pull/102
+
 ## 0.2.2
 
 ### Added
@@ -10,13 +19,9 @@
 
 ### Fixed
 
-- Fix linking device ([#101], [#102])
-
 [#91]: https://github.com/boxdot/gurk-rs/pull/91
 [#99]: https://github.com/boxdot/gurk-rs/pull/99
 [#100]: https://github.com/boxdot/gurk-rs/pull/100
-[#101]: https://github.com/boxdot/gurk-rs/pull/101
-[#102]: https://github.com/boxdot/gurk-rs/pull/102
 
 ## 0.2.1
 
