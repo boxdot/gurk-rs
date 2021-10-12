@@ -656,6 +656,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "displaydoc"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3bf95dc3f046b9da4f2d51833c0d3547d8564ef6910f5c1ed130306a75b92886"
+dependencies = [
+ "proc-macro2",
+ "quote 1.0.9",
+ "syn 1.0.73",
+]
+
+[[package]]
 name = "dtoa"
 version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1338,7 +1349,7 @@ checksum = "320cfe77175da3a483efed4bc0adc1968ca050b098ce4f2f1c13a56626128790"
 [[package]]
 name = "libsignal-protocol"
 version = "0.1.0"
-source = "git+https://github.com/signalapp/libsignal-client#33a783c28fc8e85ff6ce690efda5d777e8ba4188"
+source = "git+https://github.com/signalapp/libsignal-client#4bc9aabbd2e17842d25032e5c7d69bef659f5494"
 dependencies = [
  "aes",
  "aes-gcm-siv",
@@ -1346,6 +1357,7 @@ dependencies = [
  "async-trait",
  "block-modes",
  "curve25519-dalek 3.1.0",
+ "displaydoc",
  "hex",
  "hmac 0.9.0",
  "itertools 0.10.1",
@@ -1363,7 +1375,7 @@ dependencies = [
 [[package]]
 name = "libsignal-service"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/libsignal-service-rs#34b9e43da26ff8821e0540ea722735d7f3db21b7"
+source = "git+https://github.com/whisperfish/libsignal-service-rs#be8b839ac29df488c4dbe6e2a088247d6799a274"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -1395,7 +1407,7 @@ dependencies = [
 [[package]]
 name = "libsignal-service-hyper"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/libsignal-service-rs#34b9e43da26ff8821e0540ea722735d7f3db21b7"
+source = "git+https://github.com/whisperfish/libsignal-service-rs#be8b839ac29df488c4dbe6e2a088247d6799a274"
 dependencies = [
  "async-trait",
  "async-tungstenite",
@@ -2041,7 +2053,7 @@ checksum = "ac74c624d6b2d21f425f752262f42188365d7b8ff1aff74c82e45136510a4857"
 [[package]]
 name = "presage"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/presage.git?rev=b07abef#b07abeffc8682313d896b0b6c153b21a59c0ca1e"
+source = "git+https://github.com/whisperfish/presage.git?branch=main#4b3457fd95902950be00e2cba318af2d5425e888"
 dependencies = [
  "async-trait",
  "base64 0.12.3",
