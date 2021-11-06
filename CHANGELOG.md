@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+-  Add help panel ([#107])
+-  Basic multiline editing support
+
+[#107]: https://github.com/boxdot/gurk-rs/pull/107
+
 ## 0.2.3
 
 ### Fixed
