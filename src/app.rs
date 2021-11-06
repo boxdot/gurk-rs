@@ -52,8 +52,6 @@ pub struct AppData {
     /// Input position in chars
     #[serde(skip)]
     pub input_cursor_chars: usize,
-    #[serde(skip)]
-    pub input_cursor_chars_return: usize,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -255,13 +253,11 @@ impl App {
         self.data.input.insert(idx, c);
         self.data.input_cursor += c.len_utf8();
         self.data.input_cursor_chars += 1;
-        self.data.input_cursor_chars_return += 1;
     }
 
     pub fn new_line(&mut self) {
         self.put_char('\n');
         self.data.input_cursor_chars -= 1;
-        self.data.input_cursor_chars_return = 1;
     }
 
     pub fn on_key(&mut self, key: KeyEvent) -> anyhow::Result<()> {

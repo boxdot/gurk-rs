@@ -100,6 +100,7 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
                 }
                 match c {
                     '\n' => {
+                        // This is currently unused
                         // lines.last_mut().unwrap().push('\n');
                         lines.push(String::new())
                     }
