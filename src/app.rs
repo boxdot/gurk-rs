@@ -38,6 +38,7 @@ pub struct App {
     pub should_quit: bool,
     url_regex: LazyRegex,
     attachment_regex: LazyRegex,
+    display_help: bool,
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -235,6 +236,7 @@ impl App {
             should_quit: false,
             url_regex: LazyRegex::new(URL_REGEX),
             attachment_regex: LazyRegex::new(ATTACHMENT_REGEX),
+            display_help: false,
         })
     }
 
@@ -1077,6 +1079,14 @@ impl App {
         let clean_input = clean_input.trim().to_string();
 
         (clean_input, attachments)
+    }
+
+    pub fn toggle_help(&mut self) {
+        self.display_help = !self.display_help;
+    }
+
+    pub fn is_help(&self) -> bool {
+        self.display_help
     }
 }
 

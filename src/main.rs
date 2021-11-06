@@ -2,6 +2,7 @@
 
 mod app;
 mod config;
+mod shortcuts;
 mod signal;
 mod storage;
 mod ui;
@@ -226,6 +227,10 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                 _ => {}
             },
             Some(Event::Input(event)) => match event.code {
+                KeyCode::F(1u8) => {
+                    // Toggle help panel
+                    app.toggle_help();
+                }
                 KeyCode::Char('c') if event.modifiers.contains(KeyModifiers::CONTROL) => {
                     break;
                 }
