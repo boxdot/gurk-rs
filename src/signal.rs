@@ -110,7 +110,6 @@ impl SignalManager for PresageManager {
                     if let Err(e) = manager.send_message(uuid, body, timestamp).await {
                         // TODO: Proper error handling
                         log::error!("Failed to send message to {}: {}", uuid, e);
-                        return;
                     }
                 });
             }
@@ -138,7 +137,6 @@ impl SignalManager for PresageManager {
                         {
                             // TODO: Proper error handling
                             log::error!("Failed to send group message: {}", e);
-                            return;
                         }
                     });
                 } else {
@@ -185,7 +183,6 @@ impl SignalManager for PresageManager {
                     if let Err(e) = manager.send_message(uuid, body, timestamp).await {
                         // TODO: Proper error handling
                         log::error!("failed to send reaction {} to {}: {}", &emoji, uuid, e);
-                        return;
                     }
                 });
             }
@@ -209,7 +206,6 @@ impl SignalManager for PresageManager {
                     {
                         // TODO: Proper error handling
                         log::error!("failed to send group reaction {}: {}", &emoji, e);
-                        return;
                     }
                 });
             }

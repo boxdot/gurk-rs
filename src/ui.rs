@@ -1,3 +1,4 @@
+use crate::shortcuts::{ShortCut, SHORTCUTS};
 use crate::util;
 use crate::{app, App};
 
@@ -27,6 +28,19 @@ pub fn coords_within_channels_view<B: Backend>(f: &Frame<B>, x: u16, y: u16) -> 
 }
 
 pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
+    if app.is_help() {
+        // Display shortcut panel
+        let chunks = Layout::default()
+            .constraints([
+                Constraint::Percentage(15),
+                Constraint::Percentage(70),
+                Constraint::Percentage(15),
+            ])
+            .direction(Direction::Horizontal)
+            .split(f.size());
+        draw_help(f, app, chunks[1]);
+        return;
+    }
     let chunks = Layout::default()
         .constraints(
             [
@@ -307,7 +321,7 @@ fn display_message(
         ),
         Style::default().fg(from_color),
     );
-    let delimeter = Span::from(": ");
+    let delimiter = Span::from(": ");
 
     let wrap_opts = textwrap::Options::new(width)
         .initial_indent(prefix)
@@ -344,7 +358,7 @@ fn display_message(
                     vec![
                         time.clone(),
                         from.clone(),
-                        delimeter.clone(),
+                        delimiter.clone(),
                         Span::styled(line.strip_prefix(prefix).unwrap().to_string(), quote_style),
                     ]
                 } else {
@@ -365,7 +379,7 @@ fn display_message(
                     vec![
                         time.clone(),
                         from.clone(),
-                        delimeter.clone(),
+                        delimiter.clone(),
                         Span::from(line.strip_prefix(prefix).unwrap().to_string()),
                     ]
                 } else {
@@ -381,6 +395,77 @@ fn display_message(
         spans.push(Spans::from(format!("{}[...]", prefix)));
     }
     Some(ListItem::new(Text::from(spans)))
+}
+
+fn draw_help<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
+    let max_event_width = SHORTCUTS
+        .iter()
+        .map(
+            |ShortCut {
+                 event: ev,
+                 description: _,
+             }| { (**ev).width() },
+        )
+        .max()
+        .unwrap_or(0);
+
+    let width = area.width.saturating_sub(2) as usize;
+    let delimiter = Span::from(": ");
+    const DELIMITER_WIDTH: usize = 2;
+    let prefix_width = max_event_width + DELIMITER_WIDTH + 1; // +1 because we add 1 extra " " between the event and the delimiter
+    let prefix = " ".repeat(prefix_width);
+
+    let wrap_opts = textwrap::Options::new(width)
+        .initial_indent(&prefix)
+        .subsequent_indent(&prefix);
+
+    let shorts: Vec<ListItem> = SHORTCUTS
+        .iter()
+        .map(
+            |ShortCut {
+                 event: ev,
+                 description: desc,
+             }| {
+                let event = ev;
+                let description = desc;
+
+                let wrapped = textwrap::wrap(description, &wrap_opts);
+
+                let mut res = Vec::new();
+
+                wrapped.into_iter().enumerate().for_each(|(i, line)| {
+                    let mut truc = Vec::new();
+                    if i == 0 {
+                        let event_span = Span::from(textwrap::indent(
+                            &" ".repeat(
+                                max_event_width
+                                    .checked_sub(event.width())
+                                    .unwrap_or_default()
+                                    + 1,
+                            ),
+                            event,
+                        ));
+                        truc.push(event_span);
+                        truc.push(delimiter.clone());
+                        truc.push(Span::from(line.strip_prefix(&prefix).unwrap().to_string()));
+                    } else {
+                        truc.push(Span::from(line.to_string()))
+                    };
+
+                    let spans = Spans::from(truc);
+                    res.push(spans);
+                });
+
+                //let spans = Spans::from(res);
+
+                ListItem::new(Text::from(res))
+            },
+        )
+        .collect();
+
+    let shorts_widget =
+        List::new(shorts).block(Block::default().borders(Borders::ALL).title("Help"));
+    f.render_stateful_widget(shorts_widget, area, &mut app.data.channels.state);
 }
 
 /// Returns a sorted vector of `(id, name, color)` by id.
