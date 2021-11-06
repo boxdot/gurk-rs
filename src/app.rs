@@ -491,9 +491,13 @@ impl App {
         while idx < self.data.input.len() && !self.data.input.is_char_boundary(idx) {
             idx -= 1;
         }
+        let char = self.data.input.as_bytes()[idx] as char;
         self.data.input.remove(idx);
         self.data.input_cursor = idx;
-        self.data.input_cursor_chars -= 1;
+
+        if char != '\n' {
+            self.data.input_cursor_chars -= 1
+        };
         Some(())
     }
 
