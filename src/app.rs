@@ -7,9 +7,12 @@ use crate::util::{self, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX};
 
 use anyhow::{anyhow, Context as _};
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
+use itertools::FoldWhile::{Continue, Done};
+use itertools::Itertools;
 use log::error;
 use notify_rust::Notification;
 use phonenumber::{Mode, PhoneNumber};
+use presage::prelude::proto::{ReceiptMessage, TypingMessage};
 use presage::prelude::{
     content::{ContentBody, DataMessage, Metadata, SyncMessage},
     proto::{
@@ -25,7 +28,7 @@ use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
 
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::path::Path;
 
@@ -63,6 +66,13 @@ pub struct Channel {
     #[serde(serialize_with = "Channel::serialize_msgs")]
     pub messages: StatefulList<Message>,
     pub unread_messages: usize,
+    pub typing: TypingSet,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TypingSet {
+    SingleTyping(bool),
+    GroupTyping(HashSet<Uuid>),
 }
 
 /// Proxy type which allows us to apply post-deserialization conversion.
@@ -89,6 +99,13 @@ impl TryFrom<JsonChannel> for Channel {
             group_data: channel.group_data,
             messages: channel.messages,
             unread_messages: channel.unread_messages,
+            typing: {
+                if let Some(_) = channel.group_data {
+                    TypingSet::GroupTyping(HashSet::new())
+                } else {
+                    TypingSet::SingleTyping(false)
+                }
+            },
         };
 
         // 1. The master key in ChannelId::Group was replaced by group identifier,
@@ -171,6 +188,43 @@ impl ChannelId {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum Receipt {
+    Nothing,
+    Sent,
+    Received,
+    Read,
+}
+
+impl Default for Receipt {
+    fn default() -> Self {
+        Self::Nothing
+    }
+}
+
+impl Receipt {
+    pub fn write(&self) -> &'static str {
+        match self {
+            Self::Nothing => "",
+            Self::Sent => "(x)",
+            Self::Received => "(xx)",
+            Self::Read => "(xxx)",
+        }
+    }
+
+    pub fn update(&self, other: Self) -> Self {
+        *self.max(&other)
+    }
+
+    pub fn from_i32(i: i32) -> Self {
+        match i {
+            0 => Self::Received,
+            1 => Self::Read,
+            _ => Self::Nothing,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Message {
     pub from_id: Uuid,
@@ -182,6 +236,8 @@ pub struct Message {
     pub attachments: Vec<signal::Attachment>,
     #[serde(default)]
     pub reactions: Vec<(Uuid, String)>,
+    #[serde(default)]
+    pub receipt: Receipt,
 }
 
 impl Message {
@@ -193,6 +249,7 @@ impl Message {
             quote: None,
             attachments: Default::default(),
             reactions: Default::default(),
+            receipt: Default::default(),
         }
     }
 
@@ -204,6 +261,7 @@ impl Message {
             quote: None,
             attachments: Default::default(),
             reactions: Default::default(),
+            receipt: Default::default(),
         })
     }
 }
@@ -766,12 +824,114 @@ impl App {
                 );
                 return Ok(());
             }
+            (
+                Metadata {
+                    sender:
+                        ServiceAddress {
+                            uuid: Some(sender_uuid),
+                            ..
+                        },
+                    ..
+                },
+                ContentBody::ReceiptMessage(ReceiptMessage {
+                    r#type: Some(typ),
+                    timestamp: timestamps,
+                }),
+            ) => {
+                self.handle_receipt(sender_uuid, typ, timestamps);
+                return Ok(());
+            }
+
+            (
+                Metadata {
+                    sender:
+                        ServiceAddress {
+                            uuid: Some(sender_uuid),
+                            ..
+                        },
+                    ..
+                },
+                ContentBody::TypingMessage(TypingMessage {
+                    timestamp: Some(timest),
+                    group_id,
+                    action: Some(act),
+                }),
+            ) => {
+                self.handle_typing(group_id, act, timest);
+                return Ok(());
+            }
+
             _ => return Ok(()),
         };
 
         self.add_message_to_channel(channel_idx, message);
 
         Ok(())
+    }
+
+    fn handle_typing(
+        &mut self,
+        group_id: Option<Vec<u8>>,
+        action: i32,
+        timestamp: u64,
+    ) -> Result<(), ()> {
+        if let Some(gid) = group_id {
+            // It's in a group
+            let group = self
+                .data
+                .channels
+                .items
+                .iter()
+                .find(|c| {
+                    if let ChannelId::Group(gid_other) = c.id {
+                        gid_other[..] == gid[..]
+                    } else {
+                        false
+                    }
+                })
+                .unwrap();
+        } else {
+        }
+        return Ok(());
+    }
+
+    fn handle_receipt(&mut self, sender_uuid: Uuid, typ: i32, timestamps: Vec<u64>) {
+        let earliest = timestamps.iter().min().unwrap();
+        for c in self.data.channels.items.iter_mut() {
+            match c.id {
+                ChannelId::User(other_uuid) if other_uuid == sender_uuid => {
+                    c.messages.items.iter_mut().rev().fold_while(0, |_, b| {
+                        match b.arrived_at.cmp(earliest) {
+                            std::cmp::Ordering::Less => Done(0),
+                            _ => {
+                                if timestamps.contains(&b.arrived_at) {
+                                    b.receipt = b.receipt.update(Receipt::from_i32(typ));
+                                }
+                                Continue(0)
+                            }
+                        }
+                    });
+                }
+                ChannelId::Group(_) => {
+                    if let Some(ref g_data) = c.group_data {
+                        if g_data.members.contains(&sender_uuid) {
+                            c.messages.items.iter_mut().rev().fold_while(0, |_, b| {
+                                match b.arrived_at.cmp(earliest) {
+                                    std::cmp::Ordering::Less => Done(0),
+                                    _ => {
+                                        if timestamps.contains(&b.arrived_at) {
+                                            b.receipt = b.receipt.update(Receipt::from_i32(typ));
+                                        }
+                                        Continue(0)
+                                    }
+                                }
+                            });
+                        }
+                    }
+                }
+                _ => (),
+            }
+        }
     }
 
     fn handle_reaction(
@@ -897,6 +1057,7 @@ impl App {
                 group_data: Some(group_data),
                 messages: StatefulList::with_items(Vec::new()),
                 unread_messages: 0,
+                typing: TypingSet::GroupTyping(HashSet::new()),
             });
             Ok(self.data.channels.items.len() - 1)
         }
@@ -963,6 +1124,7 @@ impl App {
                 group_data: None,
                 messages: StatefulList::with_items(Vec::new()),
                 unread_messages: 0,
+                typing: TypingSet::SingleTyping(false),
             });
             self.data.channels.items.len() - 1
         }
@@ -990,6 +1152,7 @@ impl App {
                 group_data: None,
                 messages: StatefulList::with_items(Vec::new()),
                 unread_messages: 0,
+                typing: TypingSet::SingleTyping(false),
             });
             self.data.channels.items.len() - 1
         }
@@ -1156,8 +1319,10 @@ mod tests {
                 quote: Default::default(),
                 attachments: Default::default(),
                 reactions: Default::default(),
+                receipt: Default::default(),
             }]),
             unread_messages: 1,
+            typing: TypingSet::GroupTyping(HashSet::new()),
         });
         app.data.channels.state.select(Some(0));
 

@@ -157,6 +157,7 @@ impl SignalManager for PresageManager {
             quote: quote_message,
             attachments: Default::default(),
             reactions: Default::default(),
+            receipt: Default::default(),
         }
     }
 
@@ -434,6 +435,8 @@ pub mod test {
                 quote: quote_message,
                 attachments: Default::default(),
                 reactions: Default::default(),
+                // TODO make sure the message sending procedure did not fail
+                receipt: crate::app::Receipt::Sent,
             };
             self.sent_messages.borrow_mut().push(message.clone());
             println!("sent messages: {:?}", self.sent_messages.borrow());

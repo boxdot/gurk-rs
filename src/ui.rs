@@ -310,6 +310,8 @@ fn display_message(
         }
     }
 
+    let receipt = msg.receipt.write();
+
     let from = Span::styled(
         textwrap::indent(
             from,
@@ -328,12 +330,13 @@ fn display_message(
         .subsequent_indent(prefix);
 
     let text = if msg.reactions.is_empty() {
-        Cow::from(msg.message.as_ref()?)
+        Cow::from(format!("{} {}", msg.message.as_ref()?, receipt))
     } else {
         Cow::from(format!(
-            "{} [{}]",
+            "{} [{}] {}",
             msg.message.as_ref()?,
             msg.reactions.iter().map(|(_, emoji)| emoji).format(""),
+            receipt,
         ))
     };
 
