@@ -161,6 +161,8 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         _ => return,
     };
 
+    let writing = if channel.is_writing() { "..." } else { "" };
+
     // area without borders
     let height = area.height.saturating_sub(2) as usize;
     if height == 0 {
@@ -249,8 +251,15 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         items.insert(unread_messages, ListItem::new(Span::from(new_message_line)));
     }
 
+    let mut title = String::from("Messages");
+    title.push_str(writing);
+
     let list = List::new(items)
-        .block(Block::default().title("Messages").borders(Borders::ALL))
+        .block(
+            Block::default()
+                .title(title)
+                .borders(Borders::ALL),
+        )
         .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray))
         .start_corner(Corner::BottomLeft);
 

@@ -137,10 +137,7 @@ pub mod test {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        app::{Channel, ChannelId},
-        util::StatefulList,
-    };
+    use crate::{app::{Channel, ChannelId, TypingSet}, util::StatefulList};
 
     use super::*;
     use tempfile::NamedTempFile;
@@ -229,6 +226,7 @@ mod tests {
                 group_data: None,
                 messages: Default::default(),
                 unread_messages: 0,
+                typing: TypingSet::SingleTyping(false),
             }]),
         };
 

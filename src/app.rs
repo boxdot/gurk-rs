@@ -93,6 +93,7 @@ pub struct JsonChannel {
 impl TryFrom<JsonChannel> for Channel {
     type Error = anyhow::Error;
     fn try_from(channel: JsonChannel) -> anyhow::Result<Self> {
+        let is_group = channel.group_data.is_some();
         let mut channel = Channel {
             id: channel.id,
             name: channel.name,
@@ -100,7 +101,7 @@ impl TryFrom<JsonChannel> for Channel {
             messages: channel.messages,
             unread_messages: channel.unread_messages,
             typing: {
-                if let Some(_) = channel.group_data {
+                if is_group {
                     TypingSet::GroupTyping(HashSet::new())
                 } else {
                     TypingSet::SingleTyping(false)
@@ -130,6 +131,13 @@ pub struct GroupData {
 }
 
 impl Channel {
+    pub fn is_writing(&self) -> bool {
+        match &self.typing {
+            TypingSet::GroupTyping(a) => !a.is_empty(),
+            TypingSet::SingleTyping(a) => *a
+        }
+    }
+
     fn user_id(&self) -> Option<Uuid> {
         match self.id {
             ChannelId::User(id) => Some(id),
@@ -185,6 +193,25 @@ impl ChannelId {
         let secret_params = GroupSecretParams::derive_from_master_key(master_key);
         let group_id = secret_params.get_group_identifier();
         Ok(Self::Group(group_id))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum TypingAction {
+    Started,
+    Stopped,
+}
+
+impl TypingAction {
+    pub fn from_i32(i: i32) -> Self {
+        match i {
+            0 => Self::Started,
+            1 => Self::Stopped,
+            _ => {
+                log::error!("Got incorrect TypingAction : {}", i);
+                Self::Stopped
+            }
+        }
     }
 }
 
@@ -857,7 +884,7 @@ impl App {
                     action: Some(act),
                 }),
             ) => {
-                self.handle_typing(group_id, act, timest);
+                self.handle_typing(sender_uuid, group_id, TypingAction::from_i32(act), timest);
                 return Ok(());
             }
 
@@ -871,9 +898,10 @@ impl App {
 
     fn handle_typing(
         &mut self,
+        sender_uuid: Uuid,
         group_id: Option<Vec<u8>>,
-        action: i32,
-        timestamp: u64,
+        action: TypingAction,
+        _timestamp: u64,
     ) -> Result<(), ()> {
         if let Some(gid) = group_id {
             // It's in a group
@@ -881,7 +909,7 @@ impl App {
                 .data
                 .channels
                 .items
-                .iter()
+                .iter_mut()
                 .find(|c| {
                     if let ChannelId::Group(gid_other) = c.id {
                         gid_other[..] == gid[..]
@@ -890,7 +918,46 @@ impl App {
                     }
                 })
                 .unwrap();
+            if let TypingSet::GroupTyping(ref mut hash_set) = group.typing {
+                match action {
+                    TypingAction::Started => {
+                        hash_set.insert(sender_uuid);
+                    }
+                    TypingAction::Stopped => {
+                        hash_set.remove(&sender_uuid);
+                    }
+                }
+            } else {
+                log::error!("Got a single typing hash set on a group.");
+            }
         } else {
+            let chan = self
+                .data
+                .channels
+                .items
+                .iter_mut()
+                .find(|c| {
+                    if let ChannelId::User(other_uuid) = c.id {
+                        if other_uuid == sender_uuid {
+                            return true;
+                        }
+                    }
+                    return false;
+                })
+                .unwrap();
+
+            if let TypingSet::SingleTyping(_) = chan.typing {
+                match action {
+                    TypingAction::Started => {
+                        chan.typing = TypingSet::SingleTyping(true);
+                    }
+                    TypingAction::Stopped => {
+                        chan.typing = TypingSet::SingleTyping(false);
+                    }
+                }
+            } else {
+                log::error!("Got a single typing hash set on a group.");
+            }
         }
         return Ok(());
     }
