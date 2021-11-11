@@ -131,10 +131,44 @@ pub struct GroupData {
 }
 
 impl Channel {
+    pub fn writing_people(&self, app: &App) -> String {
+        if !self.is_writing() {
+            return String::from("");
+        }
+        let uuids: Vec<Uuid> = match &self.typing {
+            TypingSet::GroupTyping(hash_set) => hash_set.clone().into_iter().collect(),
+            TypingSet::SingleTyping(a) => {
+                if *a {
+                    vec![self.user_id().unwrap()]
+                } else {
+                    Vec::new()
+                }
+            }
+        };
+        format!(
+            "{:?} writing...",
+            uuids
+                .into_iter()
+                .map(|u| app.name_by_id(u))
+                .collect::<Vec<&str>>()
+        )
+    }
+
+    pub fn reset_writing(&mut self, user: Uuid) {
+        match &mut self.typing {
+            TypingSet::GroupTyping(ref mut hash_set) => {
+                hash_set.remove(&user);
+            }
+            TypingSet::SingleTyping(_) => {
+                self.typing = TypingSet::SingleTyping(false);
+            }
+        }
+    }
+
     pub fn is_writing(&self) -> bool {
         match &self.typing {
             TypingSet::GroupTyping(a) => !a.is_empty(),
-            TypingSet::SingleTyping(a) => *a
+            TypingSet::SingleTyping(a) => *a,
         }
     }
 
@@ -736,7 +770,8 @@ impl App {
                         .to_string();
                     let channel_idx = self.ensure_contact_channel_exists(uuid, &name).await;
                     let from = self.data.channels.items[channel_idx].name.clone();
-
+                    // Reset typing notification as the Tipyng::Stop are not always sent by the server when a message is sent.
+                    self.data.channels.items[channel_idx].reset_writing(uuid);
                     (channel_idx, from)
                 };
 
@@ -884,7 +919,8 @@ impl App {
                     action: Some(act),
                 }),
             ) => {
-                self.handle_typing(sender_uuid, group_id, TypingAction::from_i32(act), timest);
+                let _ =
+                    self.handle_typing(sender_uuid, group_id, TypingAction::from_i32(act), timest);
                 return Ok(());
             }
 
@@ -942,7 +978,7 @@ impl App {
                             return true;
                         }
                     }
-                    return false;
+                    false
                 })
                 .unwrap();
 
@@ -959,7 +995,7 @@ impl App {
                 log::error!("Got a single typing hash set on a group.");
             }
         }
-        return Ok(());
+        Ok(())
     }
 
     fn handle_receipt(&mut self, sender_uuid: Uuid, typ: i32, timestamps: Vec<u64>) {

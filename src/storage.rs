@@ -137,7 +137,10 @@ pub mod test {
 
 #[cfg(test)]
 mod tests {
-    use crate::{app::{Channel, ChannelId, TypingSet}, util::StatefulList};
+    use crate::{
+        app::{Channel, ChannelId, TypingSet},
+        util::StatefulList,
+    };
 
     use super::*;
     use tempfile::NamedTempFile;
