@@ -31,6 +31,7 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::path::Path;
+use std::str::FromStr;
 
 pub struct App {
     pub config: Config,
@@ -814,6 +815,7 @@ impl App {
                                 }),
                             ..
                         }),
+                    read,
                     ..
                 }),
             ) => {
@@ -837,6 +839,13 @@ impl App {
                     remove.unwrap_or(false),
                     true,
                 );
+                read.into_iter().for_each(|r| {
+                    self.handle_receipt(
+                        Uuid::from_str(r.sender_uuid.unwrap().as_str()).unwrap(),
+                        1,
+                        vec![r.timestamp.unwrap()],
+                    )
+                });
                 return Ok(());
             }
             (
