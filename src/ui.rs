@@ -152,6 +152,7 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
 fn send_receipts(app: &mut App, height: usize) {
     let mut timestamps = Vec::new();
+    let user_id = app.user_id;
 
     {
         let channel = app
@@ -185,8 +186,10 @@ fn send_receipts(app: &mut App, height: usize) {
             .for_each(|msg| match msg.receipt {
                 Receipt::Read => (),
                 _ => {
-                    timestamps.push(msg.arrived_at);
-                    msg.receipt = Receipt::Read
+                    if msg.from_id != user_id {
+                        timestamps.push(msg.arrived_at);
+                        msg.receipt = Receipt::Read
+                    }
                 }
             });
     }
@@ -268,6 +271,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
             &prefix,
             width as usize,
             height,
+            app.user_id == msg.from_id,
         )
     });
 
@@ -344,6 +348,7 @@ fn display_message(
     prefix: &str,
     width: usize,
     height: usize,
+    print_receipt: bool,
 ) -> Option<ListItem<'static>> {
     let arrived_at = util::utc_timestamp_msec_to_local(msg.arrived_at);
 
@@ -372,7 +377,11 @@ fn display_message(
         }
     }
 
-    let receipt = msg.receipt.write();
+    let receipt = if print_receipt {
+        msg.receipt.write()
+    } else {
+        ""
+    };
 
     let from = Span::styled(
         textwrap::indent(
