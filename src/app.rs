@@ -132,29 +132,6 @@ pub struct GroupData {
 }
 
 impl Channel {
-    pub fn writing_people(&self, app: &App) -> String {
-        if !self.is_writing() {
-            return String::from("");
-        }
-        let uuids: Vec<Uuid> = match &self.typing {
-            TypingSet::GroupTyping(hash_set) => hash_set.clone().into_iter().collect(),
-            TypingSet::SingleTyping(a) => {
-                if *a {
-                    vec![self.user_id().unwrap()]
-                } else {
-                    Vec::new()
-                }
-            }
-        };
-        format!(
-            "{:?} writing...",
-            uuids
-                .into_iter()
-                .map(|u| app.name_by_id(u))
-                .collect::<Vec<&str>>()
-        )
-    }
-
     pub fn reset_writing(&mut self, user: Uuid) {
         match &mut self.typing {
             TypingSet::GroupTyping(ref mut hash_set) => {
@@ -285,6 +262,13 @@ impl Receipt {
             _ => Self::Nothing,
         }
     }
+
+    pub fn to_i32(self) -> i32 {
+        match self {
+            Self::Read => 1,
+            _ => 0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -358,6 +342,29 @@ impl App {
             attachment_regex: LazyRegex::new(ATTACHMENT_REGEX),
             display_help: false,
         })
+    }
+
+    pub fn writing_people(&self, channel: &Channel) -> String {
+        if !channel.is_writing() {
+            return String::from("");
+        }
+        let uuids: Vec<Uuid> = match &channel.typing {
+            TypingSet::GroupTyping(hash_set) => hash_set.clone().into_iter().collect(),
+            TypingSet::SingleTyping(a) => {
+                if *a {
+                    vec![channel.user_id().unwrap()]
+                } else {
+                    Vec::new()
+                }
+            }
+        };
+        format!(
+            "{:?} writing...",
+            uuids
+                .into_iter()
+                .map(|u| self.name_by_id(u))
+                .collect::<Vec<&str>>()
+        )
     }
 
     pub fn save(&self) -> anyhow::Result<()> {
@@ -939,6 +946,11 @@ impl App {
         self.add_message_to_channel(channel_idx, message);
 
         Ok(())
+    }
+
+    pub fn send_receipts(&self, channel: &Channel, timestamps: Vec<u64>, receipt: Receipt) {
+        self.signal_manager
+            .send_receipt(channel, self.user_id, timestamps, receipt)
     }
 
     fn handle_typing(

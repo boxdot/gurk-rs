@@ -1,6 +1,7 @@
 use crate::shortcuts::{ShortCut, SHORTCUTS};
 use crate::util;
 use crate::{app, App};
+use app::Receipt;
 
 use chrono::{Datelike, Timelike};
 use itertools::Itertools;
@@ -149,7 +150,47 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     );
 }
 
-fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
+fn send_receipts(app: &mut App, height: usize) {
+    let mut timestamps = Vec::new();
+
+    {
+        let channel = app
+            .data
+            .channels
+            .state
+            .selected()
+            .and_then(|idx| app.data.channels.items.get_mut(idx));
+        let channel = match channel {
+            Some(c) if !c.messages.items.is_empty() => c,
+            _ => return,
+        };
+
+        let offset = if let Some(selected) = channel.messages.state.selected() {
+            channel
+                .messages
+                .rendered
+                .offset
+                .min(selected)
+                .max(selected.saturating_sub(height))
+        } else {
+            channel.messages.rendered.offset
+        };
+
+        let messages = &mut channel.messages.items[..];
+
+        let _ = messages
+            .iter_mut()
+            .rev()
+            .skip(offset)
+            .for_each(|msg| match msg.receipt {
+                Receipt::Read => (),
+                _ => {
+                    timestamps.push(msg.arrived_at);
+                    msg.receipt = Receipt::Read
+                }
+            });
+    }
+
     let channel = app
         .data
         .channels
@@ -161,14 +202,31 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         _ => return,
     };
 
-    let writing_people = channel.writing_people(app);
+    app.send_receipts(channel, timestamps, Receipt::Read);
+}
 
+fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     // area without borders
     let height = area.height.saturating_sub(2) as usize;
     if height == 0 {
         return;
     }
     let width = area.width.saturating_sub(2) as usize;
+
+    send_receipts(app, height);
+
+    let channel = app
+        .data
+        .channels
+        .state
+        .selected()
+        .and_then(|idx| app.data.channels.items.get(idx));
+    let channel = match channel {
+        Some(c) if !c.messages.items.is_empty() => c,
+        _ => return,
+    };
+
+    let writing_people = app.writing_people(channel);
 
     // Calculate the offset in messages we start rendering with.
     // `offset` includes the selected message (if any), and is at most height-many messages to

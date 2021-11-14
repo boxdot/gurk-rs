@@ -1,4 +1,4 @@
-use crate::app::{Channel, ChannelId, GroupData, Message};
+use crate::app::{Channel, ChannelId, GroupData, Message, Receipt};
 use crate::config::{self, Config};
 use crate::util::utc_now_timestamp_msec;
 
@@ -8,6 +8,7 @@ use gh_emoji::Replacer;
 use log::error;
 use presage::prelude::content::Reaction;
 use presage::prelude::proto::data_message::Quote;
+use presage::prelude::proto::ReceiptMessage;
 use presage::prelude::{
     AttachmentSpec, ContentBody, DataMessage, GroupContextV2, GroupMasterKey, SignalServers,
 };
@@ -35,6 +36,14 @@ pub trait SignalManager {
         &mut self,
         master_key_bytes: GroupMasterKeyBytes,
     ) -> anyhow::Result<ResolvedGroup>;
+
+    fn send_receipt(
+        &self,
+        channel: &Channel,
+        sender_uuid: Uuid,
+        timestamps: Vec<u64>,
+        receipt: Receipt,
+    );
 
     fn send_text(
         &self,
@@ -71,6 +80,35 @@ impl PresageManager {
 impl SignalManager for PresageManager {
     fn user_id(&self) -> Uuid {
         self.manager.uuid()
+    }
+
+    fn send_receipt(
+        &self,
+        channel: &Channel,
+        _sender_uuid: Uuid,
+        timestamps: Vec<u64>,
+        receipt: Receipt,
+    ) {
+        let now_timestamp = utc_now_timestamp_msec();
+        let data_message = ReceiptMessage {
+            r#type: Some(receipt.to_i32()),
+            timestamp: timestamps,
+        };
+
+        match channel.id {
+            ChannelId::User(uuid) => {
+                let manager = self.manager.clone();
+                tokio::task::spawn_local(async move {
+                    let body = ContentBody::ReceiptMessage(data_message);
+                    if let Err(e) = manager.send_message(uuid, body, now_timestamp).await {
+                        log::error!("Failed to send message to {}: {}", uuid, e);
+                    }
+                });
+            }
+            ChannelId::Group(_) => {
+                log::warn!("Not supported for now.");
+            }
+        }
     }
 
     fn send_text(
@@ -400,6 +438,8 @@ pub mod test {
         fn user_id(&self) -> Uuid {
             self.user_id
         }
+
+        fn send_receipt(&self, _: &Channel, _: Uuid, _: Vec<u64>, _: Receipt) {}
 
         async fn contact_name(&self, _id: Uuid, _profile_key: [u8; 32]) -> Option<String> {
             None
