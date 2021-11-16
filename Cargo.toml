@@ -28,36 +28,36 @@ libsignal-service = { git = "https://github.com/whisperfish/libsignal-service-rs
 libsignal-service-hyper = { git = "https://github.com/whisperfish/libsignal-service-rs.git", rev = "b0f5d4f" }
 libsignal-protocol = { git = "https://github.com/signalapp/libsignal-client", rev = "228cb02" }
 
-anyhow = "1.0.40"
+anyhow = "1.0.45"
 async-trait = "0.1.51"
 chrono = { version = "0.4.19", features = ["serde"] }
-crossterm = { version = "0.19.0", features = ["event-stream"] }
+crossterm = { version = "0.22.1", features = ["event-stream"] }
 derivative = "2.2.0"
-dirs = "3.0.2"
+dirs = "4.0.0"
 emoji = "0.2.1"
-gh-emoji = "1.0.3"
+gh-emoji = "1.0.6"
 hostname = "0.3.1"
-itertools = "0.10.0"
+itertools = "0.10.1"
 log = "0.4.14"
 log-panics = "2.0.0"
 log4rs = "1.0.0"
 mime_guess = "2.0.3"
-notify-rust = "4.5.0"
+notify-rust = "4.5.5"
 opener = "0.5.0"
 phonenumber = "0.3.1"
 regex-automata = "0.1.10"
 scopeguard = "1.1.0"
-serde = { version = "1.0.125", features = ["derive"] }
-serde_json = "1.0.64"
-structopt = "0.3.21"
+serde = { version = "1.0.130", features = ["derive"] }
+serde_json = "1.0.70"
+structopt = "0.3.25"
 textwrap = "0.14.2"
-tokio = { version = "1.5.0", default-features = false, features = ["rt-multi-thread", "macros", "net", "time"] }
-tokio-stream = "0.1.5"
+tokio = { version = "1.14.0", default-features = false, features = ["rt-multi-thread", "macros", "net", "time"] }
+tokio-stream = "0.1.8"
 toml = "0.5.8"
-tui = {version = "0.15.0", default-features = false, features = ["crossterm"]}
-unicode-width = "0.1.8"
+tui = { version = "0.16.0", default-features = false, features = ["crossterm"] }
+unicode-width = "0.1.9"
 uuid = "0.8.2"
-whoami = "1.1.2"
+whoami = "1.2.0"
 
 [dev-dependencies]
 tempfile = "3.2.0"
