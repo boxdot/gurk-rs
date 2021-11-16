@@ -6,7 +6,7 @@ use crate::storage::Storage;
 use crate::util::{self, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX};
 
 use anyhow::{anyhow, Context as _};
-use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use log::error;
 use notify_rust::Notification;
 use phonenumber::{Mode, PhoneNumber};
@@ -255,9 +255,17 @@ impl App {
         self.data.input_cursor_chars += 1;
     }
 
-    pub fn on_key(&mut self, key: KeyCode) -> anyhow::Result<()> {
-        match key {
+    pub fn new_line(&mut self) {
+        self.put_char('\n');
+        self.data.input_cursor_chars -= 1;
+    }
+
+    pub fn on_key(&mut self, key: KeyEvent) -> anyhow::Result<()> {
+        match key.code {
             KeyCode::Char('\r') => self.put_char('\n'),
+            KeyCode::Enter if key.modifiers.contains(KeyModifiers::ALT) => {
+                self.new_line();
+            }
             KeyCode::Enter if !self.data.input.is_empty() => {
                 if let Some(idx) = self.data.channels.state.selected() {
                     self.send_input(idx)?;
@@ -483,9 +491,13 @@ impl App {
         while idx < self.data.input.len() && !self.data.input.is_char_boundary(idx) {
             idx -= 1;
         }
+        let char = self.data.input.as_bytes()[idx] as char;
         self.data.input.remove(idx);
         self.data.input_cursor = idx;
-        self.data.input_cursor_chars -= 1;
+
+        if char != '\n' {
+            self.data.input_cursor_chars -= 1
+        };
         Some(())
     }
 
