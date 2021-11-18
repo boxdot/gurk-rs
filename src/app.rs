@@ -371,8 +371,6 @@ impl App {
         name_by_id(&self.data.names, id)
     }
 
-    
-
     pub fn on_key(&mut self, key: KeyCode) -> anyhow::Result<()> {
         match key {
             KeyCode::Char('\r') => self.get_input().put_char('\n'),

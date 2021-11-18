@@ -18,11 +18,16 @@ use std::borrow::Cow;
 pub const CHANNEL_VIEW_RATIO: u32 = 4;
 pub static mut CHANNEL_TEXT_WIDTH: usize = 0;
 
-pub fn coords_within_channels_view<B: Backend>(f: &Frame<B>, app: &App, x: u16, y: u16) -> Option<(u16, u16)> {
+pub fn coords_within_channels_view<B: Backend>(
+    f: &Frame<B>,
+    app: &App,
+    x: u16,
+    y: u16,
+) -> Option<(u16, u16)> {
     let rect = f.size();
 
     // Compute the offset due to the lines in the search bar
-    let text_width = unsafe {CHANNEL_TEXT_WIDTH};
+    let text_width = unsafe { CHANNEL_TEXT_WIDTH };
     let lines: Vec<String> =
         app.data
             .search_box
@@ -76,7 +81,6 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
         .direction(Direction::Horizontal)
         .split(f.size());
 
-    
     draw_channels_column(f, app, chunks[0]);
     draw_chat(f, app, chunks[1]);
 }
@@ -131,7 +135,7 @@ fn draw_channels_column<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect)
         .direction(Direction::Vertical)
         .split(area);
 
-        draw_channels(f, app, chunks[1]);
+    draw_channels(f, app, chunks[1]);
 
     let input = Paragraph::new(Text::from(input))
         .block(Block::default().borders(Borders::ALL).title("Search"));
@@ -148,7 +152,7 @@ fn draw_channels_column<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect)
 
 fn draw_channels<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let channel_list_width = area.width.saturating_sub(2) as usize;
-    unsafe {CHANNEL_TEXT_WIDTH = channel_list_width};
+    unsafe { CHANNEL_TEXT_WIDTH = channel_list_width };
     let channels: Vec<ListItem> = app
         .data
         .channels
@@ -180,7 +184,6 @@ fn draw_channels<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray));
     f.render_stateful_widget(channels, area, &mut app.data.channels.state);
 }
-
 
 fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let text_width = area.width.saturating_sub(2) as usize;
