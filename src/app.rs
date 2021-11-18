@@ -6,10 +6,9 @@ use crate::storage::Storage;
 use crate::util::{self, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX};
 
 use anyhow::{anyhow, Context as _};
-use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use itertools::FoldWhile::{Continue, Done};
 use itertools::Itertools;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use log::error;
 use notify_rust::Notification;
 use phonenumber::{Mode, PhoneNumber};
