@@ -14,4 +14,8 @@ pub static SHORTCUTS: &[ShortCut] = &[
         event: "Tab",
         description: "When a message is selected, proceeds to try and read an emoji code (e.g. `:blush:`) from the input box and send the corresponding reaction on the selected message.",
     },
+    ShortCut {
+        event: "ALT + Enter",
+        description: "Add a newline when editing a message.",
+    },
 ];
