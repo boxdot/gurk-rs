@@ -196,7 +196,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                     let col = event.column;
                     let row = event.row;
                     if let Some(channel_idx) =
-                        ui::coords_within_channels_view(&terminal.get_frame(), col, row)
+                        ui::coords_within_channels_view(&terminal.get_frame(), &app, col, row)
                             .map(|(_, row)| row as usize)
                             .filter(|&idx| idx < app.data.channels.items.len())
                     {

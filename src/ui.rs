@@ -16,12 +16,36 @@ use uuid::Uuid;
 use std::borrow::Cow;
 
 pub const CHANNEL_VIEW_RATIO: u32 = 4;
+pub static mut CHANNEL_TEXT_WIDTH: usize = 0;
 
-pub fn coords_within_channels_view<B: Backend>(f: &Frame<B>, x: u16, y: u16) -> Option<(u16, u16)> {
+pub fn coords_within_channels_view<B: Backend>(f: &Frame<B>, app: &App, x: u16, y: u16) -> Option<(u16, u16)> {
     let rect = f.size();
+
+    // Compute the offset due to the lines in the search bar
+    let text_width = unsafe {CHANNEL_TEXT_WIDTH};
+    let lines: Vec<String> =
+        app.data
+            .search_box
+            .data
+            .chars()
+            .enumerate()
+            .fold(Vec::new(), |mut lines, (idx, c)| {
+                if idx % text_width == 0 {
+                    lines.push(String::new());
+                }
+                match c {
+                    '\n' => {
+                        lines.last_mut().unwrap().push('\n');
+                        lines.push(String::new())
+                    }
+                    _ => lines.last_mut().unwrap().push(c),
+                }
+                lines
+            });
+    let num_input_lines = lines.len().max(1);
     // 1 offset around the view for taking the border into account
     if 0 < x && x < rect.width / CHANNEL_VIEW_RATIO as u16 && 0 < y && y + 1 < rect.height {
-        Some((x - 1, y - 1))
+        Some((x - 1, y - (3 + num_input_lines as u16)))
     } else {
         None
     }
@@ -52,7 +76,79 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
         .direction(Direction::Horizontal)
         .split(f.size());
 
-    let channel_list_width = chunks[0].width.saturating_sub(2) as usize;
+    
+    draw_channels_column(f, app, chunks[0]);
+    draw_chat(f, app, chunks[1]);
+}
+
+fn draw_channels_column<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
+    let text_width = area.width.saturating_sub(2) as usize;
+    let lines: Vec<String> =
+        app.data
+            .search_box
+            .data
+            .chars()
+            .enumerate()
+            .fold(Vec::new(), |mut lines, (idx, c)| {
+                if idx % text_width == 0 {
+                    lines.push(String::new());
+                }
+                match c {
+                    '\n' => {
+                        lines.last_mut().unwrap().push('\n');
+                        lines.push(String::new())
+                    }
+                    _ => lines.last_mut().unwrap().push(c),
+                }
+                lines
+            });
+    // chars since newline on `cursor_y` line
+    let mut cursor_x = app.data.search_box.input_cursor_chars;
+    // line selected by `app.data.input_cursor`
+    let mut cursor_y = 0;
+    for string in &lines {
+        cursor_y += 1;
+        match string.len().cmp(&cursor_x) {
+            std::cmp::Ordering::Less => cursor_x -= string.width(),
+            _ => break,
+        };
+    }
+    let num_input_lines = lines.len().max(1);
+    let input: Vec<Spans> = lines.into_iter().map(Spans::from).collect();
+    let extra_cursor_line = if cursor_x > 0 && cursor_x % text_width == 0 {
+        1
+    } else {
+        0
+    };
+    let chunks = Layout::default()
+        .constraints(
+            [
+                Constraint::Length(num_input_lines as u16 + 2 + extra_cursor_line),
+                Constraint::Min(0),
+            ]
+            .as_ref(),
+        )
+        .direction(Direction::Vertical)
+        .split(area);
+
+        draw_channels(f, app, chunks[1]);
+
+    let input = Paragraph::new(Text::from(input))
+        .block(Block::default().borders(Borders::ALL).title("Search"));
+    f.render_widget(input, chunks[0]);
+    if app.is_searching {
+        f.set_cursor(
+            // Put cursor past the end of the input text
+            chunks[0].x + ((cursor_x as u16) % text_width as u16) + 1,
+            // Move one line down, from the border to the input line
+            chunks[0].y + (cursor_x as u16 / (text_width as u16)) + cursor_y.max(1) as u16,
+        );
+    }
+}
+
+fn draw_channels<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
+    let channel_list_width = area.width.saturating_sub(2) as usize;
+    unsafe {CHANNEL_TEXT_WIDTH = channel_list_width};
     let channels: Vec<ListItem> = app
         .data
         .channels
@@ -82,16 +178,16 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     let channels = List::new(channels)
         .block(Block::default().borders(Borders::ALL).title("Channels"))
         .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray));
-    f.render_stateful_widget(channels, chunks[0], &mut app.data.channels.state);
-
-    draw_chat(f, app, chunks[1]);
+    f.render_stateful_widget(channels, area, &mut app.data.channels.state);
 }
+
 
 fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let text_width = area.width.saturating_sub(2) as usize;
     let lines: Vec<String> =
         app.data
-            .input.data
+            .input
+            .data
             .chars()
             .enumerate()
             .fold(Vec::new(), |mut lines, (idx, c)| {
@@ -141,12 +237,14 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let input = Paragraph::new(Text::from(input))
         .block(Block::default().borders(Borders::ALL).title("Input"));
     f.render_widget(input, chunks[1]);
-    f.set_cursor(
-        // Put cursor past the end of the input text
-        chunks[1].x + ((cursor_x as u16) % text_width as u16) + 1,
-        // Move one line down, from the border to the input line
-        chunks[1].y + (cursor_x as u16 / (text_width as u16)) + cursor_y.max(1) as u16,
-    );
+    if !app.is_searching {
+        f.set_cursor(
+            // Put cursor past the end of the input text
+            chunks[1].x + ((cursor_x as u16) % text_width as u16) + 1,
+            // Move one line down, from the border to the input line
+            chunks[1].y + (cursor_x as u16 / (text_width as u16)) + cursor_y.max(1) as u16,
+        );
+    }
 }
 
 fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
