@@ -101,7 +101,8 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
                 }
                 match c {
                     '\n' => {
-                        lines.last_mut().unwrap().push('\n');
+                        // This is currently unused
+                        // lines.last_mut().unwrap().push('\n');
                         lines.push(String::new())
                     }
                     _ => lines.last_mut().unwrap().push(c),
@@ -112,10 +113,11 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let mut cursor_x = app.data.input_cursor_chars;
     // line selected by `app.data.input_cursor`
     let mut cursor_y = 0;
-    for string in &lines {
+    for (i, string) in (&lines).iter().enumerate() {
         cursor_y += 1;
-        match string.len().cmp(&cursor_x) {
+        match string.width().cmp(&cursor_x) {
             std::cmp::Ordering::Less => cursor_x -= string.width(),
+            std::cmp::Ordering::Equal if i < lines.len() - 1 => cursor_x -= string.width(),
             _ => break,
         };
     }
