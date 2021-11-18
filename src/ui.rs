@@ -48,6 +48,10 @@ pub fn coords_within_channels_view<B: Backend>(
                 lines
             });
     let num_input_lines = lines.len().max(1);
+
+    if y < 3 + num_input_lines as u16 {
+        return None;
+    }
     // 1 offset around the view for taking the border into account
     if 0 < x && x < rect.width / CHANNEL_VIEW_RATIO as u16 && 0 < y && y + 1 < rect.height {
         Some((x - 1, y - (3 + num_input_lines as u16)))
@@ -154,12 +158,11 @@ fn draw_channels<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let channel_list_width = area.width.saturating_sub(2) as usize;
     let pattern = app.data.search_box.data.as_str();
     unsafe { CHANNEL_TEXT_WIDTH = channel_list_width };
+    app.data.channels.filter_channels(pattern);
     let channels: Vec<ListItem> = app
         .data
         .channels
-        .items
         .iter()
-        .filter(|c| pattern.is_empty() || c.name.contains(pattern))
         .map(|channel| {
             let unread_messages_label = if channel.unread_messages != 0 {
                 format!(" ({})", channel.unread_messages)

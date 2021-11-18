@@ -3,7 +3,9 @@ use crate::signal::{
     self, GroupIdentifierBytes, GroupMasterKeyBytes, ResolvedGroup, SignalManager,
 };
 use crate::storage::Storage;
-use crate::util::{self, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX};
+use crate::util::{
+    self, FilteredStatefulList, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX,
+};
 
 use anyhow::{anyhow, Context as _};
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
@@ -160,7 +162,7 @@ impl BoxData {
 
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppData {
-    pub channels: StatefulList<Channel>,
+    pub channels: FilteredStatefulList<Channel>,
     pub names: HashMap<Uuid, String>,
     #[serde(skip)] // ! We may want to save it
     pub input: BoxData,
@@ -227,6 +229,10 @@ pub struct GroupData {
 }
 
 impl Channel {
+    pub fn match_pattern(&self, pattern: &str) -> bool {
+        self.name.contains(pattern) || pattern.is_empty()
+    }
+
     fn user_id(&self) -> Option<Uuid> {
         match self.id {
             ChannelId::User(id) => Some(id),

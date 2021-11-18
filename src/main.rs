@@ -200,7 +200,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                             .map(|(_, row)| row as usize)
                             .filter(|&idx| idx < app.data.channels.items.len())
                     {
-                        app.data.channels.state.select(Some(channel_idx as usize));
+                        app.data.channels.state.select(Some(channel_idx));
                         if app.reset_unread_messages() {
                             app.save().unwrap();
                         }

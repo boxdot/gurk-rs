@@ -139,7 +139,7 @@ pub mod test {
 mod tests {
     use crate::{
         app::{BoxData, Channel, ChannelId},
-        util::StatefulList,
+        util::FilteredStatefulList,
     };
 
     use super::*;
@@ -244,7 +244,7 @@ mod tests {
                 input_cursor_chars: 10,
             },
             names: [(user_id, user_name.clone())].iter().cloned().collect(),
-            channels: StatefulList::with_items(vec![Channel {
+            channels: FilteredStatefulList::_with_items(vec![Channel {
                 id: ChannelId::User(user_id),
                 name: user_name.clone(),
                 group_data: None,
