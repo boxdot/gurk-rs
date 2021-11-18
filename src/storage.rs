@@ -151,14 +151,14 @@ mod tests {
         let user_name = "Tyler Durden".to_string();
         let app_data = AppData {
             input: BoxData {
-                data: "some input".to_string(),
-                input_cursor: 10,
-                input_cursor_chars: 10,
+                data: "".to_string(),
+                input_cursor: 0,
+                input_cursor_chars: 0,
             },
             search_box: BoxData {
-                data: "some input".to_string(),
-                input_cursor: 10,
-                input_cursor_chars: 10,
+                data: "".to_string(),
+                input_cursor: 0,
+                input_cursor_chars: 0,
             },
             names: [(user_id, user_name.clone())].iter().cloned().collect(),
             ..Default::default()
@@ -202,14 +202,14 @@ mod tests {
         let user_name = "Tyler Durden".to_string();
         let app_data = AppData {
             input: BoxData {
-                data: "some input".to_string(),
-                input_cursor: 10,
-                input_cursor_chars: 10,
+                data: "".to_string(),
+                input_cursor: 0,
+                input_cursor_chars: 0,
             },
             search_box: BoxData {
-                data: "some input".to_string(),
-                input_cursor: 10,
-                input_cursor_chars: 10,
+                data: "".to_string(),
+                input_cursor: 0,
+                input_cursor_chars: 0,
             },
             names: [(user_id, user_name.clone())].iter().cloned().collect(),
             ..Default::default()
@@ -239,7 +239,7 @@ mod tests {
                 input_cursor_chars: 10,
             },
             search_box: BoxData {
-                data: "some input".to_string(),
+                data: "some search".to_string(),
                 input_cursor: 10,
                 input_cursor_chars: 10,
             },
