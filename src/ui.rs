@@ -91,7 +91,7 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let text_width = area.width.saturating_sub(2) as usize;
     let lines: Vec<String> =
         app.data
-            .input
+            .input.data
             .chars()
             .enumerate()
             .fold(Vec::new(), |mut lines, (idx, c)| {
@@ -108,7 +108,7 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
                 lines
             });
     // chars since newline on `cursor_y` line
-    let mut cursor_x = app.data.input_cursor_chars;
+    let mut cursor_x = app.data.input.input_cursor_chars;
     // line selected by `app.data.input_cursor`
     let mut cursor_y = 0;
     for string in &lines {

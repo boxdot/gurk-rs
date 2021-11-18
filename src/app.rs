@@ -39,19 +39,133 @@ pub struct App {
     url_regex: LazyRegex,
     attachment_regex: LazyRegex,
     display_help: bool,
+    pub is_searching: bool,
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct BoxData {
+    pub data: String,
+    /// Input position in bytes (not number of chars)
+    pub input_cursor: usize,
+    /// Input position in chars
+    pub input_cursor_chars: usize,
+}
+
+impl BoxData {
+    pub fn on_left(&mut self) -> Option<()> {
+        let mut idx = self.input_cursor.checked_sub(1)?;
+        while !self.data.is_char_boundary(idx) {
+            idx -= 1;
+        }
+        self.input_cursor = idx;
+        self.input_cursor_chars -= 1;
+        Some(())
+    }
+
+    fn word_operation(&mut self, op: impl Fn(&mut BoxData) -> Option<()>) -> Option<()> {
+        while op(self).is_some() {
+            if self.data.as_bytes().get(self.input_cursor)? != &b' ' {
+                break;
+            }
+        }
+        while op(self).is_some() {
+            if self.data.as_bytes().get(self.input_cursor)? == &b' ' {
+                return Some(());
+            }
+        }
+        None
+    }
+
+    /// Move a word back
+    pub fn move_back_word(&mut self) {
+        self.on_left();
+        self.word_operation(Self::on_left);
+        if self.data.as_bytes().get(self.input_cursor) == Some(&b' ') {
+            self.on_right();
+        }
+    }
+
+    /// Move a word forward
+    pub fn move_forward_word(&mut self) {
+        self.word_operation(Self::on_right);
+        while self.data.as_bytes().get(self.input_cursor) == Some(&b' ') {
+            self.on_right();
+        }
+    }
+
+    pub fn on_home(&mut self) {
+        self.input_cursor = 0;
+        self.input_cursor_chars = 0;
+    }
+
+    pub fn on_end(&mut self) {
+        self.input_cursor = self.data.len();
+        self.input_cursor_chars = self.data.width();
+    }
+
+    pub fn on_right(&mut self) -> Option<()> {
+        let mut idx = Some(self.input_cursor + 1).filter(|x| x <= &self.data.len())?;
+        while idx < self.data.len() && !self.data.is_char_boundary(idx) {
+            idx -= 1;
+        }
+        self.input_cursor = idx;
+        self.input_cursor_chars += 1;
+        Some(())
+    }
+
+    pub fn on_backspace(&mut self) -> Option<()> {
+        let mut idx = self.input_cursor.checked_sub(1)?;
+        while idx < self.data.len() && !self.data.is_char_boundary(idx) {
+            idx -= 1;
+        }
+        self.data.remove(idx);
+        self.input_cursor = idx;
+        self.input_cursor_chars -= 1;
+        Some(())
+    }
+
+    pub fn on_delete_word(&mut self) -> Option<()> {
+        while self
+            .data
+            .as_bytes()
+            .get(self.input_cursor.checked_sub(1)?)?
+            == &b' '
+        {
+            self.on_backspace();
+        }
+        while self
+            .data
+            .as_bytes()
+            .get(self.input_cursor.checked_sub(1)?)?
+            != &b' '
+        {
+            self.on_backspace();
+        }
+        Some(())
+    }
+
+    pub fn on_delete_suffix(&mut self) {
+        if self.input_cursor < self.data.len() {
+            self.data.truncate(self.input_cursor);
+        }
+    }
+
+    pub fn put_char(&mut self, c: char) {
+        let idx = self.input_cursor;
+        self.data.insert(idx, c);
+        self.input_cursor += c.len_utf8();
+        self.input_cursor_chars += 1;
+    }
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppData {
     pub channels: StatefulList<Channel>,
     pub names: HashMap<Uuid, String>,
-    pub input: String,
-    /// Input position in bytes (not number of chars)
+    #[serde(skip)] // ! We may want to save it
+    pub input: BoxData,
     #[serde(skip)]
-    pub input_cursor: usize,
-    /// Input position in chars
-    #[serde(skip)]
-    pub input_cursor_chars: usize,
+    pub search_box: BoxData,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -237,7 +351,16 @@ impl App {
             url_regex: LazyRegex::new(URL_REGEX),
             attachment_regex: LazyRegex::new(ATTACHMENT_REGEX),
             display_help: false,
+            is_searching: false,
         })
+    }
+
+    pub fn get_input(&mut self) -> &mut BoxData {
+        if self.is_searching {
+            &mut self.data.search_box
+        } else {
+            &mut self.data.input
+        }
     }
 
     pub fn save(&self) -> anyhow::Result<()> {
@@ -248,17 +371,12 @@ impl App {
         name_by_id(&self.data.names, id)
     }
 
-    pub fn put_char(&mut self, c: char) {
-        let idx = self.data.input_cursor;
-        self.data.input.insert(idx, c);
-        self.data.input_cursor += c.len_utf8();
-        self.data.input_cursor_chars += 1;
-    }
+    
 
     pub fn on_key(&mut self, key: KeyCode) -> anyhow::Result<()> {
         match key {
-            KeyCode::Char('\r') => self.put_char('\n'),
-            KeyCode::Enter if !self.data.input.is_empty() => {
+            KeyCode::Char('\r') => self.get_input().put_char('\n'),
+            KeyCode::Enter if !self.data.input.data.is_empty() && !self.is_searching => {
                 if let Some(idx) = self.data.channels.state.selected() {
                     self.send_input(idx)?;
                 }
@@ -267,13 +385,13 @@ impl App {
                 // input is empty
                 self.try_open_url();
             }
-            KeyCode::Home => self.on_home(),
-            KeyCode::End => self.on_end(),
+            KeyCode::Home => self.get_input().on_home(),
+            KeyCode::End => self.get_input().on_end(),
             KeyCode::Backspace => {
-                self.on_backspace();
+                self.get_input().on_backspace();
             }
             KeyCode::Esc => self.reset_message_selection(),
-            KeyCode::Char(c) => self.put_char(c),
+            KeyCode::Char(c) => self.get_input().put_char(c),
             KeyCode::Tab => {
                 if let Some(idx) = self.data.channels.state.selected() {
                     self.add_reaction(idx);
@@ -301,10 +419,11 @@ impl App {
     ///
     /// Inner is None, if the reaction should be removed.
     fn take_reaction(&mut self) -> Option<Option<String>> {
-        if self.data.input.is_empty() {
+        let input_box = self.get_input();
+        if input_box.data.is_empty() {
             Some(None)
         } else {
-            let emoji = to_emoji(&self.data.input)?.to_string();
+            let emoji = to_emoji(&input_box.data)?.to_string();
             self.take_input();
             Some(Some(emoji))
         }
@@ -358,9 +477,10 @@ impl App {
     }
 
     fn take_input(&mut self) -> String {
-        self.data.input_cursor = 0;
-        self.data.input_cursor_chars = 0;
-        std::mem::take(&mut self.data.input)
+        let input_box = self.get_input();
+        input_box.input_cursor = 0;
+        input_box.input_cursor_chars = 0;
+        std::mem::take(&mut input_box.data)
     }
 
     fn send_input(&mut self, channel_idx: usize) -> anyhow::Result<()> {
@@ -415,106 +535,6 @@ impl App {
             }
         }
         false
-    }
-
-    pub fn on_left(&mut self) -> Option<()> {
-        let mut idx = self.data.input_cursor.checked_sub(1)?;
-        while !self.data.input.is_char_boundary(idx) {
-            idx -= 1;
-        }
-        self.data.input_cursor = idx;
-        self.data.input_cursor_chars -= 1;
-        Some(())
-    }
-
-    fn word_operation(&mut self, op: impl Fn(&mut App) -> Option<()>) -> Option<()> {
-        while op(self).is_some() {
-            if self.data.input.as_bytes().get(self.data.input_cursor)? != &b' ' {
-                break;
-            }
-        }
-        while op(self).is_some() {
-            if self.data.input.as_bytes().get(self.data.input_cursor)? == &b' ' {
-                return Some(());
-            }
-        }
-        None
-    }
-
-    /// Move a word back
-    pub fn move_back_word(&mut self) {
-        self.on_left();
-        self.word_operation(Self::on_left);
-        if self.data.input.as_bytes().get(self.data.input_cursor) == Some(&b' ') {
-            self.on_right();
-        }
-    }
-
-    /// Move a word forward
-    pub fn move_forward_word(&mut self) {
-        self.word_operation(Self::on_right);
-        while self.data.input.as_bytes().get(self.data.input_cursor) == Some(&b' ') {
-            self.on_right();
-        }
-    }
-
-    pub fn on_home(&mut self) {
-        self.data.input_cursor = 0;
-        self.data.input_cursor_chars = 0;
-    }
-
-    pub fn on_end(&mut self) {
-        self.data.input_cursor = self.data.input.len();
-        self.data.input_cursor_chars = self.data.input.width();
-    }
-
-    pub fn on_right(&mut self) -> Option<()> {
-        let mut idx = Some(self.data.input_cursor + 1).filter(|x| x <= &self.data.input.len())?;
-        while idx < self.data.input.len() && !self.data.input.is_char_boundary(idx) {
-            idx -= 1;
-        }
-        self.data.input_cursor = idx;
-        self.data.input_cursor_chars += 1;
-        Some(())
-    }
-
-    pub fn on_backspace(&mut self) -> Option<()> {
-        let mut idx = self.data.input_cursor.checked_sub(1)?;
-        while idx < self.data.input.len() && !self.data.input.is_char_boundary(idx) {
-            idx -= 1;
-        }
-        self.data.input.remove(idx);
-        self.data.input_cursor = idx;
-        self.data.input_cursor_chars -= 1;
-        Some(())
-    }
-
-    pub fn on_delete_word(&mut self) -> Option<()> {
-        while self
-            .data
-            .input
-            .as_bytes()
-            .get(self.data.input_cursor.checked_sub(1)?)?
-            == &b' '
-        {
-            self.on_backspace();
-        }
-        while self
-            .data
-            .input
-            .as_bytes()
-            .get(self.data.input_cursor.checked_sub(1)?)?
-            != &b' '
-        {
-            self.on_backspace();
-        }
-        Some(())
-    }
-
-    pub fn on_delete_suffix(&mut self) {
-        if self.data.input_cursor < self.data.input.len() {
-            self.data.input.truncate(self.data.input_cursor);
-        }
     }
 
     pub async fn on_message(&mut self, content: Content) -> anyhow::Result<()> {
@@ -1085,6 +1105,10 @@ impl App {
         self.display_help = !self.display_help;
     }
 
+    pub fn toggle_search(&mut self) {
+        self.is_searching = !self.is_searching;
+    }
+
     pub fn is_help(&self) -> bool {
         self.display_help
     }
@@ -1169,7 +1193,7 @@ mod tests {
         let (mut app, sent_messages) = test_app();
         let input = "Hello, World!";
         for c in input.chars() {
-            app.put_char(c);
+            app.get_input().put_char(c);
         }
         app.send_input(0).unwrap();
 
@@ -1179,9 +1203,9 @@ mod tests {
 
         assert_eq!(app.data.channels.items[0].unread_messages, 0);
 
-        assert_eq!(app.data.input, "");
-        assert_eq!(app.data.input_cursor, 0);
-        assert_eq!(app.data.input_cursor_chars, 0);
+        assert_eq!(app.get_input().data, "");
+        assert_eq!(app.get_input().input_cursor, 0);
+        assert_eq!(app.get_input().input_cursor_chars, 0);
     }
 
     #[test]
@@ -1189,10 +1213,10 @@ mod tests {
         let (mut app, sent_messages) = test_app();
         let input = "👻";
         for c in input.chars() {
-            app.put_char(c);
+            app.get_input().put_char(c);
         }
-        assert_eq!(app.data.input_cursor, 4);
-        assert_eq!(app.data.input_cursor_chars, 1);
+        assert_eq!(app.get_input().input_cursor, 4);
+        assert_eq!(app.get_input().input_cursor_chars, 1);
 
         app.send_input(0).unwrap();
 
@@ -1200,9 +1224,9 @@ mod tests {
         assert_eq!(sent.len(), 1);
         assert_eq!(sent[0].message.as_ref().unwrap(), input);
 
-        assert_eq!(app.data.input, "");
-        assert_eq!(app.data.input_cursor, 0);
-        assert_eq!(app.data.input_cursor_chars, 0);
+        assert_eq!(app.get_input().data, "");
+        assert_eq!(app.get_input().input_cursor, 0);
+        assert_eq!(app.get_input().input_cursor_chars, 0);
     }
 
     #[test]
@@ -1210,7 +1234,7 @@ mod tests {
         let (mut app, sent_messages) = test_app();
         let input = ":thumbsup:";
         for c in input.chars() {
-            app.put_char(c);
+            app.get_input().put_char(c);
         }
 
         app.send_input(0).unwrap();
@@ -1226,7 +1250,7 @@ mod tests {
 
         app.data.channels.items[0].messages.state.select(Some(0));
 
-        app.put_char('👍');
+        app.get_input().put_char('👍');
         app.add_reaction(0);
 
         let reactions = &app.data.channels.items[0].messages.items[0].reactions;
@@ -1241,7 +1265,7 @@ mod tests {
         app.data.channels.items[0].messages.state.select(Some(0));
 
         for c in ":thumbsup:".chars() {
-            app.put_char(c);
+            app.get_input().put_char(c);
         }
         app.add_reaction(0);
 
@@ -1267,15 +1291,14 @@ mod tests {
     #[test]
     fn test_add_invalid_reaction() {
         let (mut app, _sent_messages) = test_app();
-
         app.data.channels.items[0].messages.state.select(Some(0));
 
         for c in ":thumbsup".chars() {
-            app.put_char(c);
+            app.get_input().put_char(c);
         }
         app.add_reaction(0);
 
-        assert_eq!(app.data.input, ":thumbsup");
+        assert_eq!(app.get_input().data, ":thumbsup");
         let reactions = &app.data.channels.items[0].messages.items[0].reactions;
         assert!(reactions.is_empty());
     }

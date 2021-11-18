@@ -97,11 +97,12 @@ impl JsonStorage {
     }
 
     fn load_app_data_from(data_path: impl AsRef<Path>) -> anyhow::Result<AppData> {
+        
         info!("loading app data from: {}", data_path.as_ref().display());
         let f = BufReader::new(File::open(data_path)?);
         let mut data: AppData = serde_json::from_reader(f)?;
-        data.input_cursor = data.input.len();
-        data.input_cursor_chars = data.input.width();
+        data.input.input_cursor = data.input.data.len();
+        data.input.input_cursor_chars = data.input.data.width();
         Ok(data)
     }
 }
@@ -137,10 +138,7 @@ pub mod test {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        app::{Channel, ChannelId},
-        util::StatefulList,
-    };
+    use crate::{app::{BoxData, Channel, ChannelId}, util::StatefulList};
 
     use super::*;
     use tempfile::NamedTempFile;
@@ -150,9 +148,16 @@ mod tests {
         let user_id = Uuid::new_v4();
         let user_name = "Tyler Durden".to_string();
         let app_data = AppData {
-            input: "some input".to_string(),
-            input_cursor: 10,
+            input: BoxData{
+                data: "some input".to_string(),
+                input_cursor: 10,
+                input_cursor_chars: 10,
+            },
+            search_box: BoxData{
+                data: "some input".to_string(),
+                input_cursor: 10,
             input_cursor_chars: 10,
+            },
             names: [(user_id, user_name.clone())].iter().cloned().collect(),
             ..Default::default()
         };
@@ -194,9 +199,16 @@ mod tests {
         let user_id = Uuid::new_v4();
         let user_name = "Tyler Durden".to_string();
         let app_data = AppData {
-            input: "some input".to_string(),
-            input_cursor: 10,
+            input: BoxData{
+                data: "some input".to_string(),
+                input_cursor: 10,
+                input_cursor_chars: 10,
+            },
+            search_box: BoxData{
+                data: "some input".to_string(),
+                input_cursor: 10,
             input_cursor_chars: 10,
+            },
             names: [(user_id, user_name.clone())].iter().cloned().collect(),
             ..Default::default()
         };
@@ -219,9 +231,16 @@ mod tests {
         let user_id = Uuid::new_v4();
         let user_name = "Tyler Durden".to_string();
         let app_data = AppData {
-            input: "some input".to_string(),
-            input_cursor: 10,
+            input: BoxData{
+                data: "some input".to_string(),
+                input_cursor: 10,
+                input_cursor_chars: 10,
+            },
+            search_box: BoxData{
+                data: "some input".to_string(),
+                input_cursor: 10,
             input_cursor_chars: 10,
+            },
             names: [(user_id, user_name.clone())].iter().cloned().collect(),
             channels: StatefulList::with_items(vec![Channel {
                 id: ChannelId::User(user_id),

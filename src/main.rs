@@ -239,9 +239,9 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                         .modifiers
                         .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
                     {
-                        app.move_back_word();
+                        app.get_input().move_back_word();
                     } else {
-                        app.on_left();
+                        app.get_input().on_left();
                     }
                 }
                 KeyCode::Up if event.modifiers.contains(KeyModifiers::ALT) => app.on_pgup(),
@@ -251,29 +251,30 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                         .modifiers
                         .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
                     {
-                        app.move_forward_word();
+                        app.get_input().move_forward_word();
                     } else {
-                        app.on_right();
+                        app.get_input().on_right();
                     }
                 }
                 KeyCode::Down if event.modifiers.contains(KeyModifiers::ALT) => app.on_pgdn(),
                 KeyCode::Down => app.select_next_channel(),
                 KeyCode::PageUp => app.on_pgup(),
                 KeyCode::PageDown => app.on_pgdn(),
+                KeyCode::Tab if event.modifiers.contains(KeyModifiers::ALT) => app.toggle_search(),
                 KeyCode::Char('f') if event.modifiers.contains(KeyModifiers::ALT) => {
-                    app.move_forward_word();
+                    app.get_input().move_forward_word();
                 }
                 KeyCode::Char('b') if event.modifiers.contains(KeyModifiers::ALT) => {
-                    app.move_back_word();
+                    app.get_input().move_back_word();
                 }
                 KeyCode::Char('a') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                    app.on_home();
+                    app.get_input().on_home();
                 }
                 KeyCode::Char('e') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                    app.on_end();
+                    app.get_input().on_end();
                 }
                 KeyCode::Char('w') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                    app.on_delete_word();
+                    app.get_input().on_delete_word();
                 }
                 KeyCode::Char('j') if event.modifiers.contains(KeyModifiers::CONTROL) => {
                     app.select_next_channel();
@@ -286,10 +287,10 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                         .modifiers
                         .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
                 {
-                    app.on_delete_word();
+                    app.get_input().on_delete_word();
                 }
                 KeyCode::Char('k') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                    app.on_delete_suffix();
+                    app.get_input().on_delete_suffix();
                 }
                 code => app.on_key(code)?,
             },
