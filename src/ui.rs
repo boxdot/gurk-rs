@@ -152,12 +152,14 @@ fn draw_channels_column<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect)
 
 fn draw_channels<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let channel_list_width = area.width.saturating_sub(2) as usize;
+    let pattern = app.data.search_box.data.as_str();
     unsafe { CHANNEL_TEXT_WIDTH = channel_list_width };
     let channels: Vec<ListItem> = app
         .data
         .channels
         .items
         .iter()
+        .filter(|c| pattern.is_empty() || c.name.contains(pattern))
         .map(|channel| {
             let unread_messages_label = if channel.unread_messages != 0 {
                 format!(" ({})", channel.unread_messages)
