@@ -8,10 +8,13 @@ use crate::util::{
 };
 
 use anyhow::{anyhow, Context as _};
-use crossterm::event::{KeyCode, KeyEvent, MouseEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
+use itertools::FoldWhile::{Continue, Done};
+use itertools::Itertools;
 use log::error;
 use notify_rust::Notification;
 use phonenumber::{Mode, PhoneNumber};
+use presage::prelude::proto::{ReceiptMessage, TypingMessage};
 use presage::prelude::{
     content::{ContentBody, DataMessage, Metadata, SyncMessage},
     proto::{
@@ -27,9 +30,10 @@ use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
 
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::path::Path;
+use std::str::FromStr;
 
 pub struct App {
     pub config: Config,
@@ -55,6 +59,18 @@ pub struct BoxData {
 }
 
 impl BoxData {
+    pub fn put_char(&mut self, c: char) {
+        let idx = self.input_cursor;
+        self.data.insert(idx, c);
+        self.input_cursor += c.len_utf8();
+        self.input_cursor_chars += 1;
+    }
+
+    pub fn new_line(&mut self) {
+        self.put_char('\n');
+        self.input_cursor_chars -= 1;
+    }
+
     pub fn on_left(&mut self) -> Option<()> {
         let mut idx = self.input_cursor.checked_sub(1)?;
         while !self.data.is_char_boundary(idx) {
@@ -152,13 +168,6 @@ impl BoxData {
             self.data.truncate(self.input_cursor);
         }
     }
-
-    pub fn put_char(&mut self, c: char) {
-        let idx = self.input_cursor;
-        self.data.insert(idx, c);
-        self.input_cursor += c.len_utf8();
-        self.input_cursor_chars += 1;
-    }
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -180,6 +189,13 @@ pub struct Channel {
     #[serde(serialize_with = "Channel::serialize_msgs")]
     pub messages: StatefulList<Message>,
     pub unread_messages: usize,
+    pub typing: TypingSet,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TypingSet {
+    SingleTyping(bool),
+    GroupTyping(HashSet<Uuid>),
 }
 
 /// Proxy type which allows us to apply post-deserialization conversion.
@@ -200,12 +216,20 @@ pub struct JsonChannel {
 impl TryFrom<JsonChannel> for Channel {
     type Error = anyhow::Error;
     fn try_from(channel: JsonChannel) -> anyhow::Result<Self> {
+        let is_group = channel.group_data.is_some();
         let mut channel = Channel {
             id: channel.id,
             name: channel.name,
             group_data: channel.group_data,
             messages: channel.messages,
             unread_messages: channel.unread_messages,
+            typing: {
+                if is_group {
+                    TypingSet::GroupTyping(HashSet::new())
+                } else {
+                    TypingSet::SingleTyping(false)
+                }
+            },
         };
 
         // 1. The master key in ChannelId::Group was replaced by group identifier,
@@ -244,6 +268,24 @@ impl Channel {
         match pattern.chars().next().unwrap() {
             '@' => self.contains_user(&pattern[1..], hm),
             _ => self.name.contains(pattern),
+        }
+    }
+
+    pub fn reset_writing(&mut self, user: Uuid) {
+        match &mut self.typing {
+            TypingSet::GroupTyping(ref mut hash_set) => {
+                hash_set.remove(&user);
+            }
+            TypingSet::SingleTyping(_) => {
+                self.typing = TypingSet::SingleTyping(false);
+            }
+        }
+    }
+
+    pub fn is_writing(&self) -> bool {
+        match &self.typing {
+            TypingSet::GroupTyping(a) => !a.is_empty(),
+            TypingSet::SingleTyping(a) => *a,
         }
     }
 
@@ -305,6 +347,69 @@ impl ChannelId {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum TypingAction {
+    Started,
+    Stopped,
+}
+
+impl TypingAction {
+    pub fn from_i32(i: i32) -> Self {
+        match i {
+            0 => Self::Started,
+            1 => Self::Stopped,
+            _ => {
+                log::error!("Got incorrect TypingAction : {}", i);
+                Self::Stopped
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum Receipt {
+    Nothing,
+    Sent,
+    Received,
+    Read,
+}
+
+impl Default for Receipt {
+    fn default() -> Self {
+        Self::Nothing
+    }
+}
+
+impl Receipt {
+    pub fn write(&self) -> &'static str {
+        match self {
+            Self::Nothing => "",
+            Self::Sent => "(x)",
+            Self::Received => "(xx)",
+            Self::Read => "(xxx)",
+        }
+    }
+
+    pub fn update(&self, other: Self) -> Self {
+        *self.max(&other)
+    }
+
+    pub fn from_i32(i: i32) -> Self {
+        match i {
+            0 => Self::Received,
+            1 => Self::Read,
+            _ => Self::Nothing,
+        }
+    }
+
+    pub fn to_i32(self) -> i32 {
+        match self {
+            Self::Read => 1,
+            _ => 0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Message {
     pub from_id: Uuid,
@@ -316,6 +421,8 @@ pub struct Message {
     pub attachments: Vec<signal::Attachment>,
     #[serde(default)]
     pub reactions: Vec<(Uuid, String)>,
+    #[serde(default)]
+    pub receipt: Receipt,
 }
 
 impl Message {
@@ -327,6 +434,7 @@ impl Message {
             quote: None,
             attachments: Default::default(),
             reactions: Default::default(),
+            receipt: Default::default(),
         }
     }
 
@@ -338,6 +446,7 @@ impl Message {
             quote: None,
             attachments: Default::default(),
             reactions: Default::default(),
+            receipt: Default::default(),
         })
     }
 }
@@ -384,6 +493,29 @@ impl App {
         }
     }
 
+    pub fn writing_people(&self, channel: &Channel) -> String {
+        if !channel.is_writing() {
+            return String::from("");
+        }
+        let uuids: Vec<Uuid> = match &channel.typing {
+            TypingSet::GroupTyping(hash_set) => hash_set.clone().into_iter().collect(),
+            TypingSet::SingleTyping(a) => {
+                if *a {
+                    vec![channel.user_id().unwrap()]
+                } else {
+                    Vec::new()
+                }
+            }
+        };
+        format!(
+            "{:?} writing...",
+            uuids
+                .into_iter()
+                .map(|u| self.name_by_id(u))
+                .collect::<Vec<&str>>()
+        )
+    }
+
     pub fn save(&self) -> anyhow::Result<()> {
         self.storage.save_app_data(&self.data)
     }
@@ -392,10 +524,16 @@ impl App {
         name_by_id(&self.data.names, id)
     }
 
-    pub fn on_key(&mut self, key: KeyCode) -> anyhow::Result<()> {
-        match key {
+    pub fn on_key(&mut self, key: KeyEvent) -> anyhow::Result<()> {
+        match key.code {
             KeyCode::Char('\r') => self.get_input().put_char('\n'),
-            KeyCode::Enter if !self.data.input.data.is_empty() && !self.is_searching => {
+            KeyCode::Enter
+                if !self.get_input().data.is_empty()
+                    && key.modifiers.contains(KeyModifiers::ALT) =>
+            {
+                self.get_input().new_line();
+            }
+            KeyCode::Enter if !self.get_input().data.is_empty() && !self.is_searching => {
                 if let Some(idx) = self.data.channels.state.selected() {
                     self.send_input(idx)?;
                 }
@@ -690,7 +828,8 @@ impl App {
                         .to_string();
                     let channel_idx = self.ensure_contact_channel_exists(uuid, &name).await;
                     let from = self.data.channels.items[channel_idx].name.clone();
-
+                    // Reset typing notification as the Tipyng::Stop are not always sent by the server when a message is sent.
+                    self.data.channels.items[channel_idx].reset_writing(uuid);
                     (channel_idx, from)
                 };
 
@@ -733,6 +872,7 @@ impl App {
                                 }),
                             ..
                         }),
+                    read,
                     ..
                 }),
             ) => {
@@ -756,6 +896,13 @@ impl App {
                     remove.unwrap_or(false),
                     true,
                 );
+                read.into_iter().for_each(|r| {
+                    self.handle_receipt(
+                        Uuid::from_str(r.sender_uuid.unwrap().as_str()).unwrap(),
+                        1,
+                        vec![r.timestamp.unwrap()],
+                    )
+                });
                 return Ok(());
             }
             (
@@ -805,12 +952,160 @@ impl App {
                 );
                 return Ok(());
             }
+            (
+                Metadata {
+                    sender:
+                        ServiceAddress {
+                            uuid: Some(sender_uuid),
+                            ..
+                        },
+                    ..
+                },
+                ContentBody::ReceiptMessage(ReceiptMessage {
+                    r#type: Some(typ),
+                    timestamp: timestamps,
+                }),
+            ) => {
+                self.handle_receipt(sender_uuid, typ, timestamps);
+                return Ok(());
+            }
+
+            (
+                Metadata {
+                    sender:
+                        ServiceAddress {
+                            uuid: Some(sender_uuid),
+                            ..
+                        },
+                    ..
+                },
+                ContentBody::TypingMessage(TypingMessage {
+                    timestamp: Some(timest),
+                    group_id,
+                    action: Some(act),
+                }),
+            ) => {
+                let _ =
+                    self.handle_typing(sender_uuid, group_id, TypingAction::from_i32(act), timest);
+                return Ok(());
+            }
+
             _ => return Ok(()),
         };
 
         self.add_message_to_channel(channel_idx, message);
 
         Ok(())
+    }
+
+    pub fn send_receipts(&self, channel: &Channel, timestamps: Vec<u64>, receipt: Receipt) {
+        self.signal_manager
+            .send_receipt(channel, self.user_id, timestamps, receipt)
+    }
+
+    fn handle_typing(
+        &mut self,
+        sender_uuid: Uuid,
+        group_id: Option<Vec<u8>>,
+        action: TypingAction,
+        _timestamp: u64,
+    ) -> Result<(), ()> {
+        if let Some(gid) = group_id {
+            // It's in a group
+            let group = self
+                .data
+                .channels
+                .items
+                .iter_mut()
+                .find(|c| {
+                    if let ChannelId::Group(gid_other) = c.id {
+                        gid_other[..] == gid[..]
+                    } else {
+                        false
+                    }
+                })
+                .unwrap();
+            if let TypingSet::GroupTyping(ref mut hash_set) = group.typing {
+                match action {
+                    TypingAction::Started => {
+                        hash_set.insert(sender_uuid);
+                    }
+                    TypingAction::Stopped => {
+                        hash_set.remove(&sender_uuid);
+                    }
+                }
+            } else {
+                log::error!("Got a single typing hash set on a group.");
+            }
+        } else {
+            let chan = self
+                .data
+                .channels
+                .items
+                .iter_mut()
+                .find(|c| {
+                    if let ChannelId::User(other_uuid) = c.id {
+                        if other_uuid == sender_uuid {
+                            return true;
+                        }
+                    }
+                    false
+                })
+                .unwrap();
+
+            if let TypingSet::SingleTyping(_) = chan.typing {
+                match action {
+                    TypingAction::Started => {
+                        chan.typing = TypingSet::SingleTyping(true);
+                    }
+                    TypingAction::Stopped => {
+                        chan.typing = TypingSet::SingleTyping(false);
+                    }
+                }
+            } else {
+                log::error!("Got a single typing hash set on a group.");
+            }
+        }
+        Ok(())
+    }
+
+    fn handle_receipt(&mut self, sender_uuid: Uuid, typ: i32, timestamps: Vec<u64>) {
+        let earliest = timestamps.iter().min().unwrap();
+        for c in self.data.channels.items.iter_mut() {
+            match c.id {
+                ChannelId::User(other_uuid) if other_uuid == sender_uuid => {
+                    c.messages.items.iter_mut().rev().fold_while(0, |_, b| {
+                        match b.arrived_at.cmp(earliest) {
+                            std::cmp::Ordering::Less => Done(0),
+                            _ => {
+                                if timestamps.contains(&b.arrived_at) {
+                                    b.receipt = b.receipt.update(Receipt::from_i32(typ));
+                                }
+                                Continue(0)
+                            }
+                        }
+                    });
+                }
+                ChannelId::Group(_) => {
+                    if let Some(ref g_data) = c.group_data {
+                        if g_data.members.contains(&sender_uuid) {
+                            c.messages.items.iter_mut().rev().fold_while(0, |_, b| {
+                                match b.arrived_at.cmp(earliest) {
+                                    std::cmp::Ordering::Less => Done(0),
+                                    _ => {
+                                        if timestamps.contains(&b.arrived_at) {
+                                            b.receipt = b.receipt.update(Receipt::from_i32(typ));
+                                        }
+                                        Continue(0)
+                                    }
+                                }
+                            });
+                        }
+                    }
+                }
+                _ => (),
+            }
+        }
     }
 
     fn handle_reaction(
@@ -936,6 +1231,7 @@ impl App {
                 group_data: Some(group_data),
                 messages: StatefulList::with_items(Vec::new()),
                 unread_messages: 0,
+                typing: TypingSet::GroupTyping(HashSet::new()),
             });
             Ok(self.data.channels.items.len() - 1)
         }
@@ -1002,6 +1298,7 @@ impl App {
                 group_data: None,
                 messages: StatefulList::with_items(Vec::new()),
                 unread_messages: 0,
+                typing: TypingSet::SingleTyping(false),
             });
             self.data.channels.items.len() - 1
         }
@@ -1029,6 +1326,7 @@ impl App {
                 group_data: None,
                 messages: StatefulList::with_items(Vec::new()),
                 unread_messages: 0,
+                typing: TypingSet::SingleTyping(false),
             });
             self.data.channels.items.len() - 1
         }
@@ -1199,8 +1497,10 @@ mod tests {
                 quote: Default::default(),
                 attachments: Default::default(),
                 reactions: Default::default(),
+                receipt: Default::default(),
             }]),
             unread_messages: 1,
+            typing: TypingSet::GroupTyping(HashSet::new()),
         });
         app.data.channels.state.select(Some(0));
 

@@ -138,7 +138,7 @@ pub mod test {
 #[cfg(test)]
 mod tests {
     use crate::{
-        app::{BoxData, Channel, ChannelId},
+        app::{BoxData, Channel, ChannelId, TypingSet},
         util::FilteredStatefulList,
     };
 
@@ -250,6 +250,7 @@ mod tests {
                 group_data: None,
                 messages: Default::default(),
                 unread_messages: 0,
+                typing: TypingSet::SingleTyping(false),
             }]),
         };
 

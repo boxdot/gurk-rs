@@ -292,7 +292,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                 KeyCode::Char('k') if event.modifiers.contains(KeyModifiers::CONTROL) => {
                     app.get_input().on_delete_suffix();
                 }
-                code => app.on_key(code)?,
+                _ => app.on_key(event)?,
             },
             Some(Event::Message(content)) => {
                 if let Err(e) = app.on_message(content).await {
