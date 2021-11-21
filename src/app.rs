@@ -42,6 +42,7 @@ pub struct App {
     attachment_regex: LazyRegex,
     display_help: bool,
     pub is_searching: bool,
+    pub channel_text_width: usize,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -371,6 +372,7 @@ impl App {
             attachment_regex: LazyRegex::new(ATTACHMENT_REGEX),
             display_help: false,
             is_searching: false,
+            channel_text_width: 0,
         })
     }
 

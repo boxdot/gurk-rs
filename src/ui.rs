@@ -16,7 +16,6 @@ use uuid::Uuid;
 use std::borrow::Cow;
 
 pub const CHANNEL_VIEW_RATIO: u32 = 4;
-pub static mut CHANNEL_TEXT_WIDTH: usize = 0;
 
 pub fn coords_within_channels_view<B: Backend>(
     f: &Frame<B>,
@@ -27,7 +26,7 @@ pub fn coords_within_channels_view<B: Backend>(
     let rect = f.size();
 
     // Compute the offset due to the lines in the search bar
-    let text_width = unsafe { CHANNEL_TEXT_WIDTH };
+    let text_width = app.channel_text_width;
     let lines: Vec<String> =
         app.data
             .search_box
@@ -157,7 +156,7 @@ fn draw_channels_column<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect)
 fn draw_channels<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let channel_list_width = area.width.saturating_sub(2) as usize;
     let pattern = app.data.search_box.data.as_str();
-    unsafe { CHANNEL_TEXT_WIDTH = channel_list_width };
+    app.channel_text_width = channel_list_width;
     app.data.channels.filter_channels(pattern, &app.data.names);
     let channels: Vec<ListItem> = app
         .data
