@@ -325,12 +325,12 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
     send_receipts(app, height);
 
-    let channel = app
-        .data
-        .channels
-        .state
-        .selected()
-        .and_then(|idx| app.data.channels.items.get(idx));
+    let channel = app.data.channels.state.selected().and_then(|idx| {
+        app.data
+            .channels
+            .items
+            .get(*app.data.channels.filtered_items.get(idx).unwrap())
+    });
     let channel = match channel {
         Some(c) if !c.messages.items.is_empty() => c,
         _ => return,
