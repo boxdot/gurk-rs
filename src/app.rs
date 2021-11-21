@@ -535,7 +535,7 @@ impl App {
             }
             KeyCode::Enter if !self.get_input().data.is_empty() && !self.is_searching => {
                 if let Some(idx) = self.data.channels.state.selected() {
-                    self.send_input(idx)?;
+                    self.send_input(self.data.channels.filtered_items[idx])?;
                 }
             }
             KeyCode::Enter => {
