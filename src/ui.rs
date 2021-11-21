@@ -158,7 +158,7 @@ fn draw_channels<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let channel_list_width = area.width.saturating_sub(2) as usize;
     let pattern = app.data.search_box.data.as_str();
     unsafe { CHANNEL_TEXT_WIDTH = channel_list_width };
-    app.data.channels.filter_channels(pattern);
+    app.data.channels.filter_channels(pattern, &app.data.names);
     let channels: Vec<ListItem> = app
         .data
         .channels

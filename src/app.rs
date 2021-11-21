@@ -229,8 +229,21 @@ pub struct GroupData {
 }
 
 impl Channel {
-    pub fn match_pattern(&self, pattern: &str) -> bool {
-        self.name.contains(pattern) || pattern.is_empty()
+    pub fn contains_user(&self, name: &str, hm: &HashMap<Uuid, String>) -> bool {
+        match self.group_data {
+            Some(ref gd) => gd.members.iter().any(|u| name_by_id(hm, *u).contains(name)),
+            None => self.name.contains(name),
+        }
+    }
+
+    pub fn match_pattern(&self, pattern: &str, hm: &HashMap<Uuid, String>) -> bool {
+        if pattern.is_empty() {
+            return true;
+        }
+        match pattern.chars().next().unwrap() {
+            '@' => self.contains_user(&pattern[1..], hm),
+            _ => self.name.contains(pattern),
+        }
     }
 
     fn user_id(&self) -> Option<Uuid> {

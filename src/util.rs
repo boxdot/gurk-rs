@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::app::Channel;
 
 use super::MESSAGE_SCROLL_BACK;
@@ -6,6 +8,7 @@ use presage::prelude::PhoneNumber;
 use regex_automata::Regex;
 use serde::{Deserialize, Serialize};
 use tui::widgets::ListState;
+use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StatefulList<T> {
@@ -59,8 +62,8 @@ impl<T> Default for StatefulList<T> {
 }
 
 impl FilteredStatefulList<Channel> {
-    pub fn filter_channels(&mut self, pattern: &str) {
-        let lambda = |c: &Channel| c.match_pattern(pattern);
+    pub fn filter_channels(&mut self, pattern: &str, hm: &HashMap<Uuid, String>) {
+        let lambda = |c: &Channel| c.match_pattern(pattern, hm);
         self.filter_elements(lambda);
         self.state.select(Some(
             (self.filtered_items.len().max(1) - 1).min(self.state.selected().unwrap_or(0)),
