@@ -45,6 +45,7 @@ pub struct App {
 pub struct AppData {
     pub channels: StatefulList<Channel>,
     pub names: HashMap<Uuid, String>,
+    pub used_words: HashSet<String>,
     pub input: String,
     /// Input position in bytes (not number of chars)
     #[serde(skip)]
@@ -287,6 +288,11 @@ impl App {
                     self.add_reaction(idx);
                 }
             }
+            KeyCode::BackTab => {
+                if let Some(idx) = self.data.channels.state.selected() {
+                    self.complete(idx)?;
+                }
+            }
             _ => {}
         }
         Ok(())
@@ -315,6 +321,29 @@ impl App {
             let emoji = to_emoji(&self.data.input)?.to_string();
             self.take_input();
             Some(Some(emoji))
+        }
+    }
+
+    pub fn get_completion(&mut self, input: String) -> Option<String> {
+        let fragment = input.split(" ").last();
+        for word in self.data.used_words {
+            // returns None if it's not a prefix
+            let maybe_addition = word.strip_prefix(fragment);
+            match addition {
+                Some(extra) => return Some(format!("{}{}", input, extra)),
+                None => (),
+            }
+        }
+        // instead of immediately returning, you could keep
+        // the set of extensions and use a heuristic for
+        // selecting the best one. maybe used_words is a
+        // counter for frequency, or there's some context
+        return None()
+    }
+    pub fn complete(&mut self, channel_idx: usize) -> Option<()> {
+        let input = self.take_input();
+        for completion_char in get_completion(self, input).chars() {
+            self.put_char(completion_char)
         }
     }
 
@@ -373,6 +402,7 @@ impl App {
 
     fn send_input(&mut self, channel_idx: usize) -> anyhow::Result<()> {
         let input = self.take_input();
+        self.used_words.extend(HashSet::from_iter(input.split(" ").iter()))
         let (input, attachments) = self.extract_attachments(&input);
         let channel = &mut self.data.channels.items[channel_idx];
         let quote = channel.selected_message();

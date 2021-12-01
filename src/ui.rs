@@ -149,6 +149,8 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         // Move one line down, from the border to the input line
         chunks[1].y + (cursor_x as u16 / (text_width as u16)) + cursor_y.max(1) as u16,
     );
+    // completion needs to set_cursor to the new input
+    // and make this input widget render
 }
 
 fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
