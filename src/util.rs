@@ -65,9 +65,12 @@ impl FilteredStatefulList<Channel> {
     pub fn filter_channels(&mut self, pattern: &str, hm: &HashMap<Uuid, String>) {
         let lambda = |c: &Channel| c.match_pattern(pattern, hm);
         self.filter_elements(lambda);
-        self.state.select(Some(
-            (self.filtered_items.len().max(1) - 1).min(self.state.selected().unwrap_or(0)),
-        ));
+        // Update the selected message to not got past the bound of `self.filtered_items`
+        self.state.select(if self.filtered_items.is_empty() {
+            None
+        } else {
+            Some((self.filtered_items.len().max(1) - 1).min(self.state.selected().unwrap_or(0)))
+        });
     }
 }
 
