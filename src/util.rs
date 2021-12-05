@@ -1,15 +1,31 @@
+use std::collections::HashMap;
+
+use crate::app::Channel;
+
 use super::MESSAGE_SCROLL_BACK;
 use chrono::{DateTime, Local, NaiveDateTime, TimeZone as _, Utc};
 use presage::prelude::PhoneNumber;
 use regex_automata::Regex;
 use serde::{Deserialize, Serialize};
 use tui::widgets::ListState;
+use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StatefulList<T> {
     #[serde(skip)]
     pub state: ListState,
     pub items: Vec<T>,
+    #[serde(skip)]
+    pub rendered: Rendered,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FilteredStatefulList<T> {
+    #[serde(skip)]
+    pub state: ListState,
+    pub items: Vec<T>,
+    #[serde(skip)]
+    pub filtered_items: Vec<usize>,
     #[serde(skip)]
     pub rendered: Rendered,
 }
@@ -22,6 +38,14 @@ impl<T: PartialEq> PartialEq for StatefulList<T> {
 
 impl<T: Eq> Eq for StatefulList<T> {}
 
+impl<T: PartialEq> PartialEq for FilteredStatefulList<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.items == other.items
+    }
+}
+
+impl<T: Eq> Eq for FilteredStatefulList<T> {}
+
 #[derive(Debug, Clone, Default)]
 pub struct Rendered {
     pub offset: usize,
@@ -33,6 +57,49 @@ impl<T> Default for StatefulList<T> {
             state: Default::default(),
             items: Vec::new(),
             rendered: Default::default(),
+        }
+    }
+}
+
+impl FilteredStatefulList<Channel> {
+    pub fn filter_channels(&mut self, pattern: &str, hm: &HashMap<Uuid, String>) {
+        let lambda = |c: &Channel| c.match_pattern(pattern, hm);
+        self.filter_elements(lambda);
+        // Update the selected message to not got past the bound of `self.filtered_items`
+        self.state.select(if self.filtered_items.is_empty() {
+            None
+        } else {
+            Some((self.filtered_items.len().max(1) - 1).min(self.state.selected().unwrap_or(0)))
+        });
+    }
+}
+
+impl<T> Default for FilteredStatefulList<T> {
+    fn default() -> Self {
+        Self {
+            state: Default::default(),
+            items: Vec::new(),
+            rendered: Default::default(),
+            filtered_items: Vec::new(),
+        }
+    }
+}
+
+pub struct StatefulIterator<'a, T> {
+    index: usize,
+    list: &'a FilteredStatefulList<T>,
+}
+
+impl<'a, T> Iterator for StatefulIterator<'a, T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.list.filtered_items.len() {
+            None
+        } else {
+            let res = self.list.items.get(self.list.filtered_items[self.index]);
+            self.index += 1;
+            res
         }
     }
 }
@@ -85,6 +152,98 @@ impl<T> StatefulList<T> {
             }
             None => {
                 if !self.items.is_empty() {
+                    0
+                } else {
+                    return; // nothing to select
+                }
+            }
+        };
+        self.state.select(Some(i));
+    }
+}
+
+impl<T> FilteredStatefulList<T> {
+    pub fn iter(&'_ self) -> StatefulIterator<T> {
+        StatefulIterator {
+            index: 0,
+            list: self,
+        }
+    }
+
+    pub fn _with_items(items: Vec<T>) -> FilteredStatefulList<T> {
+        FilteredStatefulList {
+            state: ListState::default(),
+            items,
+            filtered_items: Default::default(),
+            rendered: Default::default(),
+        }
+    }
+
+    pub fn _get(&self, index: usize) -> Option<&T> {
+        if let Some(i) = self.filtered_items.get(index) {
+            self.items.get(*i)
+        } else {
+            None
+        }
+    }
+
+    pub fn _get_mut(&self, index: usize) -> Option<&T> {
+        if let Some(i) = self.filtered_items.get(index) {
+            self.items.get(*i)
+        } else {
+            None
+        }
+    }
+
+    pub fn filter_elements(&mut self, lambda: impl Fn(&T) -> bool) {
+        self.filtered_items = self
+            .items
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| lambda(c))
+            .map(|(i, _)| i)
+            .collect();
+    }
+
+    pub fn next(&mut self) {
+        let i = match self.state.selected() {
+            Some(i) => {
+                if i + 1 >= self.filtered_items.len() {
+                    if MESSAGE_SCROLL_BACK {
+                        0
+                    } else {
+                        i
+                    }
+                } else {
+                    i + 1
+                }
+            }
+            None => {
+                if !self.filtered_items.is_empty() {
+                    0
+                } else {
+                    return; // nothing to select
+                }
+            }
+        };
+        self.state.select(Some(i));
+    }
+
+    pub fn previous(&mut self) {
+        let i = match self.state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    if MESSAGE_SCROLL_BACK {
+                        self.filtered_items.len() - 1
+                    } else {
+                        0
+                    }
+                } else {
+                    i - 1
+                }
+            }
+            None => {
+                if !self.filtered_items.is_empty() {
                     0
                 } else {
                     return; // nothing to select

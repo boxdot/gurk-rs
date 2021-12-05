@@ -1,6 +1,7 @@
 use crate::shortcuts::{ShortCut, SHORTCUTS};
 use crate::util;
 use crate::{app, App};
+use app::Receipt;
 
 use chrono::{Datelike, Timelike};
 use itertools::Itertools;
@@ -17,11 +18,43 @@ use std::borrow::Cow;
 
 pub const CHANNEL_VIEW_RATIO: u32 = 4;
 
-pub fn coords_within_channels_view<B: Backend>(f: &Frame<B>, x: u16, y: u16) -> Option<(u16, u16)> {
+pub fn coords_within_channels_view<B: Backend>(
+    f: &Frame<B>,
+    app: &App,
+    x: u16,
+    y: u16,
+) -> Option<(u16, u16)> {
     let rect = f.size();
+
+    // Compute the offset due to the lines in the search bar
+    let text_width = app.channel_text_width;
+    let lines: Vec<String> =
+        app.data
+            .search_box
+            .data
+            .chars()
+            .enumerate()
+            .fold(Vec::new(), |mut lines, (idx, c)| {
+                if idx % text_width == 0 {
+                    lines.push(String::new());
+                }
+                match c {
+                    '\n' => {
+                        lines.last_mut().unwrap().push('\n');
+                        lines.push(String::new())
+                    }
+                    _ => lines.last_mut().unwrap().push(c),
+                }
+                lines
+            });
+    let num_input_lines = lines.len().max(1);
+
+    if y < 3 + num_input_lines as u16 {
+        return None;
+    }
     // 1 offset around the view for taking the border into account
     if 0 < x && x < rect.width / CHANNEL_VIEW_RATIO as u16 && 0 < y && y + 1 < rect.height {
-        Some((x - 1, y - 1))
+        Some((x - 1, y - (3 + num_input_lines as u16)))
     } else {
         None
     }
@@ -52,11 +85,83 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
         .direction(Direction::Horizontal)
         .split(f.size());
 
-    let channel_list_width = chunks[0].width.saturating_sub(2) as usize;
+    draw_channels_column(f, app, chunks[0]);
+    draw_chat(f, app, chunks[1]);
+}
+
+fn draw_channels_column<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
+    let text_width = area.width.saturating_sub(2) as usize;
+    let lines: Vec<String> =
+        app.data
+            .search_box
+            .data
+            .chars()
+            .enumerate()
+            .fold(Vec::new(), |mut lines, (idx, c)| {
+                if idx % text_width == 0 {
+                    lines.push(String::new());
+                }
+                match c {
+                    '\n' => {
+                        lines.last_mut().unwrap().push('\n');
+                        lines.push(String::new())
+                    }
+                    _ => lines.last_mut().unwrap().push(c),
+                }
+                lines
+            });
+    // chars since newline on `cursor_y` line
+    let mut cursor_x = app.data.search_box.input_cursor_chars;
+    // line selected by `app.data.input_cursor`
+    let mut cursor_y = 0;
+    for string in &lines {
+        cursor_y += 1;
+        match string.len().cmp(&cursor_x) {
+            std::cmp::Ordering::Less => cursor_x -= string.width(),
+            _ => break,
+        };
+    }
+    let num_input_lines = lines.len().max(1);
+    let input: Vec<Spans> = lines.into_iter().map(Spans::from).collect();
+    let extra_cursor_line = if cursor_x > 0 && cursor_x % text_width == 0 {
+        1
+    } else {
+        0
+    };
+    let chunks = Layout::default()
+        .constraints(
+            [
+                Constraint::Length(num_input_lines as u16 + 2 + extra_cursor_line),
+                Constraint::Min(0),
+            ]
+            .as_ref(),
+        )
+        .direction(Direction::Vertical)
+        .split(area);
+
+    draw_channels(f, app, chunks[1]);
+
+    let input = Paragraph::new(Text::from(input))
+        .block(Block::default().borders(Borders::ALL).title("Search"));
+    f.render_widget(input, chunks[0]);
+    if app.is_searching {
+        f.set_cursor(
+            // Put cursor past the end of the input text
+            chunks[0].x + ((cursor_x as u16) % text_width as u16) + 1,
+            // Move one line down, from the border to the input line
+            chunks[0].y + (cursor_x as u16 / (text_width as u16)) + cursor_y.max(1) as u16,
+        );
+    }
+}
+
+fn draw_channels<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
+    let channel_list_width = area.width.saturating_sub(2) as usize;
+    let pattern = app.data.search_box.data.as_str();
+    app.channel_text_width = channel_list_width;
+    app.data.channels.filter_channels(pattern, &app.data.names);
     let channels: Vec<ListItem> = app
         .data
         .channels
-        .items
         .iter()
         .map(|channel| {
             let unread_messages_label = if channel.unread_messages != 0 {
@@ -82,9 +187,7 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     let channels = List::new(channels)
         .block(Block::default().borders(Borders::ALL).title("Channels"))
         .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray));
-    f.render_stateful_widget(channels, chunks[0], &mut app.data.channels.state);
-
-    draw_chat(f, app, chunks[1]);
+    f.render_stateful_widget(channels, area, &mut app.data.channels.state);
 }
 
 fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
@@ -92,6 +195,7 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let lines: Vec<String> =
         app.data
             .input
+            .data
             .chars()
             .enumerate()
             .fold(Vec::new(), |mut lines, (idx, c)| {
@@ -109,7 +213,7 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
                 lines
             });
     // chars since newline on `cursor_y` line
-    let mut cursor_x = app.data.input_cursor_chars;
+    let mut cursor_x = app.data.input.input_cursor_chars;
     // line selected by `app.data.input_cursor`
     let mut cursor_y = 0;
     for (i, string) in (&lines).iter().enumerate() {
@@ -143,15 +247,60 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let input = Paragraph::new(Text::from(input))
         .block(Block::default().borders(Borders::ALL).title("Input"));
     f.render_widget(input, chunks[1]);
-    f.set_cursor(
-        // Put cursor past the end of the input text
-        chunks[1].x + ((cursor_x as u16) % text_width as u16) + 1,
-        // Move one line down, from the border to the input line
-        chunks[1].y + (cursor_x as u16 / (text_width as u16)) + cursor_y.max(1) as u16,
-    );
+    if !app.is_searching {
+        f.set_cursor(
+            // Put cursor past the end of the input text
+            chunks[1].x + ((cursor_x as u16) % text_width as u16) + 1,
+            // Move one line down, from the border to the input line
+            chunks[1].y + (cursor_x as u16 / (text_width as u16)) + cursor_y.max(1) as u16,
+        );
+    }
 }
 
-fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
+fn send_receipts(app: &mut App, height: usize) {
+    let mut timestamps = Vec::new();
+    let user_id = app.user_id;
+
+    {
+        let channel = app
+            .data
+            .channels
+            .state
+            .selected()
+            .and_then(|idx| app.data.channels.items.get_mut(idx));
+        let channel = match channel {
+            Some(c) if !c.messages.items.is_empty() => c,
+            _ => return,
+        };
+
+        let offset = if let Some(selected) = channel.messages.state.selected() {
+            channel
+                .messages
+                .rendered
+                .offset
+                .min(selected)
+                .max(selected.saturating_sub(height))
+        } else {
+            channel.messages.rendered.offset
+        };
+
+        let messages = &mut channel.messages.items[..];
+
+        let _ = messages
+            .iter_mut()
+            .rev()
+            .skip(offset)
+            .for_each(|msg| match msg.receipt {
+                Receipt::Read => (),
+                _ => {
+                    if msg.from_id != user_id {
+                        timestamps.push(msg.arrived_at);
+                        msg.receipt = Receipt::Read
+                    }
+                }
+            });
+    }
+
     let channel = app
         .data
         .channels
@@ -163,12 +312,31 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         _ => return,
     };
 
+    app.send_receipts(channel, timestamps, Receipt::Read);
+}
+
+fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     // area without borders
     let height = area.height.saturating_sub(2) as usize;
     if height == 0 {
         return;
     }
     let width = area.width.saturating_sub(2) as usize;
+
+    send_receipts(app, height);
+
+    let channel = app.data.channels.state.selected().and_then(|idx| {
+        app.data
+            .channels
+            .items
+            .get(*app.data.channels.filtered_items.get(idx).unwrap())
+    });
+    let channel = match channel {
+        Some(c) if !c.messages.items.is_empty() => c,
+        _ => return,
+    };
+
+    let writing_people = app.writing_people(channel);
 
     // Calculate the offset in messages we start rendering with.
     // `offset` includes the selected message (if any), and is at most height-many messages to
@@ -210,6 +378,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
             &prefix,
             width as usize,
             height,
+            app.user_id == msg.from_id,
         )
     });
 
@@ -251,8 +420,10 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         items.insert(unread_messages, ListItem::new(Span::from(new_message_line)));
     }
 
+    let title = format!("Messages {}", writing_people);
+
     let list = List::new(items)
-        .block(Block::default().title("Messages").borders(Borders::ALL))
+        .block(Block::default().title(title).borders(Borders::ALL))
         .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray))
         .start_corner(Corner::BottomLeft);
 
@@ -284,6 +455,7 @@ fn display_message(
     prefix: &str,
     width: usize,
     height: usize,
+    print_receipt: bool,
 ) -> Option<ListItem<'static>> {
     let arrived_at = util::utc_timestamp_msec_to_local(msg.arrived_at);
 
@@ -312,6 +484,12 @@ fn display_message(
         }
     }
 
+    let receipt = if print_receipt {
+        msg.receipt.write()
+    } else {
+        ""
+    };
+
     let from = Span::styled(
         textwrap::indent(
             from,
@@ -330,12 +508,13 @@ fn display_message(
         .subsequent_indent(prefix);
 
     let text = if msg.reactions.is_empty() {
-        Cow::from(msg.message.as_ref()?)
+        Cow::from(format!("{} {}", msg.message.as_ref()?, receipt))
     } else {
         Cow::from(format!(
-            "{} [{}]",
+            "{} [{}] {}",
             msg.message.as_ref()?,
             msg.reactions.iter().map(|(_, emoji)| emoji).format(""),
+            receipt,
         ))
     };
 

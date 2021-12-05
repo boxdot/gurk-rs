@@ -3,13 +3,18 @@ use crate::signal::{
     self, GroupIdentifierBytes, GroupMasterKeyBytes, ResolvedGroup, SignalManager,
 };
 use crate::storage::Storage;
-use crate::util::{self, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX};
+use crate::util::{
+    self, FilteredStatefulList, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX,
+};
 
 use anyhow::{anyhow, Context as _};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
+use itertools::FoldWhile::{Continue, Done};
+use itertools::Itertools;
 use log::error;
 use notify_rust::Notification;
 use phonenumber::{Mode, PhoneNumber};
+use presage::prelude::proto::{ReceiptMessage, TypingMessage};
 use presage::prelude::{
     content::{ContentBody, DataMessage, Metadata, SyncMessage},
     proto::{
@@ -25,9 +30,10 @@ use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
 
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::path::Path;
+use std::str::FromStr;
 
 pub struct App {
     pub config: Config,
@@ -39,19 +45,139 @@ pub struct App {
     url_regex: LazyRegex,
     attachment_regex: LazyRegex,
     display_help: bool,
+    pub is_searching: bool,
+    pub channel_text_width: usize,
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct BoxData {
+    pub data: String,
+    /// Input position in bytes (not number of chars)
+    pub input_cursor: usize,
+    /// Input position in chars
+    pub input_cursor_chars: usize,
+}
+
+impl BoxData {
+    pub fn put_char(&mut self, c: char) {
+        let idx = self.input_cursor;
+        self.data.insert(idx, c);
+        self.input_cursor += c.len_utf8();
+        self.input_cursor_chars += 1;
+    }
+
+    pub fn new_line(&mut self) {
+        self.put_char('\n');
+        self.input_cursor_chars -= 1;
+    }
+
+    pub fn on_left(&mut self) -> Option<()> {
+        let mut idx = self.input_cursor.checked_sub(1)?;
+        while !self.data.is_char_boundary(idx) {
+            idx -= 1;
+        }
+        self.input_cursor = idx;
+        self.input_cursor_chars -= 1;
+        Some(())
+    }
+
+    fn word_operation(&mut self, op: impl Fn(&mut BoxData) -> Option<()>) -> Option<()> {
+        while op(self).is_some() {
+            if self.data.as_bytes().get(self.input_cursor)? != &b' ' {
+                break;
+            }
+        }
+        while op(self).is_some() {
+            if self.data.as_bytes().get(self.input_cursor)? == &b' ' {
+                return Some(());
+            }
+        }
+        None
+    }
+
+    /// Move a word back
+    pub fn move_back_word(&mut self) {
+        self.on_left();
+        self.word_operation(Self::on_left);
+        if self.data.as_bytes().get(self.input_cursor) == Some(&b' ') {
+            self.on_right();
+        }
+    }
+
+    /// Move a word forward
+    pub fn move_forward_word(&mut self) {
+        self.word_operation(Self::on_right);
+        while self.data.as_bytes().get(self.input_cursor) == Some(&b' ') {
+            self.on_right();
+        }
+    }
+
+    pub fn on_home(&mut self) {
+        self.input_cursor = 0;
+        self.input_cursor_chars = 0;
+    }
+
+    pub fn on_end(&mut self) {
+        self.input_cursor = self.data.len();
+        self.input_cursor_chars = self.data.width();
+    }
+
+    pub fn on_right(&mut self) -> Option<()> {
+        let mut idx = Some(self.input_cursor + 1).filter(|x| x <= &self.data.len())?;
+        while idx < self.data.len() && !self.data.is_char_boundary(idx) {
+            idx -= 1;
+        }
+        self.input_cursor = idx;
+        self.input_cursor_chars += 1;
+        Some(())
+    }
+
+    pub fn on_backspace(&mut self) -> Option<()> {
+        let mut idx = self.input_cursor.checked_sub(1)?;
+        while idx < self.data.len() && !self.data.is_char_boundary(idx) {
+            idx -= 1;
+        }
+        self.data.remove(idx);
+        self.input_cursor = idx;
+        self.input_cursor_chars -= 1;
+        Some(())
+    }
+
+    pub fn on_delete_word(&mut self) -> Option<()> {
+        while self
+            .data
+            .as_bytes()
+            .get(self.input_cursor.checked_sub(1)?)?
+            == &b' '
+        {
+            self.on_backspace();
+        }
+        while self
+            .data
+            .as_bytes()
+            .get(self.input_cursor.checked_sub(1)?)?
+            != &b' '
+        {
+            self.on_backspace();
+        }
+        Some(())
+    }
+
+    pub fn on_delete_suffix(&mut self) {
+        if self.input_cursor < self.data.len() {
+            self.data.truncate(self.input_cursor);
+        }
+    }
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppData {
-    pub channels: StatefulList<Channel>,
+    pub channels: FilteredStatefulList<Channel>,
     pub names: HashMap<Uuid, String>,
-    pub input: String,
-    /// Input position in bytes (not number of chars)
+    #[serde(skip)] // ! We may want to save it
+    pub input: BoxData,
     #[serde(skip)]
-    pub input_cursor: usize,
-    /// Input position in chars
-    #[serde(skip)]
-    pub input_cursor_chars: usize,
+    pub search_box: BoxData,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -63,6 +189,13 @@ pub struct Channel {
     #[serde(serialize_with = "Channel::serialize_msgs")]
     pub messages: StatefulList<Message>,
     pub unread_messages: usize,
+    pub typing: TypingSet,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TypingSet {
+    SingleTyping(bool),
+    GroupTyping(HashSet<Uuid>),
 }
 
 /// Proxy type which allows us to apply post-deserialization conversion.
@@ -83,12 +216,20 @@ pub struct JsonChannel {
 impl TryFrom<JsonChannel> for Channel {
     type Error = anyhow::Error;
     fn try_from(channel: JsonChannel) -> anyhow::Result<Self> {
+        let is_group = channel.group_data.is_some();
         let mut channel = Channel {
             id: channel.id,
             name: channel.name,
             group_data: channel.group_data,
             messages: channel.messages,
             unread_messages: channel.unread_messages,
+            typing: {
+                if is_group {
+                    TypingSet::GroupTyping(HashSet::new())
+                } else {
+                    TypingSet::SingleTyping(false)
+                }
+            },
         };
 
         // 1. The master key in ChannelId::Group was replaced by group identifier,
@@ -113,6 +254,41 @@ pub struct GroupData {
 }
 
 impl Channel {
+    pub fn contains_user(&self, name: &str, hm: &HashMap<Uuid, String>) -> bool {
+        match self.group_data {
+            Some(ref gd) => gd.members.iter().any(|u| name_by_id(hm, *u).contains(name)),
+            None => self.name.contains(name),
+        }
+    }
+
+    pub fn match_pattern(&self, pattern: &str, hm: &HashMap<Uuid, String>) -> bool {
+        if pattern.is_empty() {
+            return true;
+        }
+        match pattern.chars().next().unwrap() {
+            '@' => self.contains_user(&pattern[1..], hm),
+            _ => self.name.contains(pattern),
+        }
+    }
+
+    pub fn reset_writing(&mut self, user: Uuid) {
+        match &mut self.typing {
+            TypingSet::GroupTyping(ref mut hash_set) => {
+                hash_set.remove(&user);
+            }
+            TypingSet::SingleTyping(_) => {
+                self.typing = TypingSet::SingleTyping(false);
+            }
+        }
+    }
+
+    pub fn is_writing(&self) -> bool {
+        match &self.typing {
+            TypingSet::GroupTyping(a) => !a.is_empty(),
+            TypingSet::SingleTyping(a) => *a,
+        }
+    }
+
     fn user_id(&self) -> Option<Uuid> {
         match self.id {
             ChannelId::User(id) => Some(id),
@@ -171,6 +347,69 @@ impl ChannelId {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum TypingAction {
+    Started,
+    Stopped,
+}
+
+impl TypingAction {
+    pub fn from_i32(i: i32) -> Self {
+        match i {
+            0 => Self::Started,
+            1 => Self::Stopped,
+            _ => {
+                log::error!("Got incorrect TypingAction : {}", i);
+                Self::Stopped
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum Receipt {
+    Nothing,
+    Sent,
+    Received,
+    Read,
+}
+
+impl Default for Receipt {
+    fn default() -> Self {
+        Self::Nothing
+    }
+}
+
+impl Receipt {
+    pub fn write(&self) -> &'static str {
+        match self {
+            Self::Nothing => "",
+            Self::Sent => "(x)",
+            Self::Received => "(xx)",
+            Self::Read => "(xxx)",
+        }
+    }
+
+    pub fn update(&self, other: Self) -> Self {
+        *self.max(&other)
+    }
+
+    pub fn from_i32(i: i32) -> Self {
+        match i {
+            0 => Self::Received,
+            1 => Self::Read,
+            _ => Self::Nothing,
+        }
+    }
+
+    pub fn to_i32(self) -> i32 {
+        match self {
+            Self::Read => 1,
+            _ => 0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Message {
     pub from_id: Uuid,
@@ -182,6 +421,8 @@ pub struct Message {
     pub attachments: Vec<signal::Attachment>,
     #[serde(default)]
     pub reactions: Vec<(Uuid, String)>,
+    #[serde(default)]
+    pub receipt: Receipt,
 }
 
 impl Message {
@@ -193,6 +434,7 @@ impl Message {
             quote: None,
             attachments: Default::default(),
             reactions: Default::default(),
+            receipt: Default::default(),
         }
     }
 
@@ -204,6 +446,7 @@ impl Message {
             quote: None,
             attachments: Default::default(),
             reactions: Default::default(),
+            receipt: Default::default(),
         })
     }
 }
@@ -237,7 +480,40 @@ impl App {
             url_regex: LazyRegex::new(URL_REGEX),
             attachment_regex: LazyRegex::new(ATTACHMENT_REGEX),
             display_help: false,
+            is_searching: false,
+            channel_text_width: 0,
         })
+    }
+
+    pub fn get_input(&mut self) -> &mut BoxData {
+        if self.is_searching {
+            &mut self.data.search_box
+        } else {
+            &mut self.data.input
+        }
+    }
+
+    pub fn writing_people(&self, channel: &Channel) -> String {
+        if !channel.is_writing() {
+            return String::from("");
+        }
+        let uuids: Vec<Uuid> = match &channel.typing {
+            TypingSet::GroupTyping(hash_set) => hash_set.clone().into_iter().collect(),
+            TypingSet::SingleTyping(a) => {
+                if *a {
+                    vec![channel.user_id().unwrap()]
+                } else {
+                    Vec::new()
+                }
+            }
+        };
+        format!(
+            "{:?} writing...",
+            uuids
+                .into_iter()
+                .map(|u| self.name_by_id(u))
+                .collect::<Vec<&str>>()
+        )
     }
 
     pub fn save(&self) -> anyhow::Result<()> {
@@ -248,40 +524,31 @@ impl App {
         name_by_id(&self.data.names, id)
     }
 
-    pub fn put_char(&mut self, c: char) {
-        let idx = self.data.input_cursor;
-        self.data.input.insert(idx, c);
-        self.data.input_cursor += c.len_utf8();
-        self.data.input_cursor_chars += 1;
-    }
-
-    pub fn new_line(&mut self) {
-        self.put_char('\n');
-        self.data.input_cursor_chars -= 1;
-    }
-
     pub fn on_key(&mut self, key: KeyEvent) -> anyhow::Result<()> {
         match key.code {
-            KeyCode::Char('\r') => self.put_char('\n'),
-            KeyCode::Enter if key.modifiers.contains(KeyModifiers::ALT) => {
-                self.new_line();
+            KeyCode::Char('\r') => self.get_input().put_char('\n'),
+            KeyCode::Enter
+                if !self.get_input().data.is_empty()
+                    && key.modifiers.contains(KeyModifiers::ALT) =>
+            {
+                self.get_input().new_line();
             }
-            KeyCode::Enter if !self.data.input.is_empty() => {
+            KeyCode::Enter if !self.get_input().data.is_empty() && !self.is_searching => {
                 if let Some(idx) = self.data.channels.state.selected() {
-                    self.send_input(idx)?;
+                    self.send_input(self.data.channels.filtered_items[idx])?;
                 }
             }
             KeyCode::Enter => {
                 // input is empty
                 self.try_open_url();
             }
-            KeyCode::Home => self.on_home(),
-            KeyCode::End => self.on_end(),
+            KeyCode::Home => self.get_input().on_home(),
+            KeyCode::End => self.get_input().on_end(),
             KeyCode::Backspace => {
-                self.on_backspace();
+                self.get_input().on_backspace();
             }
             KeyCode::Esc => self.reset_message_selection(),
-            KeyCode::Char(c) => self.put_char(c),
+            KeyCode::Char(c) => self.get_input().put_char(c),
             KeyCode::Tab => {
                 if let Some(idx) = self.data.channels.state.selected() {
                     self.add_reaction(idx);
@@ -309,10 +576,11 @@ impl App {
     ///
     /// Inner is None, if the reaction should be removed.
     fn take_reaction(&mut self) -> Option<Option<String>> {
-        if self.data.input.is_empty() {
+        let input_box = self.get_input();
+        if input_box.data.is_empty() {
             Some(None)
         } else {
-            let emoji = to_emoji(&self.data.input)?.to_string();
+            let emoji = to_emoji(&input_box.data)?.to_string();
             self.take_input();
             Some(Some(emoji))
         }
@@ -366,9 +634,10 @@ impl App {
     }
 
     fn take_input(&mut self) -> String {
-        self.data.input_cursor = 0;
-        self.data.input_cursor_chars = 0;
-        std::mem::take(&mut self.data.input)
+        let input_box = self.get_input();
+        input_box.input_cursor = 0;
+        input_box.input_cursor_chars = 0;
+        std::mem::take(&mut input_box.data)
     }
 
     fn send_input(&mut self, channel_idx: usize) -> anyhow::Result<()> {
@@ -423,110 +692,6 @@ impl App {
             }
         }
         false
-    }
-
-    pub fn on_left(&mut self) -> Option<()> {
-        let mut idx = self.data.input_cursor.checked_sub(1)?;
-        while !self.data.input.is_char_boundary(idx) {
-            idx -= 1;
-        }
-        self.data.input_cursor = idx;
-        self.data.input_cursor_chars -= 1;
-        Some(())
-    }
-
-    fn word_operation(&mut self, op: impl Fn(&mut App) -> Option<()>) -> Option<()> {
-        while op(self).is_some() {
-            if self.data.input.as_bytes().get(self.data.input_cursor)? != &b' ' {
-                break;
-            }
-        }
-        while op(self).is_some() {
-            if self.data.input.as_bytes().get(self.data.input_cursor)? == &b' ' {
-                return Some(());
-            }
-        }
-        None
-    }
-
-    /// Move a word back
-    pub fn move_back_word(&mut self) {
-        self.on_left();
-        self.word_operation(Self::on_left);
-        if self.data.input.as_bytes().get(self.data.input_cursor) == Some(&b' ') {
-            self.on_right();
-        }
-    }
-
-    /// Move a word forward
-    pub fn move_forward_word(&mut self) {
-        self.word_operation(Self::on_right);
-        while self.data.input.as_bytes().get(self.data.input_cursor) == Some(&b' ') {
-            self.on_right();
-        }
-    }
-
-    pub fn on_home(&mut self) {
-        self.data.input_cursor = 0;
-        self.data.input_cursor_chars = 0;
-    }
-
-    pub fn on_end(&mut self) {
-        self.data.input_cursor = self.data.input.len();
-        self.data.input_cursor_chars = self.data.input.width();
-    }
-
-    pub fn on_right(&mut self) -> Option<()> {
-        let mut idx = Some(self.data.input_cursor + 1).filter(|x| x <= &self.data.input.len())?;
-        while idx < self.data.input.len() && !self.data.input.is_char_boundary(idx) {
-            idx -= 1;
-        }
-        self.data.input_cursor = idx;
-        self.data.input_cursor_chars += 1;
-        Some(())
-    }
-
-    pub fn on_backspace(&mut self) -> Option<()> {
-        let mut idx = self.data.input_cursor.checked_sub(1)?;
-        while idx < self.data.input.len() && !self.data.input.is_char_boundary(idx) {
-            idx -= 1;
-        }
-        let char = self.data.input.as_bytes()[idx] as char;
-        self.data.input.remove(idx);
-        self.data.input_cursor = idx;
-
-        if char != '\n' {
-            self.data.input_cursor_chars -= 1
-        };
-        Some(())
-    }
-
-    pub fn on_delete_word(&mut self) -> Option<()> {
-        while self
-            .data
-            .input
-            .as_bytes()
-            .get(self.data.input_cursor.checked_sub(1)?)?
-            == &b' '
-        {
-            self.on_backspace();
-        }
-        while self
-            .data
-            .input
-            .as_bytes()
-            .get(self.data.input_cursor.checked_sub(1)?)?
-            != &b' '
-        {
-            self.on_backspace();
-        }
-        Some(())
-    }
-
-    pub fn on_delete_suffix(&mut self) {
-        if self.data.input_cursor < self.data.input.len() {
-            self.data.input.truncate(self.data.input_cursor);
-        }
     }
 
     pub async fn on_message(&mut self, content: Content) -> anyhow::Result<()> {
@@ -663,7 +828,8 @@ impl App {
                         .to_string();
                     let channel_idx = self.ensure_contact_channel_exists(uuid, &name).await;
                     let from = self.data.channels.items[channel_idx].name.clone();
-
+                    // Reset typing notification as the Tipyng::Stop are not always sent by the server when a message is sent.
+                    self.data.channels.items[channel_idx].reset_writing(uuid);
                     (channel_idx, from)
                 };
 
@@ -706,6 +872,7 @@ impl App {
                                 }),
                             ..
                         }),
+                    read,
                     ..
                 }),
             ) => {
@@ -729,6 +896,13 @@ impl App {
                     remove.unwrap_or(false),
                     true,
                 );
+                read.into_iter().for_each(|r| {
+                    self.handle_receipt(
+                        Uuid::from_str(r.sender_uuid.unwrap().as_str()).unwrap(),
+                        1,
+                        vec![r.timestamp.unwrap()],
+                    )
+                });
                 return Ok(());
             }
             (
@@ -778,12 +952,160 @@ impl App {
                 );
                 return Ok(());
             }
+            (
+                Metadata {
+                    sender:
+                        ServiceAddress {
+                            uuid: Some(sender_uuid),
+                            ..
+                        },
+                    ..
+                },
+                ContentBody::ReceiptMessage(ReceiptMessage {
+                    r#type: Some(typ),
+                    timestamp: timestamps,
+                }),
+            ) => {
+                self.handle_receipt(sender_uuid, typ, timestamps);
+                return Ok(());
+            }
+
+            (
+                Metadata {
+                    sender:
+                        ServiceAddress {
+                            uuid: Some(sender_uuid),
+                            ..
+                        },
+                    ..
+                },
+                ContentBody::TypingMessage(TypingMessage {
+                    timestamp: Some(timest),
+                    group_id,
+                    action: Some(act),
+                }),
+            ) => {
+                let _ =
+                    self.handle_typing(sender_uuid, group_id, TypingAction::from_i32(act), timest);
+                return Ok(());
+            }
+
             _ => return Ok(()),
         };
 
         self.add_message_to_channel(channel_idx, message);
 
         Ok(())
+    }
+
+    pub fn send_receipts(&self, channel: &Channel, timestamps: Vec<u64>, receipt: Receipt) {
+        self.signal_manager
+            .send_receipt(channel, self.user_id, timestamps, receipt)
+    }
+
+    fn handle_typing(
+        &mut self,
+        sender_uuid: Uuid,
+        group_id: Option<Vec<u8>>,
+        action: TypingAction,
+        _timestamp: u64,
+    ) -> Result<(), ()> {
+        if let Some(gid) = group_id {
+            // It's in a group
+            let group = self
+                .data
+                .channels
+                .items
+                .iter_mut()
+                .find(|c| {
+                    if let ChannelId::Group(gid_other) = c.id {
+                        gid_other[..] == gid[..]
+                    } else {
+                        false
+                    }
+                })
+                .unwrap();
+            if let TypingSet::GroupTyping(ref mut hash_set) = group.typing {
+                match action {
+                    TypingAction::Started => {
+                        hash_set.insert(sender_uuid);
+                    }
+                    TypingAction::Stopped => {
+                        hash_set.remove(&sender_uuid);
+                    }
+                }
+            } else {
+                log::error!("Got a single typing hash set on a group.");
+            }
+        } else {
+            let chan = self
+                .data
+                .channels
+                .items
+                .iter_mut()
+                .find(|c| {
+                    if let ChannelId::User(other_uuid) = c.id {
+                        if other_uuid == sender_uuid {
+                            return true;
+                        }
+                    }
+                    false
+                })
+                .unwrap();
+
+            if let TypingSet::SingleTyping(_) = chan.typing {
+                match action {
+                    TypingAction::Started => {
+                        chan.typing = TypingSet::SingleTyping(true);
+                    }
+                    TypingAction::Stopped => {
+                        chan.typing = TypingSet::SingleTyping(false);
+                    }
+                }
+            } else {
+                log::error!("Got a single typing hash set on a group.");
+            }
+        }
+        Ok(())
+    }
+
+    fn handle_receipt(&mut self, sender_uuid: Uuid, typ: i32, timestamps: Vec<u64>) {
+        let earliest = timestamps.iter().min().unwrap();
+        for c in self.data.channels.items.iter_mut() {
+            match c.id {
+                ChannelId::User(other_uuid) if other_uuid == sender_uuid => {
+                    c.messages.items.iter_mut().rev().fold_while(0, |_, b| {
+                        match b.arrived_at.cmp(earliest) {
+                            std::cmp::Ordering::Less => Done(0),
+                            _ => {
+                                if timestamps.contains(&b.arrived_at) {
+                                    b.receipt = b.receipt.update(Receipt::from_i32(typ));
+                                }
+                                Continue(0)
+                            }
+                        }
+                    });
+                }
+                ChannelId::Group(_) => {
+                    if let Some(ref g_data) = c.group_data {
+                        if g_data.members.contains(&sender_uuid) {
+                            c.messages.items.iter_mut().rev().fold_while(0, |_, b| {
+                                match b.arrived_at.cmp(earliest) {
+                                    std::cmp::Ordering::Less => Done(0),
+                                    _ => {
+                                        if timestamps.contains(&b.arrived_at) {
+                                            b.receipt = b.receipt.update(Receipt::from_i32(typ));
+                                        }
+                                        Continue(0)
+                                    }
+                                }
+                            });
+                        }
+                    }
+                }
+                _ => (),
+            }
+        }
     }
 
     fn handle_reaction(
@@ -909,6 +1231,7 @@ impl App {
                 group_data: Some(group_data),
                 messages: StatefulList::with_items(Vec::new()),
                 unread_messages: 0,
+                typing: TypingSet::GroupTyping(HashSet::new()),
             });
             Ok(self.data.channels.items.len() - 1)
         }
@@ -975,6 +1298,7 @@ impl App {
                 group_data: None,
                 messages: StatefulList::with_items(Vec::new()),
                 unread_messages: 0,
+                typing: TypingSet::SingleTyping(false),
             });
             self.data.channels.items.len() - 1
         }
@@ -1002,6 +1326,7 @@ impl App {
                 group_data: None,
                 messages: StatefulList::with_items(Vec::new()),
                 unread_messages: 0,
+                typing: TypingSet::SingleTyping(false),
             });
             self.data.channels.items.len() - 1
         }
@@ -1097,6 +1422,10 @@ impl App {
         self.display_help = !self.display_help;
     }
 
+    pub fn toggle_search(&mut self) {
+        self.is_searching = !self.is_searching;
+    }
+
     pub fn is_help(&self) -> bool {
         self.display_help
     }
@@ -1168,8 +1497,10 @@ mod tests {
                 quote: Default::default(),
                 attachments: Default::default(),
                 reactions: Default::default(),
+                receipt: Default::default(),
             }]),
             unread_messages: 1,
+            typing: TypingSet::GroupTyping(HashSet::new()),
         });
         app.data.channels.state.select(Some(0));
 
@@ -1181,7 +1512,7 @@ mod tests {
         let (mut app, sent_messages) = test_app();
         let input = "Hello, World!";
         for c in input.chars() {
-            app.put_char(c);
+            app.get_input().put_char(c);
         }
         app.send_input(0).unwrap();
 
@@ -1191,9 +1522,9 @@ mod tests {
 
         assert_eq!(app.data.channels.items[0].unread_messages, 0);
 
-        assert_eq!(app.data.input, "");
-        assert_eq!(app.data.input_cursor, 0);
-        assert_eq!(app.data.input_cursor_chars, 0);
+        assert_eq!(app.get_input().data, "");
+        assert_eq!(app.get_input().input_cursor, 0);
+        assert_eq!(app.get_input().input_cursor_chars, 0);
     }
 
     #[test]
@@ -1201,10 +1532,10 @@ mod tests {
         let (mut app, sent_messages) = test_app();
         let input = "👻";
         for c in input.chars() {
-            app.put_char(c);
+            app.get_input().put_char(c);
         }
-        assert_eq!(app.data.input_cursor, 4);
-        assert_eq!(app.data.input_cursor_chars, 1);
+        assert_eq!(app.get_input().input_cursor, 4);
+        assert_eq!(app.get_input().input_cursor_chars, 1);
 
         app.send_input(0).unwrap();
 
@@ -1212,9 +1543,9 @@ mod tests {
         assert_eq!(sent.len(), 1);
         assert_eq!(sent[0].message.as_ref().unwrap(), input);
 
-        assert_eq!(app.data.input, "");
-        assert_eq!(app.data.input_cursor, 0);
-        assert_eq!(app.data.input_cursor_chars, 0);
+        assert_eq!(app.get_input().data, "");
+        assert_eq!(app.get_input().input_cursor, 0);
+        assert_eq!(app.get_input().input_cursor_chars, 0);
     }
 
     #[test]
@@ -1222,7 +1553,7 @@ mod tests {
         let (mut app, sent_messages) = test_app();
         let input = ":thumbsup:";
         for c in input.chars() {
-            app.put_char(c);
+            app.get_input().put_char(c);
         }
 
         app.send_input(0).unwrap();
@@ -1238,7 +1569,7 @@ mod tests {
 
         app.data.channels.items[0].messages.state.select(Some(0));
 
-        app.put_char('👍');
+        app.get_input().put_char('👍');
         app.add_reaction(0);
 
         let reactions = &app.data.channels.items[0].messages.items[0].reactions;
@@ -1253,7 +1584,7 @@ mod tests {
         app.data.channels.items[0].messages.state.select(Some(0));
 
         for c in ":thumbsup:".chars() {
-            app.put_char(c);
+            app.get_input().put_char(c);
         }
         app.add_reaction(0);
 
@@ -1279,15 +1610,14 @@ mod tests {
     #[test]
     fn test_add_invalid_reaction() {
         let (mut app, _sent_messages) = test_app();
-
         app.data.channels.items[0].messages.state.select(Some(0));
 
         for c in ":thumbsup".chars() {
-            app.put_char(c);
+            app.get_input().put_char(c);
         }
         app.add_reaction(0);
 
-        assert_eq!(app.data.input, ":thumbsup");
+        assert_eq!(app.get_input().data, ":thumbsup");
         let reactions = &app.data.channels.items[0].messages.items[0].reactions;
         assert!(reactions.is_empty());
     }
