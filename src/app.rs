@@ -368,7 +368,7 @@ impl TypingAction {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Receipt {
-    Nothing,
+    Nothing, // Do not do anything to these receipts in order to avoid spamming receipt messages when an old database is loaded
     Sent,
     Received,
     Read,
@@ -434,7 +434,7 @@ impl Message {
             quote: None,
             attachments: Default::default(),
             reactions: Default::default(),
-            receipt: Default::default(),
+            receipt: Receipt::Sent,
         }
     }
 
@@ -446,7 +446,7 @@ impl Message {
             quote: None,
             attachments: Default::default(),
             reactions: Default::default(),
-            receipt: Default::default(),
+            receipt: Receipt::Sent,
         })
     }
 }
@@ -998,9 +998,10 @@ impl App {
         Ok(())
     }
 
-    pub fn send_receipts(&self, channel: &Channel, timestamps: Vec<u64>, receipt: Receipt) {
+    pub fn send_receipts(&self, channel: &Channel, timestamps: Vec<u64>, receipt: Receipt)  -> anyhow::Result<()> {
         self.signal_manager
-            .send_receipt(channel, self.user_id, timestamps, receipt)
+            .send_receipt(channel, self.user_id, timestamps, receipt);
+        self.save()
     }
 
     fn handle_typing(

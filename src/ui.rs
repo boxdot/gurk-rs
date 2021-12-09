@@ -292,6 +292,7 @@ fn send_receipts(app: &mut App, height: usize) {
             .skip(offset)
             .for_each(|msg| match msg.receipt {
                 Receipt::Read => (),
+                Receipt::Nothing => (), // Retro-compatibilaty
                 _ => {
                     if msg.from_id != user_id {
                         timestamps.push(msg.arrived_at);
@@ -311,8 +312,9 @@ fn send_receipts(app: &mut App, height: usize) {
         Some(c) if !c.messages.items.is_empty() => c,
         _ => return,
     };
-
-    app.send_receipts(channel, timestamps, Receipt::Read);
+    if !timestamps.is_empty() {
+        let _ = app.send_receipts(channel, timestamps, Receipt::Read);
+    }
 }
 
 fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
