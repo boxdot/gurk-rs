@@ -97,14 +97,13 @@ impl ReceiptHandler {
                 if let Some((timestamps, receipt)) = u.get_data() {
                     signal_manager.send_receipt(uuid, timestamps, receipt);
                     if u.is_empty() {
-                        self.receipt_set.remove_entry(&uuid);
+                        e.remove_entry();
                     }
                     return true;
                 }
             }
             Entry::Vacant(_) => {}
         };
-        self.receipt_set.remove_entry(&uuid);
         false
     }
 }
