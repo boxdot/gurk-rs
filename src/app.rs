@@ -47,6 +47,138 @@ pub struct App {
     display_help: bool,
     pub is_searching: bool,
     pub channel_text_width: usize,
+    receipt_handler: ReceiptHandler,
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct ReceiptHandler {
+    receipt_set: HashMap<Uuid, ReceiptQueues>,
+    time_since_update: u64,
+}
+
+impl ReceiptHandler {
+    pub fn new() -> Self {
+        Self {
+            receipt_set: HashMap::new(),
+            time_since_update: 0u64,
+        }
+    }
+
+    pub fn add_receipt_event(&mut self, event: ReceiptEvent) {
+        // Add a new set in the case no receipt had been handled for this contact
+        // over the current session
+        self.receipt_set
+            .entry(event.uuid)
+            .or_insert_with(ReceiptQueues::new);
+
+        self.receipt_set
+            .get_mut(&event.uuid)
+            .unwrap()
+            .add(event.timestamp, event.receipt_type);
+    }
+
+    // Dictates whether receipts should be sent on the current tick
+    // Not used for now as
+    fn do_tick(&mut self) -> bool {
+        true
+    }
+
+    pub fn step(&mut self, signal_manager: &dyn SignalManager) -> bool {
+        if !self.do_tick() {
+            return false;
+        }
+        if self.receipt_set.is_empty() {
+            return false;
+        }
+        let uuid = *self.receipt_set.keys().next().unwrap();
+        let mut queue = self.receipt_set.remove(&uuid).unwrap();
+        if let Some((timestamps, receipt)) = queue.get_data() {
+            signal_manager.send_receipt(uuid, timestamps, receipt);
+            return true;
+        }
+        if !queue.is_empty() {
+            self.receipt_set.insert(uuid, queue);
+        }
+        false
+    }
+}
+
+/// This get built anywhere in the client and get passed to the App
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct ReceiptEvent {
+    uuid: Uuid,
+    /// Timestamp of the messages
+    timestamp: u64,
+    /// Type : Received, Read
+    receipt_type: Receipt,
+}
+
+impl ReceiptEvent {
+    pub fn new(uuid: Uuid, timestamp: u64, receipt_type: Receipt) -> Self {
+        Self {
+            uuid,
+            timestamp,
+            receipt_type,
+        }
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct ReceiptQueues {
+    received_msg: HashSet<u64>,
+    read_msg: HashSet<u64>,
+}
+
+impl ReceiptQueues {
+    pub fn new() -> Self {
+        Self {
+            received_msg: HashSet::new(),
+            read_msg: HashSet::new(),
+        }
+    }
+
+    pub fn add_received(&mut self, timestamp: u64) {
+        if !self.received_msg.insert(timestamp) {
+            log::info!("Somehow got duplicate Received receipt @ {}", timestamp);
+        }
+    }
+
+    pub fn add_read(&mut self, timestamp: u64) {
+        // Ensures we do not send uselessly double the amount of receipts
+        // in the case a message is immediatly received and read.
+        self.received_msg.remove(&timestamp);
+        if !self.read_msg.insert(timestamp) {
+            log::info!("Somehow got duplicate Read receipt @ {}", timestamp);
+        }
+    }
+
+    pub fn add(&mut self, timestamp: u64, receipt: Receipt) {
+        match receipt {
+            Receipt::Received => self.add_received(timestamp),
+            Receipt::Read => self.add_read(timestamp),
+            _ => {}
+        }
+    }
+
+    pub fn _add_vec(&mut self, timestamps: Vec<u64>, receipt: Receipt) {
+        timestamps.into_iter().for_each(|t| self.add(t, receipt))
+    }
+
+    pub fn get_data(&mut self) -> Option<(Vec<u64>, Receipt)> {
+        if !self.received_msg.is_empty() {
+            let timestamps = self.received_msg.drain().collect::<Vec<u64>>();
+            return Some((timestamps, Receipt::Received));
+        }
+        if !self.read_msg.is_empty() {
+            let timestamps = self.read_msg.drain().collect::<Vec<u64>>();
+            return Some((timestamps, Receipt::Read));
+        }
+        None
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.received_msg.is_empty() && self.read_msg.is_empty()
+    }
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -460,6 +592,7 @@ pub enum Event {
     Message(Content),
     Resize { cols: u16, rows: u16 },
     Quit(Option<anyhow::Error>),
+    Tick,
 }
 
 impl App {
@@ -482,6 +615,7 @@ impl App {
             display_help: false,
             is_searching: false,
             channel_text_width: 0,
+            receipt_handler: ReceiptHandler::new(),
         })
     }
 
@@ -835,6 +969,9 @@ impl App {
 
                 self.notify(&from, &text);
 
+                // Send "Delivered" receipt
+                self.add_receipt_event(ReceiptEvent::new(uuid, timestamp, Receipt::Received));
+
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let message = Message {
                     quote,
@@ -998,10 +1135,13 @@ impl App {
         Ok(())
     }
 
-    pub fn send_receipts(&self, channel: &Channel, timestamps: Vec<u64>, receipt: Receipt)  -> anyhow::Result<()> {
-        self.signal_manager
-            .send_receipt(channel, self.user_id, timestamps, receipt);
-        self.save()
+    pub fn step_receipts(&mut self) -> anyhow::Result<()> {
+        if self.receipt_handler.step(self.signal_manager.as_ref()) {
+            // No need to save if no receipt was sent
+            self.save()
+        } else {
+            anyhow::Result::Ok(())
+        }
     }
 
     fn handle_typing(
@@ -1068,6 +1208,10 @@ impl App {
             }
         }
         Ok(())
+    }
+
+    pub fn add_receipt_event(&mut self, event: ReceiptEvent) {
+        self.receipt_handler.add_receipt_event(event);
     }
 
     fn handle_receipt(&mut self, sender_uuid: Uuid, typ: i32, timestamps: Vec<u64>) {

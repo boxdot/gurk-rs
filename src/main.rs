@@ -30,7 +30,9 @@ use std::time::{Duration, Instant};
 use crate::{signal::PresageManager, storage::JsonStorage};
 
 const TARGET_FPS: u64 = 144;
+const RECEIPT_TICK_PERIOD: u64 = 144;
 const FRAME_BUDGET: Duration = Duration::from_millis(1000 / TARGET_FPS);
+const RECEIPT_BUDGET: Duration = Duration::from_millis(RECEIPT_TICK_PERIOD * 1000 / TARGET_FPS);
 const MESSAGE_SCROLL_BACK: bool = false;
 
 #[derive(Debug, StructOpt)]
@@ -166,6 +168,18 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
     let mut last_render_at = Instant::now();
     let is_render_spawned = Arc::new(AtomicBool::new(false));
 
+    let tick_tx = tx.clone();
+    // Tick to trigger receipt sending
+    tokio::spawn(async move {
+        loop {
+            tick_tx
+                .send(Event::Tick)
+                .await
+                .expect("Cannot tick: events channel closed.");
+            tokio::time::sleep(RECEIPT_BUDGET).await;
+        }
+    });
+
     loop {
         // render
         let left_frame_budget = FRAME_BUDGET.checked_sub(last_render_at.elapsed());
@@ -191,6 +205,9 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
         }
 
         match rx.recv().await {
+            Some(Event::Tick) => {
+                let _ = app.step_receipts();
+            }
             Some(Event::Click(event)) => match event.kind {
                 MouseEventKind::Down(MouseButton::Left) => {
                     let col = event.column;

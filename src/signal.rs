@@ -37,13 +37,7 @@ pub trait SignalManager {
         master_key_bytes: GroupMasterKeyBytes,
     ) -> anyhow::Result<ResolvedGroup>;
 
-    fn send_receipt(
-        &self,
-        channel: &Channel,
-        sender_uuid: Uuid,
-        timestamps: Vec<u64>,
-        receipt: Receipt,
-    );
+    fn send_receipt(&self, sender_uuid: Uuid, timestamps: Vec<u64>, receipt: Receipt);
 
     fn send_text(
         &self,
@@ -82,33 +76,23 @@ impl SignalManager for PresageManager {
         self.manager.uuid()
     }
 
-    fn send_receipt(
-        &self,
-        channel: &Channel,
-        _sender_uuid: Uuid,
-        timestamps: Vec<u64>,
-        receipt: Receipt,
-    ) {
+    fn send_receipt(&self, _sender_uuid: Uuid, timestamps: Vec<u64>, receipt: Receipt) {
         let now_timestamp = utc_now_timestamp_msec();
         let data_message = ReceiptMessage {
             r#type: Some(receipt.to_i32()),
             timestamp: timestamps,
         };
 
-        match channel.id {
-            ChannelId::User(uuid) => {
-                let manager = self.manager.clone();
-                tokio::task::spawn_local(async move {
-                    let body = ContentBody::ReceiptMessage(data_message);
-                    if let Err(e) = manager.send_message(uuid, body, now_timestamp).await {
-                        log::error!("Failed to send message to {}: {}", uuid, e);
-                    }
-                });
+        let manager = self.manager.clone();
+        tokio::task::spawn_local(async move {
+            let body = ContentBody::ReceiptMessage(data_message);
+            if let Err(e) = manager
+                .send_message(_sender_uuid, body, now_timestamp)
+                .await
+            {
+                log::error!("Failed to send message to {}: {}", _sender_uuid, e);
             }
-            ChannelId::Group(_) => {
-                log::warn!("Not supported for now.");
-            }
-        }
+        });
     }
 
     fn send_text(
@@ -439,7 +423,7 @@ pub mod test {
             self.user_id
         }
 
-        fn send_receipt(&self, _: &Channel, _: Uuid, _: Vec<u64>, _: Receipt) {}
+        fn send_receipt(&self, _: Uuid, _: Vec<u64>, _: Receipt) {}
 
         async fn contact_name(&self, _id: Uuid, _profile_key: [u8; 32]) -> Option<String> {
             None

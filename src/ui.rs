@@ -1,3 +1,4 @@
+use crate::app::ReceiptEvent;
 use crate::shortcuts::{ShortCut, SHORTCUTS};
 use crate::util;
 use crate::{app, App};
@@ -257,63 +258,51 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     }
 }
 
-fn send_receipts(app: &mut App, height: usize) {
-    let mut timestamps = Vec::new();
+fn prepare_receipts(app: &mut App, height: usize) {
+    let mut to_send = Vec::new();
     let user_id = app.user_id;
-
-    {
-        let channel = app
-            .data
-            .channels
-            .state
-            .selected()
-            .and_then(|idx| app.data.channels.items.get_mut(idx));
-        let channel = match channel {
-            Some(c) if !c.messages.items.is_empty() => c,
-            _ => return,
-        };
-
-        let offset = if let Some(selected) = channel.messages.state.selected() {
-            channel
-                .messages
-                .rendered
-                .offset
-                .min(selected)
-                .max(selected.saturating_sub(height))
-        } else {
-            channel.messages.rendered.offset
-        };
-
-        let messages = &mut channel.messages.items[..];
-
-        let _ = messages
-            .iter_mut()
-            .rev()
-            .skip(offset)
-            .for_each(|msg| match msg.receipt {
-                Receipt::Read => (),
-                Receipt::Nothing => (), // Retro-compatibilaty
-                _ => {
-                    if msg.from_id != user_id {
-                        timestamps.push(msg.arrived_at);
-                        msg.receipt = Receipt::Read
-                    }
-                }
-            });
-    }
-
     let channel = app
         .data
         .channels
         .state
         .selected()
-        .and_then(|idx| app.data.channels.items.get(idx));
+        .and_then(|idx| app.data.channels.items.get_mut(idx));
     let channel = match channel {
         Some(c) if !c.messages.items.is_empty() => c,
         _ => return,
     };
-    if !timestamps.is_empty() {
-        let _ = app.send_receipts(channel, timestamps, Receipt::Read);
+
+    let offset = if let Some(selected) = channel.messages.state.selected() {
+        channel
+            .messages
+            .rendered
+            .offset
+            .min(selected)
+            .max(selected.saturating_sub(height))
+    } else {
+        channel.messages.rendered.offset
+    };
+
+    let messages = &mut channel.messages.items[..];
+
+    let _ = messages
+        .iter_mut()
+        .rev()
+        .skip(offset)
+        .for_each(|msg| match msg.receipt {
+            Receipt::Read => (),
+            Receipt::Nothing => (), // Backward-compatibility
+            _ => {
+                if msg.from_id != user_id {
+                    to_send.push((msg.from_id, msg.arrived_at));
+                    msg.receipt = Receipt::Read
+                }
+            }
+        });
+    if !to_send.is_empty() {
+        to_send
+            .into_iter()
+            .for_each(|(u, t)| app.add_receipt_event(ReceiptEvent::new(u, t, Receipt::Read)))
     }
 }
 
@@ -325,7 +314,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     }
     let width = area.width.saturating_sub(2) as usize;
 
-    send_receipts(app, height);
+    prepare_receipts(app, height);
 
     let channel = app.data.channels.state.selected().and_then(|idx| {
         app.data
