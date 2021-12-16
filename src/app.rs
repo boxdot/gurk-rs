@@ -99,12 +99,13 @@ impl ReceiptHandler {
                     if u.is_empty() {
                         e.remove_entry();
                     }
-                    return true;
+                    true
+                } else {
+                    false
                 }
             }
-            Entry::Vacant(_) => {}
-        };
-        false
+            Entry::Vacant(_) => false,
+        }
     }
 }
 
