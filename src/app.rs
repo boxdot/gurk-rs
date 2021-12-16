@@ -115,7 +115,7 @@ pub struct ReceiptEvent {
     uuid: Uuid,
     /// Timestamp of the messages
     timestamp: u64,
-    /// Type : Received, Read
+    /// Type : Received, Delivered
     receipt_type: Receipt,
 }
 
@@ -154,14 +154,14 @@ impl ReceiptQueues {
         // in the case a message is immediatly received and read.
         self.received_msg.remove(&timestamp);
         if !self.read_msg.insert(timestamp) {
-            log::error!("Somehow got duplicate Read receipt @ {}", timestamp);
+            log::error!("Somehow got duplicate Delivered receipt @ {}", timestamp);
         }
     }
 
     pub fn add(&mut self, timestamp: u64, receipt: Receipt) {
         match receipt {
             Receipt::Received => self.add_received(timestamp),
-            Receipt::Read => self.add_read(timestamp),
+            Receipt::Delivered => self.add_read(timestamp),
             _ => {}
         }
     }
@@ -173,7 +173,7 @@ impl ReceiptQueues {
         }
         if !self.read_msg.is_empty() {
             let timestamps = self.read_msg.drain().collect::<Vec<u64>>();
-            return Some((timestamps, Receipt::Read));
+            return Some((timestamps, Receipt::Delivered));
         }
         None
     }
@@ -505,7 +505,7 @@ pub enum Receipt {
     Nothing, // Do not do anything to these receipts in order to avoid spamming receipt messages when an old database is loaded
     Sent,
     Received,
-    Read,
+    Delivered,
 }
 
 impl Default for Receipt {
@@ -520,7 +520,7 @@ impl Receipt {
             Self::Nothing => "",
             Self::Sent => "(x)",
             Self::Received => "(xx)",
-            Self::Read => "(xxx)",
+            Self::Delivered => "(xxx)",
         }
     }
 
@@ -531,14 +531,14 @@ impl Receipt {
     pub fn from_i32(i: i32) -> Self {
         match i {
             0 => Self::Received,
-            1 => Self::Read,
+            1 => Self::Delivered,
             _ => Self::Nothing,
         }
     }
 
     pub fn to_i32(self) -> i32 {
         match self {
-            Self::Read => 1,
+            Self::Delivered => 1,
             _ => 0,
         }
     }

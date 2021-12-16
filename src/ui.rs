@@ -290,18 +290,18 @@ fn prepare_receipts(app: &mut App, height: usize) {
         .rev()
         .skip(offset)
         .for_each(|msg| match msg.receipt {
-            Receipt::Read | Receipt::Nothing | Receipt::Sent => (),
+            Receipt::Delivered | Receipt::Nothing | Receipt::Sent => (),
             Receipt::Received => {
                 if msg.from_id != user_id {
                     to_send.push((msg.from_id, msg.arrived_at));
-                    msg.receipt = Receipt::Read
+                    msg.receipt = Receipt::Delivered
                 }
             }
         });
     if !to_send.is_empty() {
         to_send
             .into_iter()
-            .for_each(|(u, t)| app.add_receipt_event(ReceiptEvent::new(u, t, Receipt::Read)))
+            .for_each(|(u, t)| app.add_receipt_event(ReceiptEvent::new(u, t, Receipt::Delivered)))
     }
 }
 
