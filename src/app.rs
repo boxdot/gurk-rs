@@ -30,7 +30,7 @@ use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
 
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::path::Path;
 use std::str::FromStr;
@@ -69,11 +69,7 @@ impl ReceiptHandler {
         // over the current session
         self.receipt_set
             .entry(event.uuid)
-            .or_insert_with(ReceiptQueues::new);
-
-        self.receipt_set
-            .get_mut(&event.uuid)
-            .unwrap()
+            .or_insert_with(ReceiptQueues::new)
             .add(event.timestamp, event.receipt_type);
     }
 
@@ -90,15 +86,25 @@ impl ReceiptHandler {
         if self.receipt_set.is_empty() {
             return false;
         }
+
+        // Get any key
         let uuid = *self.receipt_set.keys().next().unwrap();
-        let mut queue = self.receipt_set.remove(&uuid).unwrap();
-        if let Some((timestamps, receipt)) = queue.get_data() {
-            signal_manager.send_receipt(uuid, timestamps, receipt);
-            return true;
-        }
-        if !queue.is_empty() {
-            self.receipt_set.insert(uuid, queue);
-        }
+
+        let j = self.receipt_set.entry(uuid);
+        match j {
+            Entry::Occupied(mut e) => {
+                let u = e.get_mut();
+                if let Some((timestamps, receipt)) = u.get_data() {
+                    signal_manager.send_receipt(uuid, timestamps, receipt);
+                    if u.is_empty() {
+                        self.receipt_set.remove_entry(&uuid);
+                    }
+                    return true;
+                }
+            }
+            Entry::Vacant(_) => {}
+        };
+        self.receipt_set.remove_entry(&uuid);
         false
     }
 }
@@ -139,7 +145,7 @@ impl ReceiptQueues {
 
     pub fn add_received(&mut self, timestamp: u64) {
         if !self.received_msg.insert(timestamp) {
-            log::info!("Somehow got duplicate Received receipt @ {}", timestamp);
+            log::error!("Somehow got duplicate Received receipt @ {}", timestamp);
         }
     }
 
@@ -148,7 +154,7 @@ impl ReceiptQueues {
         // in the case a message is immediatly received and read.
         self.received_msg.remove(&timestamp);
         if !self.read_msg.insert(timestamp) {
-            log::info!("Somehow got duplicate Read receipt @ {}", timestamp);
+            log::error!("Somehow got duplicate Read receipt @ {}", timestamp);
         }
     }
 
@@ -158,10 +164,6 @@ impl ReceiptQueues {
             Receipt::Read => self.add_read(timestamp),
             _ => {}
         }
-    }
-
-    pub fn _add_vec(&mut self, timestamps: Vec<u64>, receipt: Receipt) {
-        timestamps.into_iter().for_each(|t| self.add(t, receipt))
     }
 
     pub fn get_data(&mut self) -> Option<(Vec<u64>, Receipt)> {
@@ -1140,7 +1142,7 @@ impl App {
             // No need to save if no receipt was sent
             self.save()
         } else {
-            anyhow::Result::Ok(())
+            Ok(())
         }
     }
 

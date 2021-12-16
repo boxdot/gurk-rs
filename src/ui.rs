@@ -290,9 +290,8 @@ fn prepare_receipts(app: &mut App, height: usize) {
         .rev()
         .skip(offset)
         .for_each(|msg| match msg.receipt {
-            Receipt::Read => (),
-            Receipt::Nothing => (), // Backward-compatibility
-            _ => {
+            Receipt::Read | Receipt::Nothing | Receipt::Sent => (),
+            Receipt::Received => {
                 if msg.from_id != user_id {
                     to_send.push((msg.from_id, msg.arrived_at));
                     msg.receipt = Receipt::Read

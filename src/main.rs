@@ -171,12 +171,13 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
     let tick_tx = tx.clone();
     // Tick to trigger receipt sending
     tokio::spawn(async move {
+        let mut interval = tokio::time::interval(RECEIPT_BUDGET);
         loop {
+            interval.tick().await;
             tick_tx
                 .send(Event::Tick)
                 .await
                 .expect("Cannot tick: events channel closed.");
-            tokio::time::sleep(RECEIPT_BUDGET).await;
         }
     });
 
