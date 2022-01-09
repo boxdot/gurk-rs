@@ -43,6 +43,9 @@ struct Args {
     /// Relinks the device (helpful when device was unlinked)
     #[structopt(long)]
     relink: bool,
+    /// Primary device
+    #[structopt(long)]
+    primary: bool,
 }
 
 fn init_file_logger(verbosity: u8) -> anyhow::Result<()> {
@@ -76,7 +79,7 @@ async fn main() -> anyhow::Result<()> {
     log_panics::init();
 
     tokio::task::LocalSet::new()
-        .run_until(run_single_threaded(args.relink))
+        .run_until(run_single_threaded(args.relink, args.primary))
         .await
 }
 
@@ -86,8 +89,8 @@ async fn is_online() -> bool {
         .is_ok()
 }
 
-async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
-    let (signal_manager, config) = signal::ensure_linked_device(relink).await?;
+async fn run_single_threaded(relink: bool, primary: bool) -> anyhow::Result<()> {
+    let (signal_manager, config) = signal::ensure_linked_device(relink, primary).await?;
     let storage = JsonStorage::new(config.data_path.clone(), config::fallback_data_path());
     let mut app = App::try_new(
         config,

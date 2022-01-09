@@ -1,6 +1,7 @@
 use crate::app::{Channel, ChannelId, GroupData, Message, Receipt};
 use crate::config::{self, Config};
 use crate::util::utc_now_timestamp_msec;
+use std::io::{self, BufRead};
 
 use anyhow::{bail, Context as _};
 use async_trait::async_trait;
@@ -328,7 +329,7 @@ fn get_signal_manager(db_path: PathBuf) -> anyhow::Result<Manager> {
 ///    and phone number, or
 /// 2. loads the config file and tries to create the Signal manager from configured Signal database
 ///    path.
-pub async fn ensure_linked_device(relink: bool) -> anyhow::Result<(Manager, Config)> {
+pub async fn ensure_linked_device(relink: bool, primary: bool) -> anyhow::Result<(Manager, Config)> {
     let config = Config::load_installed()?;
     let db_path = config
         .as_ref()
@@ -345,22 +346,67 @@ pub async fn ensure_linked_device(relink: bool) -> anyhow::Result<(Manager, Conf
         }
     }
 
-    // link device
-    let at_hostname = hostname::get()
-        .ok()
-        .and_then(|hostname| {
-            hostname
-                .to_string_lossy()
-                .split('.')
-                .find(|s| !s.is_empty())
-                .map(|s| format!("@{}", s))
-        })
-        .unwrap_or_else(String::new);
-    let device_name = format!("gurk{}", at_hostname);
-    println!("Linking new device with device name: {}", device_name);
-    manager
-        .link_secondary_device(SignalServers::Production, device_name.clone())
-        .await?;
+    if primary {
+        println!("Phone Number: ");
+        let phone_number: phonenumber::PhoneNumber = io::stdin()
+            .lock()
+            .lines()
+            .next()
+            .expect("stdin should be available")
+            .expect("couldn't read from stdin")
+            .trim()
+            .parse()?;
+        println!("Captcha code: (from https://signalcaptchas.org/registration/generate.html ) ");
+
+        let mut buffer = String::new();
+        io::stdin()
+            .lock()
+            .read_line(&mut buffer)
+            .expect("couldn't read from stdin");
+
+        let captcha: Option<String> = Some(buffer);
+
+
+        manager
+            .register(
+                SignalServers::Production,
+                phone_number,
+                false, // use voice call
+                captcha, // None, // use a token obtained from https://signalcaptchas.org/registration/generate.html if registration fails
+                false, // force
+            )
+            .await?;
+
+        println!("Confirmation code: ");
+        let confirmation_code: u32 = io::stdin()
+            .lock()
+            .lines()
+            .next()
+            .expect("stdin should be available")
+            .expect("couldn't read from stdin")
+            .trim()
+            .to_string()
+            .parse()?;
+
+        manager.confirm_verification_code(confirmation_code).await?;
+    } else {
+        // link device
+        let at_hostname = hostname::get()
+            .ok()
+            .and_then(|hostname| {
+                hostname
+                    .to_string_lossy()
+                    .split('.')
+                    .find(|s| !s.is_empty())
+                    .map(|s| format!("@{}", s))
+            })
+            .unwrap_or_else(String::new);
+        let device_name = format!("gurk{}", at_hostname);
+        println!("Linking new device with device name: {}", device_name);
+        manager
+            .link_secondary_device(SignalServers::Production, device_name.clone())
+            .await?;
+    }
 
     // get profile
     let phone_number = manager
