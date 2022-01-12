@@ -542,7 +542,7 @@ fn display_message(
 
     let add_time = spans.is_empty();
     spans.extend(
-        textwrap::wrap(&text, wrap_opts)
+        textwrap::wrap(&text, &wrap_opts)
             .into_iter()
             .enumerate()
             .map(|(idx, line)| {
