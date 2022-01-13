@@ -359,6 +359,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let prefix = " ".repeat(prefix_width);
 
     let messages_from_offset = messages.iter().rev().skip(offset).filter_map(|msg| {
+        log::debug!("{}", msg.attachments.len());
         display_message(
             app,
             msg,
@@ -559,6 +560,21 @@ fn display_message(
                 Spans::from(res)
             }),
     );
+
+    spans.extend(msg.attachments.iter().map(|attachment| {
+        let line = attachment.filename.display().to_string();
+        let res = if add_time {
+            vec![
+                time.clone(),
+                from.clone(),
+                delimiter.clone(),
+                Span::from(line),
+            ]
+        } else {
+            vec![Span::from(line)]
+        };
+        Spans::from(res)
+    }));
 
     if spans.len() > height {
         // span is too big to be shown fully
