@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.3
 
 ### Added
 
@@ -9,8 +9,6 @@
 
 [#107]: https://github.com/boxdot/gurk-rs/pull/107
 [#109]: https://github.com/boxdot/gurk-rs/pull/109
-
-## 0.2.3
 
 ### Fixed
 
