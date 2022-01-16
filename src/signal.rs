@@ -297,7 +297,7 @@ impl SignalManager for PresageManager {
         let attachment_data = self.manager.get_attachment(&attachment_pointer).await?;
 
         let date = Utc::now().to_rfc3339();
-        let filename = match attachment_pointer.content_type.as_ref().map(|s| s.as_str()) {
+        let filename = match attachment_pointer.content_type.as_deref() {
             Some("image/jpeg") => format!("signal-{}.jpg", date),
             Some("image/gif") => format!("signal-{}.gif", date),
             Some("image/png") => format!("signal-{}.png", date),
@@ -515,6 +515,13 @@ pub mod test {
             _emoji: String,
             _remove: bool,
         ) {
+        }
+
+        async fn save_attachment(
+            &mut self,
+            _attachment_pointer: AttachmentPointer,
+        ) -> anyhow::Result<Attachment> {
+            bail!("mocked signal manager cannot save attachments");
         }
     }
 }

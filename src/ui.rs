@@ -15,7 +15,7 @@ use tui::Frame;
 use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
 
-use std::borrow::Cow;
+use std::fmt;
 
 pub const CHANNEL_VIEW_RATIO: u32 = 4;
 
@@ -344,33 +344,18 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
     let messages = &channel.messages.items[..];
 
-    let names_and_colors = compute_names_and_colors(app, channel);
-    let max_username_width = names_and_colors
-        .iter()
-        .map(|(_, name, _)| name.width())
-        .max()
-        .unwrap_or(0);
+    let names = NameResolver::compute_for_channel(app, channel);
+    let max_username_width = names.max_name_width();
 
     // message display options
-    let first_name_only = app.config.first_name_only;
     const TIME_WIDTH: usize = 10;
     const DELIMITER_WIDTH: usize = 2;
     let prefix_width = TIME_WIDTH + max_username_width + DELIMITER_WIDTH;
     let prefix = " ".repeat(prefix_width);
 
     let messages_from_offset = messages.iter().rev().skip(offset).filter_map(|msg| {
-        log::debug!("{}", msg.attachments.len());
-        display_message(
-            app,
-            msg,
-            &names_and_colors,
-            max_username_width,
-            first_name_only,
-            &prefix,
-            width as usize,
-            height,
-            app.user_id == msg.from_id,
-        )
+        let print_receipt = app.user_id == msg.from_id;
+        display_message(&names, msg, &prefix, width as usize, height, print_receipt)
     });
 
     // counters to accumulate messages as long they fit into the list height,
@@ -438,11 +423,8 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
 #[allow(clippy::too_many_arguments)]
 fn display_message(
-    app: &App,
+    names: &NameResolver,
     msg: &app::Message,
-    names_and_colors: &[(Uuid, &str, Color)],
-    max_username_width: usize,
-    first_name_only: bool,
     prefix: &str,
     width: usize,
     height: usize,
@@ -460,32 +442,14 @@ fn display_message(
         Style::default().fg(Color::Yellow),
     );
 
-    let result = names_and_colors.binary_search_by_key(&msg.from_id, |&(id, _, _)| id);
-    let from;
-    let from_color;
-    match result {
-        Ok(idx) => {
-            let (_, f, c) = names_and_colors[idx];
-            from = f;
-            from_color = c;
-        }
-        Err(_) => {
-            from = app::App::name_by_id(app, msg.from_id);
-            from_color = Color::Magenta;
-        }
-    }
-
-    let receipt = if print_receipt {
-        msg.receipt.write()
-    } else {
-        ""
-    };
+    let (from, from_color) = names.resolve(msg.from_id);
 
     let from = Span::styled(
         textwrap::indent(
             from,
             &" ".repeat(
-                max_username_width
+                names
+                    .max_name_width()
                     .checked_sub(from.width())
                     .unwrap_or_default(),
             ),
@@ -498,16 +462,16 @@ fn display_message(
         .initial_indent(prefix)
         .subsequent_indent(prefix);
 
-    let text = if msg.reactions.is_empty() {
-        Cow::from(format!("{} {}", msg.message.as_ref()?, receipt))
-    } else {
-        Cow::from(format!(
-            "{} [{}] {}",
-            msg.message.as_ref()?,
-            msg.reactions.iter().map(|(_, emoji)| emoji).format(""),
-            receipt,
-        ))
-    };
+    // collect message text
+    let mut text = msg.message.clone().unwrap_or_default();
+    add_attachments(msg, &mut text);
+    if text.is_empty() {
+        return None; // no text => nothing to render
+    }
+    add_reactions(msg, &mut text);
+    if print_receipt {
+        add_receipt(msg, &mut text);
+    }
 
     let mut spans: Vec<Spans> = vec![];
 
@@ -515,7 +479,7 @@ fn display_message(
     let quote_text = msg
         .quote
         .as_ref()
-        .and_then(|quote| displayed_quote(quote, names_and_colors, first_name_only));
+        .and_then(|quote| displayed_quote(names, quote));
     if let Some(quote_text) = quote_text.as_ref() {
         let quote_prefix = format!("{}> ", prefix);
         let quote_wrap_opts = textwrap::Options::new(width.saturating_sub(2))
@@ -561,27 +525,52 @@ fn display_message(
             }),
     );
 
-    spans.extend(msg.attachments.iter().map(|attachment| {
-        let line = attachment.filename.display().to_string();
-        let res = if add_time {
-            vec![
-                time.clone(),
-                from.clone(),
-                delimiter.clone(),
-                Span::from(line),
-            ]
-        } else {
-            vec![Span::from(line)]
-        };
-        Spans::from(res)
-    }));
-
     if spans.len() > height {
         // span is too big to be shown fully
         spans.resize(height - 1, Spans::from(""));
         spans.push(Spans::from(format!("{}[...]", prefix)));
     }
     Some(ListItem::new(Text::from(spans)))
+}
+
+fn add_attachments(msg: &app::Message, out: &mut String) {
+    if !msg.attachments.is_empty() {
+        if !out.is_empty() {
+            out.push('\n');
+        }
+
+        fmt::write(
+            out,
+            format_args!(
+                "{}",
+                msg.attachments
+                    .iter()
+                    .format_with("\n", |attachment, f| f(&format_args!(
+                        "<file://{}>",
+                        attachment.filename.display()
+                    )))
+            ),
+        )
+        .expect("formatting attachments failed");
+    }
+}
+
+fn add_reactions(msg: &app::Message, out: &mut String) {
+    if !msg.reactions.is_empty() {
+        fmt::write(
+            out,
+            format_args!(
+                " [{}]",
+                msg.reactions.iter().map(|(_, emoji)| emoji).format("")
+            ),
+        )
+        .expect("formatting reactions failed");
+    }
+}
+
+fn add_receipt(msg: &app::Message, out: &mut String) {
+    out.push(' ');
+    out.push_str(msg.receipt.write());
 }
 
 fn draw_help<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
@@ -655,58 +644,6 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     f.render_stateful_widget(shorts_widget, area, &mut app.data.channels.state);
 }
 
-/// Returns a sorted vector of `(id, name, color)` by id.
-fn compute_names_and_colors<'a, 'b>(
-    app: &'a app::App,
-    channel: &'b app::Channel,
-) -> Vec<(Uuid, &'a str, Color)> {
-    let first_name_only = app.config.first_name_only;
-    let mut res = if let Some(group_data) = channel.group_data.as_ref() {
-        group_data
-            .members
-            .iter()
-            .map(|&uuid| {
-                let name = app.name_by_id(uuid);
-                let color = user_color(name);
-                let name = displayed_name(name, first_name_only);
-                (uuid, name, color)
-            })
-            .collect()
-    } else {
-        let user_id = app.user_id;
-        let user_name = app.name_by_id(user_id);
-        let mut self_color = user_color(user_name);
-        let user_name = displayed_name(user_name, first_name_only);
-
-        let contact_uuid = match channel.id {
-            app::ChannelId::User(uuid) => uuid,
-            _ => unreachable!("logic error"),
-        };
-
-        if contact_uuid == user_id {
-            vec![(user_id, user_name, self_color)]
-        } else {
-            let contact_name = app.name_by_id(contact_uuid);
-            let contact_color = user_color(contact_name);
-            let contact_name = displayed_name(contact_name, first_name_only);
-
-            if self_color == contact_color {
-                // use differnt color for our user name
-                if let Some(idx) = USER_COLORS.iter().position(|&c| c == self_color) {
-                    self_color = USER_COLORS[(idx + 1) % USER_COLORS.len()];
-                }
-            }
-
-            vec![
-                (user_id, user_name, self_color),
-                (contact_uuid, contact_name, contact_color),
-            ]
-        }
-    };
-    res.sort_unstable_by_key(|&(id, _, _)| id);
-    res
-}
-
 fn displayed_name(name: &str, first_name_only: bool) -> &str {
     if first_name_only {
         let space_pos = name.find(' ').unwrap_or_else(|| name.len());
@@ -734,17 +671,190 @@ fn user_color(username: &str) -> Color {
     USER_COLORS[idx]
 }
 
-fn displayed_quote(
-    quote: &app::Message,
-    names_and_colors: &[(Uuid, &str, Color)],
-    first_name_only: bool,
-) -> Option<String> {
-    let idx = names_and_colors.binary_search_by_key(&quote.from_id, |&(id, _, _)| id);
-    if let Ok(idx) = idx {
-        let name = names_and_colors[idx].1;
-        let name = displayed_name(name, first_name_only);
-        Some(format!("({}) {}", name, quote.message.as_ref()?))
-    } else {
-        quote.message.clone()
+/// Resolves names in a channel
+struct NameResolver<'a> {
+    app: Option<&'a App>,
+    names_and_colors: Vec<(Uuid, &'a str, Color)>,
+    max_name_width: usize,
+}
+
+impl<'a> NameResolver<'a> {
+    fn compute_for_channel<'b>(app: &'a app::App, channel: &'b app::Channel) -> Self {
+        let first_name_only = app.config.first_name_only;
+        let mut names_and_colors = if let Some(group_data) = channel.group_data.as_ref() {
+            group_data
+                .members
+                .iter()
+                .map(|&uuid| {
+                    let name = app.name_by_id(uuid);
+                    let color = user_color(name);
+                    let name = displayed_name(name, first_name_only);
+                    (uuid, name, color)
+                })
+                .collect()
+        } else {
+            let user_id = app.user_id;
+            let user_name = app.name_by_id(user_id);
+            let mut self_color = user_color(user_name);
+            let user_name = displayed_name(user_name, first_name_only);
+
+            let contact_uuid = match channel.id {
+                app::ChannelId::User(uuid) => uuid,
+                _ => unreachable!("logic error"),
+            };
+
+            if contact_uuid == user_id {
+                vec![(user_id, user_name, self_color)]
+            } else {
+                let contact_name = app.name_by_id(contact_uuid);
+                let contact_color = user_color(contact_name);
+                let contact_name = displayed_name(contact_name, first_name_only);
+
+                if self_color == contact_color {
+                    // use differnt color for our user name
+                    if let Some(idx) = USER_COLORS.iter().position(|&c| c == self_color) {
+                        self_color = USER_COLORS[(idx + 1) % USER_COLORS.len()];
+                    }
+                }
+
+                vec![
+                    (user_id, user_name, self_color),
+                    (contact_uuid, contact_name, contact_color),
+                ]
+            }
+        };
+        names_and_colors.sort_unstable_by_key(|&(id, _, _)| id);
+
+        let max_name_width = names_and_colors
+            .iter()
+            .map(|(_, name, _)| name.width())
+            .max()
+            .unwrap_or(0);
+
+        Self {
+            app: Some(app),
+            names_and_colors,
+            max_name_width,
+        }
+    }
+
+    fn resolve(&self, id: Uuid) -> (&str, Color) {
+        match self
+            .names_and_colors
+            .binary_search_by_key(&id, |&(id, _, _)| id)
+        {
+            Ok(idx) => {
+                let (_, from, from_color) = self.names_and_colors[idx];
+                (from, from_color)
+            }
+            Err(_) => (
+                app::App::name_by_id(self.app.expect("logic error"), id),
+                Color::Magenta,
+            ),
+        }
+    }
+
+    fn max_name_width(&self) -> usize {
+        self.max_name_width
+    }
+}
+
+fn displayed_quote(names: &NameResolver, quote: &app::Message) -> Option<String> {
+    let (name, _) = names.resolve(quote.from_id);
+    Some(format!("({}) {}", name, quote.message.as_ref()?))
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::app::{Message, Receipt};
+    use crate::signal::Attachment;
+
+    use super::*;
+
+    // formatting test options
+    const PREFIX: &str = "                  ";
+    const WIDTH: usize = 60;
+    const HEIGHT: usize = 10;
+    const PRINT_RECEIPT: bool = true;
+
+    fn test_message() -> Message {
+        Message {
+            from_id: Uuid::nil(),
+            message: None,
+            arrived_at: 1642334397421,
+            quote: None,
+            attachments: vec![],
+            reactions: vec![],
+            receipt: Receipt::Sent,
+        }
+    }
+
+    fn test_attachment() -> Attachment {
+        Attachment {
+            id: "2022-01-16T11:59:58.405665+00:00".to_string(),
+            content_type: "image/jpeg".into(),
+            filename: "/tmp/gurk/signal-2022-01-16T11:59:58.405665+00:00.jpg".into(),
+            size: 238987,
+        }
+    }
+
+    #[test]
+    fn test_display_attachment_only_message() {
+        let names = NameResolver {
+            app: None,
+            names_and_colors: vec![(Uuid::nil(), "boxdot", Color::Green)],
+            max_name_width: 6,
+        };
+
+        let msg = Message {
+            attachments: vec![test_attachment()],
+            ..test_message()
+        };
+        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, PRINT_RECEIPT);
+
+        let expected = ListItem::new(Text::from(vec![
+            Spans(vec![
+                Span::styled("Sun 12:59 ", Style::default().fg(Color::Yellow)),
+                Span::styled("boxdot", Style::default().fg(Color::Green)),
+                Span::raw(": "),
+                Span::raw("<file:///tmp/gurk/signal-2022-01-"),
+            ]),
+            Spans(vec![Span::raw(
+                "                  16T11:59:58.405665+00:00.jpg> (x)",
+            )]),
+        ]));
+        assert_eq!(rendered, Some(expected));
+    }
+
+    #[test]
+    fn test_display_text_and_attachment_message() {
+        let names = NameResolver {
+            app: None,
+            names_and_colors: vec![(Uuid::nil(), "boxdot", Color::Green)],
+            max_name_width: 6,
+        };
+
+        let msg = Message {
+            message: Some("Hello, World!".into()),
+            attachments: vec![test_attachment()],
+            ..test_message()
+        };
+        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, PRINT_RECEIPT);
+
+        let expected = ListItem::new(Text::from(vec![
+            Spans(vec![
+                Span::styled("Sun 12:59 ", Style::default().fg(Color::Yellow)),
+                Span::styled("boxdot", Style::default().fg(Color::Green)),
+                Span::raw(": "),
+                Span::raw("Hello, World!"),
+            ]),
+            Spans(vec![Span::raw(
+                "                  <file:///tmp/gurk/signal-2022-01-",
+            )]),
+            Spans(vec![Span::raw(
+                "                  16T11:59:58.405665+00:00.jpg> (x)",
+            )]),
+        ]));
+        assert_eq!(rendered, Some(expected));
     }
 }
