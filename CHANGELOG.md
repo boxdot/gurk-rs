@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Add support for downloading attachments ([#122])
+
+[#122]: https://github.com/boxdot/gurk-rs/pull/122
+
 ## 0.2.3
 
 ### Added

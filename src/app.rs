@@ -1,6 +1,6 @@
 use crate::config::Config;
 use crate::signal::{
-    self, GroupIdentifierBytes, GroupMasterKeyBytes, ResolvedGroup, SignalManager,
+    self, Attachment, GroupIdentifierBytes, GroupMasterKeyBytes, ResolvedGroup, SignalManager,
 };
 use crate::storage::Storage;
 use crate::util::{
@@ -14,7 +14,7 @@ use itertools::Itertools;
 use log::error;
 use notify_rust::Notification;
 use phonenumber::{Mode, PhoneNumber};
-use presage::prelude::proto::{ReceiptMessage, TypingMessage};
+use presage::prelude::proto::{AttachmentPointer, ReceiptMessage, TypingMessage};
 use presage::prelude::{
     content::{ContentBody, DataMessage, Metadata, SyncMessage},
     proto::{
@@ -560,13 +560,18 @@ pub struct Message {
 }
 
 impl Message {
-    fn new(from_id: Uuid, message: String, arrived_at: u64) -> Self {
+    fn new(
+        from_id: Uuid,
+        message: Option<String>,
+        arrived_at: u64,
+        attachments: Vec<Attachment>,
+    ) -> Self {
         Self {
             from_id,
-            message: Some(message),
+            message,
             arrived_at,
             quote: None,
-            attachments: Default::default(),
+            attachments,
             reactions: Default::default(),
             receipt: Receipt::Sent,
         }
@@ -831,8 +836,7 @@ impl App {
     }
 
     pub async fn on_message(&mut self, content: Content) -> anyhow::Result<()> {
-        log::info!("incoming: {:?}", content);
-
+        // log::debug!("incoming: {:#?}", content);
         let user_id = self.user_id;
 
         let (channel_idx, message) = match (content.metadata, content.body) {
@@ -846,7 +850,9 @@ impl App {
                             timestamp: Some(timestamp),
                             message:
                                 Some(DataMessage {
-                                    body: Some(text), ..
+                                    body,
+                                    attachments: attachment_pointers,
+                                    ..
                                 }),
                             ..
                         }),
@@ -854,7 +860,8 @@ impl App {
                 }),
             ) if destination_uuid.parse() == Ok(user_id) => {
                 let channel_idx = self.ensure_own_channel_exists();
-                let message = Message::new(user_id, text, timestamp);
+                let attachments = self.save_attachments(attachment_pointers).await;
+                let message = Message::new(user_id, body, timestamp, attachments);
                 (channel_idx, message)
             }
             // Direct/group message by us from a different device
@@ -875,9 +882,10 @@ impl App {
                             timestamp: Some(timestamp),
                             message:
                                 Some(DataMessage {
-                                    body: Some(text),
+                                    body,
                                     group_v2,
                                     quote,
+                                    attachments: attachment_pointers,
                                     ..
                                 }),
                             ..
@@ -906,14 +914,17 @@ impl App {
                     self.ensure_contact_channel_exists(destination_uuid, &destination_e164)
                         .await
                 } else {
+                    log::error!("shit");
                     return Ok(());
                 };
 
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
+                let attachments = self.save_attachments(attachment_pointers).await;
                 let message = Message {
                     quote,
-                    ..Message::new(user_id, text, timestamp)
+                    ..Message::new(user_id, body, timestamp, attachments)
                 };
+
                 (channel_idx, message)
             }
             // Incoming direct/group message
@@ -928,11 +939,12 @@ impl App {
                     ..
                 },
                 ContentBody::DataMessage(DataMessage {
-                    body: Some(text),
+                    body,
                     group_v2,
                     timestamp: Some(timestamp),
                     profile_key: Some(profile_key),
                     quote,
+                    attachments: attachment_pointers,
                     ..
                 }),
             ) => {
@@ -966,18 +978,23 @@ impl App {
                     let from = self.data.channels.items[channel_idx].name.clone();
                     // Reset typing notification as the Tipyng::Stop are not always sent by the server when a message is sent.
                     self.data.channels.items[channel_idx].reset_writing(uuid);
+
                     (channel_idx, from)
                 };
 
-                self.notify(&from, &text);
+                if let Some(text) = &body {
+                    self.notify(&from, text);
+                }
 
                 // Send "Delivered" receipt
                 self.add_receipt_event(ReceiptEvent::new(uuid, timestamp, Receipt::Received));
 
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
+
+                let attachments = self.save_attachments(attachment_pointers).await;
                 let message = Message {
                     quote,
-                    ..Message::new(uuid, text, timestamp)
+                    ..Message::new(uuid, body, timestamp, attachments)
                 };
                 (channel_idx, message)
             }
@@ -1563,6 +1580,24 @@ impl App {
         let clean_input = clean_input.trim().to_string();
 
         (clean_input, attachments)
+    }
+
+    async fn save_attachments(
+        &mut self,
+        attachment_pointers: Vec<AttachmentPointer>,
+    ) -> Vec<Attachment> {
+        let mut attachments = vec![];
+        for attachment_pointer in attachment_pointers {
+            match self
+                .signal_manager
+                .save_attachment(attachment_pointer)
+                .await
+            {
+                Ok(attachment) => attachments.push(attachment),
+                Err(e) => log::warn!("failed to save attachment: {}", e),
+            }
+        }
+        attachments
     }
 
     pub fn toggle_help(&mut self) {
