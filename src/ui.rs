@@ -421,6 +421,11 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     channel.messages.rendered.offset = offset;
 }
 
+fn display_datetime(timestamp: u64) -> String {
+    let dt = util::utc_timestamp_msec_to_local(timestamp);
+    format!("{} {:02}:{:02} ", dt.weekday(), dt.hour(), dt.minute())
+}
+
 #[allow(clippy::too_many_arguments)]
 fn display_message(
     names: &NameResolver,
@@ -430,15 +435,8 @@ fn display_message(
     height: usize,
     print_receipt: bool,
 ) -> Option<ListItem<'static>> {
-    let arrived_at = util::utc_timestamp_msec_to_local(msg.arrived_at);
-
     let time = Span::styled(
-        format!(
-            "{} {:02}:{:02} ",
-            arrived_at.weekday(),
-            arrived_at.hour(),
-            arrived_at.minute()
-        ),
+        display_datetime(msg.arrived_at),
         Style::default().fg(Color::Yellow),
     );
 
@@ -814,7 +812,10 @@ mod tests {
 
         let expected = ListItem::new(Text::from(vec![
             Spans(vec![
-                Span::styled("Sun 12:59 ", Style::default().fg(Color::Yellow)),
+                Span::styled(
+                    display_datetime(msg.arrived_at),
+                    Style::default().fg(Color::Yellow),
+                ),
                 Span::styled("boxdot", Style::default().fg(Color::Green)),
                 Span::raw(": "),
                 Span::raw("<file:///tmp/gurk/signal-2022-01-"),
@@ -843,7 +844,10 @@ mod tests {
 
         let expected = ListItem::new(Text::from(vec![
             Spans(vec![
-                Span::styled("Sun 12:59 ", Style::default().fg(Color::Yellow)),
+                Span::styled(
+                    display_datetime(msg.arrived_at),
+                    Style::default().fg(Color::Yellow),
+                ),
                 Span::styled("boxdot", Style::default().fg(Color::Green)),
                 Span::raw(": "),
                 Span::raw("Hello, World!"),
