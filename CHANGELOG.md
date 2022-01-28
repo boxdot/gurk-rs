@@ -6,11 +6,11 @@
 
 - Add support for downloading attachments ([#122])
 - Add release build for aarch64-unknown-musl ([#126])
-- Show qrcode in terminal instead of PNG viewer ([#127])
+- Show qrcode in terminal instead of PNG viewer ([#128])
 
 [#122]: https://github.com/boxdot/gurk-rs/pull/122
 [#126]: https://github.com/boxdot/gurk-rs/pull/126
-[#127]: https://github.com/boxdot/gurk-rs/pull/127
+[#128]: https://github.com/boxdot/gurk-rs/pull/128
 
 ## 0.2.3
 
