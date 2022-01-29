@@ -1,8 +1,8 @@
 use crate::app::AppData;
+use crate::cursor::Cursor;
 
 use anyhow::Context;
 use log::info;
-use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
 
 use std::fs::File;
@@ -100,8 +100,7 @@ impl JsonStorage {
         info!("loading app data from: {}", data_path.as_ref().display());
         let f = BufReader::new(File::open(data_path)?);
         let mut data: AppData = serde_json::from_reader(f)?;
-        data.input.input_cursor = data.input.data.len();
-        data.input.input_cursor_chars = data.input.data.width();
+        data.input.cursor = Cursor::end(&data.input.data);
         Ok(data)
     }
 }
@@ -139,6 +138,7 @@ pub mod test {
 mod tests {
     use crate::{
         app::{BoxData, Channel, ChannelId, TypingSet},
+        cursor::Cursor,
         util::FilteredStatefulList,
     };
 
@@ -150,16 +150,8 @@ mod tests {
         let user_id = Uuid::new_v4();
         let user_name = "Tyler Durden".to_string();
         let app_data = AppData {
-            input: BoxData {
-                data: "".to_string(),
-                input_cursor: 0,
-                input_cursor_chars: 0,
-            },
-            search_box: BoxData {
-                data: "".to_string(),
-                input_cursor: 0,
-                input_cursor_chars: 0,
-            },
+            input: BoxData::empty(),
+            search_box: BoxData::empty(),
             names: [(user_id, user_name.clone())].iter().cloned().collect(),
             ..Default::default()
         };
@@ -201,16 +193,8 @@ mod tests {
         let user_id = Uuid::new_v4();
         let user_name = "Tyler Durden".to_string();
         let app_data = AppData {
-            input: BoxData {
-                data: "".to_string(),
-                input_cursor: 0,
-                input_cursor_chars: 0,
-            },
-            search_box: BoxData {
-                data: "".to_string(),
-                input_cursor: 0,
-                input_cursor_chars: 0,
-            },
+            input: BoxData::empty(),
+            search_box: BoxData::empty(),
             names: [(user_id, user_name.clone())].iter().cloned().collect(),
             ..Default::default()
         };
@@ -235,14 +219,13 @@ mod tests {
         let app_data = AppData {
             input: BoxData {
                 data: "some input".to_string(),
-                input_cursor: 10,
-                input_cursor_chars: 10,
+                cursor: Cursor::end("some input"),
             },
             search_box: BoxData {
                 data: "some search".to_string(),
-                input_cursor: 10,
-                input_cursor_chars: 10,
+                cursor: Cursor::end("some search"),
             },
+            is_multiline_input: false,
             names: [(user_id, user_name.clone())].iter().cloned().collect(),
             channels: FilteredStatefulList::_with_items(vec![Channel {
                 id: ChannelId::User(user_id),

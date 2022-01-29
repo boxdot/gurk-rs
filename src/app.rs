@@ -1,4 +1,5 @@
 use crate::config::Config;
+use crate::cursor::Cursor;
 use crate::signal::{
     self, Attachment, GroupIdentifierBytes, GroupMasterKeyBytes, ResolvedGroup, SignalManager,
 };
@@ -26,7 +27,6 @@ use presage::prelude::{
 };
 use regex_automata::Regex;
 use serde::{Deserialize, Serialize};
-use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
 
 use std::borrow::Cow;
@@ -186,121 +186,70 @@ impl ReceiptQueues {
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct BoxData {
     pub data: String,
-    /// Input position in bytes (not number of chars)
-    pub input_cursor: usize,
-    /// Input position in chars
-    pub input_cursor_chars: usize,
+    pub cursor: Cursor,
 }
 
 impl BoxData {
+    #[cfg(test)]
+    pub fn empty() -> Self {
+        Default::default()
+    }
+
     pub fn put_char(&mut self, c: char) {
-        let idx = self.input_cursor;
-        self.data.insert(idx, c);
-        self.input_cursor += c.len_utf8();
-        self.input_cursor_chars += 1;
+        self.cursor.put(c, &mut self.data);
     }
 
     pub fn new_line(&mut self) {
-        self.put_char('\n');
-        self.input_cursor_chars -= 1;
+        self.cursor.new_line(&mut self.data);
     }
 
-    pub fn on_left(&mut self) -> Option<()> {
-        let mut idx = self.input_cursor.checked_sub(1)?;
-        while !self.data.is_char_boundary(idx) {
-            idx -= 1;
-        }
-        self.input_cursor = idx;
-        self.input_cursor_chars -= 1;
-        Some(())
+    pub fn on_left(&mut self) {
+        self.cursor.move_left(&self.data);
     }
 
-    fn word_operation(&mut self, op: impl Fn(&mut BoxData) -> Option<()>) -> Option<()> {
-        while op(self).is_some() {
-            if self.data.as_bytes().get(self.input_cursor)? != &b' ' {
-                break;
-            }
-        }
-        while op(self).is_some() {
-            if self.data.as_bytes().get(self.input_cursor)? == &b' ' {
-                return Some(());
-            }
-        }
-        None
+    pub fn on_right(&mut self) {
+        self.cursor.move_right(&self.data);
     }
 
-    /// Move a word back
+    pub fn move_line_down(&mut self) {
+        self.cursor.move_line_down(&self.data);
+    }
+
+    pub fn move_line_up(&mut self) {
+        self.cursor.move_line_up(&self.data);
+    }
+
     pub fn move_back_word(&mut self) {
-        self.on_left();
-        self.word_operation(Self::on_left);
-        if self.data.as_bytes().get(self.input_cursor) == Some(&b' ') {
-            self.on_right();
-        }
+        self.cursor.move_word_left(&self.data);
     }
 
-    /// Move a word forward
     pub fn move_forward_word(&mut self) {
-        self.word_operation(Self::on_right);
-        while self.data.as_bytes().get(self.input_cursor) == Some(&b' ') {
-            self.on_right();
-        }
+        self.cursor.move_word_right(&self.data);
     }
 
     pub fn on_home(&mut self) {
-        self.input_cursor = 0;
-        self.input_cursor_chars = 0;
+        self.cursor.start_of_line(&self.data);
     }
 
     pub fn on_end(&mut self) {
-        self.input_cursor = self.data.len();
-        self.input_cursor_chars = self.data.width();
+        self.cursor.end_of_line(&self.data);
     }
 
-    pub fn on_right(&mut self) -> Option<()> {
-        let mut idx = Some(self.input_cursor + 1).filter(|x| x <= &self.data.len())?;
-        while idx < self.data.len() && !self.data.is_char_boundary(idx) {
-            idx -= 1;
-        }
-        self.input_cursor = idx;
-        self.input_cursor_chars += 1;
-        Some(())
+    pub fn on_backspace(&mut self) {
+        self.cursor.delete_backward(&mut self.data);
     }
 
-    pub fn on_backspace(&mut self) -> Option<()> {
-        let mut idx = self.input_cursor.checked_sub(1)?;
-        while idx < self.data.len() && !self.data.is_char_boundary(idx) {
-            idx -= 1;
-        }
-        self.data.remove(idx);
-        self.input_cursor = idx;
-        self.input_cursor_chars -= 1;
-        Some(())
-    }
-
-    pub fn on_delete_word(&mut self) -> Option<()> {
-        while self
-            .data
-            .as_bytes()
-            .get(self.input_cursor.checked_sub(1)?)?
-            == &b' '
-        {
-            self.on_backspace();
-        }
-        while self
-            .data
-            .as_bytes()
-            .get(self.input_cursor.checked_sub(1)?)?
-            != &b' '
-        {
-            self.on_backspace();
-        }
-        Some(())
+    pub fn on_delete_word(&mut self) {
+        self.cursor.delete_word_backward(&mut self.data);
     }
 
     pub fn on_delete_suffix(&mut self) {
-        if self.input_cursor < self.data.len() {
-            self.data.truncate(self.input_cursor);
-        }
+        self.cursor.delete_suffix(&mut self.data);
+    }
+
+    fn take(&mut self) -> String {
+        self.cursor = Default::default();
+        std::mem::take(&mut self.data)
     }
 }
 
@@ -312,6 +261,8 @@ pub struct AppData {
     pub input: BoxData,
     #[serde(skip)]
     pub search_box: BoxData,
+    #[serde(skip)]
+    pub is_multiline_input: bool,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -668,11 +619,11 @@ impl App {
     pub fn on_key(&mut self, key: KeyEvent) -> anyhow::Result<()> {
         match key.code {
             KeyCode::Char('\r') => self.get_input().put_char('\n'),
-            KeyCode::Enter
-                if !self.get_input().data.is_empty()
-                    && key.modifiers.contains(KeyModifiers::ALT) =>
-            {
-                self.get_input().new_line();
+            KeyCode::Enter if key.modifiers.contains(KeyModifiers::ALT) => {
+                self.data.is_multiline_input = !self.data.is_multiline_input;
+            }
+            KeyCode::Enter if self.data.is_multiline_input => {
+                self.data.input.new_line();
             }
             KeyCode::Enter if !self.get_input().data.is_empty() && !self.is_searching => {
                 if let Some(idx) = self.data.channels.state.selected() {
@@ -683,8 +634,18 @@ impl App {
                 // input is empty
                 self.try_open_url();
             }
-            KeyCode::Home => self.get_input().on_home(),
-            KeyCode::End => self.get_input().on_end(),
+            KeyCode::Home => {
+                self.get_input().on_home();
+            }
+            KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.get_input().on_home();
+            }
+            KeyCode::End => {
+                self.get_input().on_end();
+            }
+            KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.get_input().on_end();
+            }
             KeyCode::Backspace => {
                 self.get_input().on_backspace();
             }
@@ -775,10 +736,7 @@ impl App {
     }
 
     fn take_input(&mut self) -> String {
-        let input_box = self.get_input();
-        input_box.input_cursor = 0;
-        input_box.input_cursor_chars = 0;
-        std::mem::take(&mut input_box.data)
+        self.get_input().take()
     }
 
     fn send_input(&mut self, channel_idx: usize) -> anyhow::Result<()> {
@@ -1705,8 +1663,8 @@ mod tests {
         assert_eq!(app.data.channels.items[0].unread_messages, 0);
 
         assert_eq!(app.get_input().data, "");
-        assert_eq!(app.get_input().input_cursor, 0);
-        assert_eq!(app.get_input().input_cursor_chars, 0);
+        // assert_eq!(app.get_input().input_cursor, 0);
+        // assert_eq!(app.get_input().input_cursor_chars, 0);
     }
 
     #[test]
@@ -1716,8 +1674,8 @@ mod tests {
         for c in input.chars() {
             app.get_input().put_char(c);
         }
-        assert_eq!(app.get_input().input_cursor, 4);
-        assert_eq!(app.get_input().input_cursor_chars, 1);
+        // assert_eq!(app.get_input().input_cursor, 4);
+        // assert_eq!(app.get_input().input_cursor_chars, 1);
 
         app.send_input(0).unwrap();
 
@@ -1726,8 +1684,8 @@ mod tests {
         assert_eq!(sent[0].message.as_ref().unwrap(), input);
 
         assert_eq!(app.get_input().data, "");
-        assert_eq!(app.get_input().input_cursor, 0);
-        assert_eq!(app.get_input().input_cursor_chars, 0);
+        // assert_eq!(app.get_input().input_cursor, 0);
+        // assert_eq!(app.get_input().input_cursor_chars, 0);
     }
 
     #[test]

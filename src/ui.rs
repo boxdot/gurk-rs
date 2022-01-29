@@ -1,4 +1,5 @@
 use crate::app::ReceiptEvent;
+use crate::cursor::Cursor;
 use crate::shortcuts::{ShortCut, SHORTCUTS};
 use crate::util;
 use crate::{app, App};
@@ -12,7 +13,7 @@ use tui::style::{Color, Style};
 use tui::text::{Span, Spans, Text};
 use tui::widgets::{Block, Borders, List, ListItem, Paragraph};
 use tui::Frame;
-use unicode_width::UnicodeWidthStr;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use uuid::Uuid;
 
 use std::fmt;
@@ -92,47 +93,16 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
 
 fn draw_channels_column<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let text_width = area.width.saturating_sub(2) as usize;
-    let lines: Vec<String> =
-        app.data
-            .search_box
-            .data
-            .chars()
-            .enumerate()
-            .fold(Vec::new(), |mut lines, (idx, c)| {
-                if idx % text_width == 0 {
-                    lines.push(String::new());
-                }
-                match c {
-                    '\n' => {
-                        lines.last_mut().unwrap().push('\n');
-                        lines.push(String::new())
-                    }
-                    _ => lines.last_mut().unwrap().push(c),
-                }
-                lines
-            });
-    // chars since newline on `cursor_y` line
-    let mut cursor_x = app.data.search_box.input_cursor_chars;
-    // line selected by `app.data.input_cursor`
-    let mut cursor_y = 0;
-    for string in &lines {
-        cursor_y += 1;
-        match string.len().cmp(&cursor_x) {
-            std::cmp::Ordering::Less => cursor_x -= string.width(),
-            _ => break,
-        };
-    }
-    let num_input_lines = lines.len().max(1);
-    let input: Vec<Spans> = lines.into_iter().map(Spans::from).collect();
-    let extra_cursor_line = if cursor_x > 0 && cursor_x % text_width == 0 {
-        1
-    } else {
-        0
-    };
+    let (wrapped_input, cursor, num_input_lines) = wrap(
+        &app.data.search_box.data,
+        app.data.search_box.cursor.clone(),
+        text_width,
+    );
+
     let chunks = Layout::default()
         .constraints(
             [
-                Constraint::Length(num_input_lines as u16 + 2 + extra_cursor_line),
+                Constraint::Length(num_input_lines as u16 + 2),
                 Constraint::Min(0),
             ]
             .as_ref(),
@@ -142,15 +112,13 @@ fn draw_channels_column<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect)
 
     draw_channels(f, app, chunks[1]);
 
-    let input = Paragraph::new(Text::from(input))
+    let input = Paragraph::new(Text::from(wrapped_input))
         .block(Block::default().borders(Borders::ALL).title("Search"));
     f.render_widget(input, chunks[0]);
     if app.is_searching {
         f.set_cursor(
-            // Put cursor past the end of the input text
-            chunks[0].x + ((cursor_x as u16) % text_width as u16) + 1,
-            // Move one line down, from the border to the input line
-            chunks[0].y + (cursor_x as u16 / (text_width as u16)) + cursor_y.max(1) as u16,
+            chunks[0].x + cursor.col as u16 + 1,
+            chunks[0].y + cursor.line as u16 + 1,
         );
     }
 }
@@ -191,52 +159,65 @@ fn draw_channels<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     f.render_stateful_widget(channels, area, &mut app.data.channels.state);
 }
 
+fn wrap(text: &str, mut cursor: Cursor, width: usize) -> (String, Cursor, usize) {
+    let mut res = String::new();
+
+    let mut line = 0;
+    let mut col = 0;
+
+    for c in text.chars() {
+        // current line too long => wrap
+        if col > 0 && col % width == 0 {
+            res.push('\n');
+
+            // adjust cursor
+            if line < cursor.line {
+                cursor.line += 1;
+                cursor.idx += 1;
+            } else if line == cursor.line && col <= cursor.col {
+                cursor.line += 1;
+                cursor.col -= col;
+                cursor.idx += 1;
+            }
+
+            line += 1;
+            col = 0;
+        }
+
+        if c == '\n' {
+            line += 1;
+            col = 0;
+        } else {
+            col += c.width().unwrap_or(0);
+        }
+        res.push(c);
+    }
+
+    // special case: cursor is at the end of the text and overflows `width`
+    if cursor.idx == res.len() && cursor.col == width {
+        res.push('\n');
+        cursor.line += 1;
+        cursor.col = 0;
+        cursor.idx += 1;
+        line += 1;
+    }
+
+    (res, cursor, line + 1)
+}
+
 fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let text_width = area.width.saturating_sub(2) as usize;
-    let lines: Vec<String> =
-        app.data
-            .input
-            .data
-            .chars()
-            .enumerate()
-            .fold(Vec::new(), |mut lines, (idx, c)| {
-                if idx % text_width == 0 {
-                    lines.push(String::new());
-                }
-                match c {
-                    '\n' => {
-                        // This is currently unused
-                        // lines.last_mut().unwrap().push('\n');
-                        lines.push(String::new())
-                    }
-                    _ => lines.last_mut().unwrap().push(c),
-                }
-                lines
-            });
-    // chars since newline on `cursor_y` line
-    let mut cursor_x = app.data.input.input_cursor_chars;
-    // line selected by `app.data.input_cursor`
-    let mut cursor_y = 0;
-    for (i, string) in (&lines).iter().enumerate() {
-        cursor_y += 1;
-        match string.width().cmp(&cursor_x) {
-            std::cmp::Ordering::Less => cursor_x -= string.width(),
-            std::cmp::Ordering::Equal if i < lines.len() - 1 => cursor_x -= string.width(),
-            _ => break,
-        };
-    }
-    let num_input_lines = lines.len().max(1);
-    let input: Vec<Spans> = lines.into_iter().map(Spans::from).collect();
-    let extra_cursor_line = if cursor_x > 0 && cursor_x % text_width == 0 {
-        1
-    } else {
-        0
-    };
+    let (wrapped_input, cursor, num_input_lines) = wrap(
+        &app.data.input.data,
+        app.data.input.cursor.clone(),
+        text_width,
+    );
+
     let chunks = Layout::default()
         .constraints(
             [
                 Constraint::Min(0),
-                Constraint::Length(num_input_lines as u16 + 2 + extra_cursor_line),
+                Constraint::Length(num_input_lines as u16 + 2),
             ]
             .as_ref(),
         )
@@ -245,15 +226,19 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
     draw_messages(f, app, chunks[0]);
 
-    let input = Paragraph::new(Text::from(input))
-        .block(Block::default().borders(Borders::ALL).title("Input"));
+    let title = if app.data.is_multiline_input {
+        "Input (Multiline)"
+    } else {
+        "Input"
+    };
+
+    let input = Paragraph::new(Text::from(wrapped_input))
+        .block(Block::default().borders(Borders::ALL).title(title));
     f.render_widget(input, chunks[1]);
     if !app.is_searching {
         f.set_cursor(
-            // Put cursor past the end of the input text
-            chunks[1].x + ((cursor_x as u16) % text_width as u16) + 1,
-            // Move one line down, from the border to the input line
-            chunks[1].y + (cursor_x as u16 / (text_width as u16)) + cursor_y.max(1) as u16,
+            chunks[1].x + cursor.col as u16 + 1,  // +1 for frame
+            chunks[1].y + cursor.line as u16 + 1, // +1 for frame
         );
     }
 }
