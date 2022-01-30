@@ -65,25 +65,25 @@ libraries that are not available on crates.io.
 # Key bindings
 
 * App navigation
-  * `f1` Toggle help panel
+  * `f1` Toggle help panel.
   * `alt+tab` Switch between message input box and search bar
-* Message edition
+* Message edition.
   * `tab` Send emoji from input line as reaction on selected message.
   * `alt+enter` Add newline.
-  * `ctrl+w / ctrl+backspace / alt+backspace` Delete last word
-  * `enter` *when input box empty* Open URL from selected message
-  * `enter` *otherwise* Send message
+  * `ctrl+w / ctrl+backspace / alt+backspace` Delete last word.
+  * `enter` *when input box empty* Open URL from selected message.
+  * `enter` *otherwise* Send message.
 * Cursor
-  * `alt+f / alt+Right / ctrl+Right` Move forward one word
-  * `alt+b / alt+Left / ctrl+Left` Move backward one word
-  * `ctrl+a / home` Move cursor to the beginning of the text
-  * `ctrl+e / end` Move cursor the the end of the text
+  * `alt+f / alt+Right / ctrl+Right` Move forward one word.
+  * `alt+b / alt+Left / ctrl+Left` Move backward one word.
+  * `ctrl+a / home` Move cursor to the beginning of the text.
+  * `ctrl+e / end` Move cursor the the end of the text.
 * Message/channel selection
-  * `Esc` Reset message selection
-  * `alt+Up / PgUp` Select previous message
-  * `alt+Down / PgDown` Select next message
-  * `ctrl+j / Up` Select previous channel
-  * `ctrl+k / Down` Select next channel
+  * `Esc` Reset message selection.
+  * `alt+Up / PgUp` Select previous message.
+  * `alt+Down / PgDown` Select next message.
+  * `ctrl+j / Up` Select previous channel.
+  * `ctrl+k / Down` Select next channel.
 
 
 ## License
