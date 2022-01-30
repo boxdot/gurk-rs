@@ -9,7 +9,7 @@
 
 ## Pre-compiled binary
 
-Download a pre-compiled binary from [Releases] for following targets :
+Download a pre-compiled binary from [Releases] for following targets:
 
 * `x86-64 Linux GNU`
 * `x86-64 Linux musl`
@@ -66,7 +66,7 @@ libraries that are not available on crates.io.
 
 * App navigation
   * `f1` Toggle help panel.
-  * `alt+tab` Switch between message input box and search bar
+  * `alt+tab` Switch between message input box and search bar.
 * Message edition.
   * `tab` Send emoji from input line as reaction on selected message.
   * `alt+enter` Add newline.
