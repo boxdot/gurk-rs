@@ -5,13 +5,30 @@
 
 ![screenshot](screenshot.png)
 
-## Usage
+# Installation
 
-Download a pre-compiled binary from [Releases], or install from source:
+## Pre-compiled binary
+
+Download a pre-compiled binary from [Releases] for these targets :
+
+* `x86-64 Linux GNU`
+* `x86-64 Linux musl`
+* `aarch64 Linux GNU`
+* `aarch64 Linux musl` (>= `v0.2.4` only)
+* `x86-64 Darwin`
+* `aarch64 Darwin`
+
+## From source (using `cargo`)
 
 ```shell
 cargo install --git https://github.com/boxdot/gurk-rs gurk
 ```
+
+## Arch Linux
+
+Packaged in the AUR (either `bin` or `git`).
+
+# Usage
 
 Run
 
@@ -44,6 +61,28 @@ libraries that are not available on crates.io.
 * [ ] Support for blocked contacts/groups.
 * [x] Reactions with emojis.
 * [x] Open URL in selected message.
+
+# Key bindings
+* App navigation
+  * `f1` Toggle help panel
+  * `alt+tab` Switch between message input box and search bar
+Message edition
+  * `tab` Send emoji from input line as reaction on selected message.
+  * `alt+enter` Add newline.
+  * `ctrl+w` Delete last word
+  * `enter` *when input box empty* Open URL from selected message
+  * `enter` *otherwise* Send message
+* Cursor
+  * `alt+f / alt+Right / ctrl+Right` Move forward one word
+  * `alt+b / alt+Left / ctrl+Left` Move backward one word
+  * `ctrl+a / home` Move cursor to the beginning of the text
+  * `ctrl+e / end` Move cursor the the end of the text
+* Message/channel selection
+  * `alt+Up / PgUp` Select previous message
+  * `alt+Down / PgDown` Select next message
+  * `ctrl+j / Up` Select previous channel
+  * `ctrl+k / Down` Select next channel
+
 
 ## License
 

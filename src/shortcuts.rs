@@ -12,14 +12,14 @@ pub static SHORTCUTS: &[ShortCut] = &[
     },
     ShortCut {
         event: "Tab",
-        description: "When a message is selected, proceeds to try and read an emoji code (e.g. `:blush:`) from the input box and send the corresponding reaction on the selected message.",
+        description: "Sends emoji from input line as reaction on selected message.",
     },
     ShortCut {
-        event: "ALT+Enter",
-        description: "Add a newline when editing a message.",
+        event: "Alt+Enter",
+        description: "Add newline.",
     },
     ShortCut {
         event: "Alt+Tab",
-        description: "Switch between the message input box and the search bar.",
+        description: "Switch between message input box and search bar.",
     },
 ];
