@@ -9,7 +9,7 @@
 
 ## Pre-compiled binary
 
-Download a pre-compiled binary from [Releases] for these targets :
+Download a pre-compiled binary from [Releases] for following targets :
 
 * `x86-64 Linux GNU`
 * `x86-64 Linux musl`
@@ -26,7 +26,7 @@ cargo install --git https://github.com/boxdot/gurk-rs gurk
 
 ## Arch Linux
 
-Packaged in the AUR (either `bin` or `git`).
+Packaged in the AUR: `gurk-git` and `gurk-bin`
 
 # Usage
 
@@ -63,13 +63,14 @@ libraries that are not available on crates.io.
 * [x] Open URL in selected message.
 
 # Key bindings
+
 * App navigation
   * `f1` Toggle help panel
   * `alt+tab` Switch between message input box and search bar
-Message edition
+* Message edition
   * `tab` Send emoji from input line as reaction on selected message.
   * `alt+enter` Add newline.
-  * `ctrl+w` Delete last word
+  * `ctrl+w / ctrl+backspace / alt+backspace` Delete last word
   * `enter` *when input box empty* Open URL from selected message
   * `enter` *otherwise* Send message
 * Cursor
@@ -78,6 +79,7 @@ Message edition
   * `ctrl+a / home` Move cursor to the beginning of the text
   * `ctrl+e / end` Move cursor the the end of the text
 * Message/channel selection
+  * `Esc` Reset message selection
   * `alt+Up / PgUp` Select previous message
   * `alt+Down / PgDown` Select next message
   * `ctrl+j / Up` Select previous channel
