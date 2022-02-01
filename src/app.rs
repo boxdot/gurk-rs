@@ -1663,8 +1663,6 @@ mod tests {
         assert_eq!(app.data.channels.items[0].unread_messages, 0);
 
         assert_eq!(app.get_input().data, "");
-        // assert_eq!(app.get_input().input_cursor, 0);
-        // assert_eq!(app.get_input().input_cursor_chars, 0);
     }
 
     #[test]
@@ -1674,8 +1672,6 @@ mod tests {
         for c in input.chars() {
             app.get_input().put_char(c);
         }
-        // assert_eq!(app.get_input().input_cursor, 4);
-        // assert_eq!(app.get_input().input_cursor_chars, 1);
 
         app.send_input(0).unwrap();
 
@@ -1684,8 +1680,6 @@ mod tests {
         assert_eq!(sent[0].message.as_ref().unwrap(), input);
 
         assert_eq!(app.get_input().data, "");
-        // assert_eq!(app.get_input().input_cursor, 0);
-        // assert_eq!(app.get_input().input_cursor_chars, 0);
     }
 
     #[test]
