@@ -250,10 +250,6 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                     // Toggle help panel
                     app.toggle_help();
                 }
-                // KeyCode::Char('p') => {
-                //     info!("{event:?}");
-                //     info!("this will command selection");
-                // }
                 KeyCode::Char('c') if event.modifiers.contains(KeyModifiers::CONTROL) => {
                     break;
                 }
