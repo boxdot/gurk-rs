@@ -27,7 +27,7 @@ pub static SHORTCUTS: &[ShortCut] = &[
         description: "Delete last word.",
     },
     ShortCut {
-        event: "enter, when input box empty",
+        event: "enter, when input box empty in single-line mode",
         description: "Open URL from selected message.",
     },
     ShortCut {

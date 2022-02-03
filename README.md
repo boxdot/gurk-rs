@@ -72,7 +72,7 @@ libraries that are not available on crates.io.
   * `alt+enter` Switch between multi-line and singl-line input modes.
   * `alt+left`, `alt+right` Jump to previous/next word.
   * `ctrl+w / ctrl+backspace / alt+backspace` Delete last word.
-  * `enter` *when input box empty* Open URL from selected message.
+  * `enter` *when input box empty in single-line mode* Open URL from selected message.
   * `enter` *otherwise* Send message.
 * Multi-line message input
   * `enter` New line

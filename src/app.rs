@@ -619,11 +619,11 @@ impl App {
     pub fn on_key(&mut self, key: KeyEvent) -> anyhow::Result<()> {
         match key.code {
             KeyCode::Char('\r') => self.get_input().put_char('\n'),
-            KeyCode::Enter if key.modifiers.contains(KeyModifiers::ALT) => {
+            KeyCode::Enter if key.modifiers.contains(KeyModifiers::ALT) && !self.is_searching => {
                 self.data.is_multiline_input = !self.data.is_multiline_input;
             }
-            KeyCode::Enter if self.data.is_multiline_input => {
-                self.data.input.new_line();
+            KeyCode::Enter if self.data.is_multiline_input && !self.is_searching => {
+                self.get_input().new_line();
             }
             KeyCode::Enter if !self.get_input().data.is_empty() && !self.is_searching => {
                 if let Some(idx) = self.data.channels.state.selected() {
