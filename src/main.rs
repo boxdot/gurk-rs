@@ -2,6 +2,7 @@
 
 mod app;
 mod config;
+mod cursor;
 mod shortcuts;
 mod signal;
 mod storage;
@@ -263,7 +264,6 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                     }
                 }
                 KeyCode::Up if event.modifiers.contains(KeyModifiers::ALT) => app.on_pgup(),
-                KeyCode::Up => app.select_previous_channel(),
                 KeyCode::Right => {
                     if event
                         .modifiers
@@ -275,7 +275,6 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                     }
                 }
                 KeyCode::Down if event.modifiers.contains(KeyModifiers::ALT) => app.on_pgdn(),
-                KeyCode::Down => app.select_next_channel(),
                 KeyCode::PageUp => app.on_pgup(),
                 KeyCode::PageDown => app.on_pgdn(),
                 KeyCode::Tab if event.modifiers.contains(KeyModifiers::ALT) => app.toggle_search(),
@@ -285,20 +284,36 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                 KeyCode::Char('b') if event.modifiers.contains(KeyModifiers::ALT) => {
                     app.get_input().move_back_word();
                 }
-                KeyCode::Char('a') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                    app.get_input().on_home();
-                }
-                KeyCode::Char('e') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                    app.get_input().on_end();
-                }
                 KeyCode::Char('w') if event.modifiers.contains(KeyModifiers::CONTROL) => {
                     app.get_input().on_delete_word();
                 }
+                KeyCode::Down => {
+                    if app.data.is_multiline_input {
+                        app.data.input.move_line_down();
+                    } else {
+                        app.select_next_channel();
+                    }
+                }
                 KeyCode::Char('j') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                    app.select_next_channel();
+                    if app.data.is_multiline_input {
+                        app.data.input.move_line_down();
+                    } else {
+                        app.select_next_channel();
+                    }
+                }
+                KeyCode::Up => {
+                    if app.data.is_multiline_input {
+                        app.data.input.move_line_up();
+                    } else {
+                        app.select_previous_channel();
+                    }
                 }
                 KeyCode::Char('k') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                    app.select_previous_channel();
+                    if app.data.is_multiline_input {
+                        app.data.input.move_line_up();
+                    } else {
+                        app.select_previous_channel();
+                    }
                 }
                 KeyCode::Backspace
                     if event

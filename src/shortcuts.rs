@@ -16,7 +16,7 @@ pub static SHORTCUTS: &[ShortCut] = &[
     },
     ShortCut {
         event: "alt+enter",
-        description: "Add newline.",
+        description: "Switch between single-line and multi-line modes.",
     },
     ShortCut {
         event: "alt+tab",
@@ -27,12 +27,16 @@ pub static SHORTCUTS: &[ShortCut] = &[
         description: "Delete last word.",
     },
     ShortCut {
-        event: "enter, when input box empty",
+        event: "enter, when input box empty in single-line mode",
         description: "Open URL from selected message.",
     },
     ShortCut {
-        event: "enter, otherwise",
+        event: "enter, single-line mode",
         description: "Send message.",
+    },
+    ShortCut {
+        event: "enter, multi-line mode",
+        description: "New line message.",
     },
     ShortCut {
         event: "alt+f / alt+Right / ctrl+Right",
@@ -63,11 +67,19 @@ pub static SHORTCUTS: &[ShortCut] = &[
         description: "Select next message.",
     },
     ShortCut {
-        event: "ctrl+j / Up",
+        event: "ctrl+j / Up, single-line mode",
         description: "Select previous channel.",
     },
     ShortCut {
-        event: "ctrl+k / Down",
+        event: "ctrl+j / Up, multi-line mode",
+        description: "Previous line",
+    },
+    ShortCut {
+        event: "ctrl+k / Down, single-line mode",
         description: "Select next channel.",
+    },
+    ShortCut {
+        event: "ctrl+k / Down, multi-line mode",
+        description: "Next line",
     },
 ];

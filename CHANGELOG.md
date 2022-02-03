@@ -5,12 +5,24 @@
 ### Added
 
 - Add support for downloading attachments ([#122])
-- Add release build for aarch64-unknown-musl ([#126])
+- Add release build for `aarch64-unknown-musl` ([#126])
 - Show qrcode in terminal instead of PNG viewer ([#128])
+- Document key bindings and packages ([#130])
+
+## Changed
+
+- Add cursor tracking and multiline input navigation ([#131])
+
+### Fixed
+
+- Bug: infinite loop while skkiping words on input box ([#129], [#131])
 
 [#122]: https://github.com/boxdot/gurk-rs/pull/122
 [#126]: https://github.com/boxdot/gurk-rs/pull/126
 [#128]: https://github.com/boxdot/gurk-rs/pull/128
+[#129]: https://github.com/boxdot/gurk-rs/pull/129
+[#130]: https://github.com/boxdot/gurk-rs/pull/130
+[#131]: https://github.com/boxdot/gurk-rs/pull/131
 
 ## 0.2.3
 

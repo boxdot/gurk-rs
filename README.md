@@ -56,8 +56,8 @@ libraries that are not available on crates.io.
 * [x] Reply functionality to a single message.
 * [ ] Mouse navigation (works for channels, missing for the messages list).
 * [ ] Search of messages/chats. Add quick switch between chats by name.
-* [X] Multiline messages; the `Enter` key sends the message.
-* [ ] Viewing/sending of attachments (sending works).
+* [x] Multiline messages; the `Enter` key sends the message, `Alt+Enter` switches modes.
+* [x] Viewing/sending of attachments.
 * [ ] Support for blocked contacts/groups.
 * [x] Reactions with emojis.
 * [x] Open URL in selected message.
@@ -67,24 +67,28 @@ libraries that are not available on crates.io.
 * App navigation
   * `f1` Toggle help panel.
   * `alt+tab` Switch between message input box and search bar.
-* Message edition.
+* Message input
   * `tab` Send emoji from input line as reaction on selected message.
-  * `alt+enter` Add newline.
+  * `alt+enter` Switch between multi-line and singl-line input modes.
+  * `alt+left`, `alt+right` Jump to previous/next word.
   * `ctrl+w / ctrl+backspace / alt+backspace` Delete last word.
-  * `enter` *when input box empty* Open URL from selected message.
+  * `enter` *when input box empty in single-line mode* Open URL from selected message.
   * `enter` *otherwise* Send message.
+* Multi-line message input
+  * `enter` New line
+  * `ctrl+j / Up` Previous line
+  * `ctrl+k / Down` Next line
 * Cursor
   * `alt+f / alt+Right / ctrl+Right` Move forward one word.
   * `alt+b / alt+Left / ctrl+Left` Move backward one word.
-  * `ctrl+a / home` Move cursor to the beginning of the text.
-  * `ctrl+e / end` Move cursor the the end of the text.
+  * `ctrl+a / Home` Move cursor to the beginning of the line.
+  * `ctrl+e / End` Move cursor the the end of the line.
 * Message/channel selection
   * `Esc` Reset message selection.
   * `alt+Up / PgUp` Select previous message.
   * `alt+Down / PgDown` Select next message.
   * `ctrl+j / Up` Select previous channel.
   * `ctrl+k / Down` Select next channel.
-
 
 ## License
 
