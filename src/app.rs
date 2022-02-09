@@ -1142,7 +1142,7 @@ impl App {
                         false
                     }
                 })
-                .unwrap();
+                .ok_or(())?;
             if let TypingSet::GroupTyping(ref mut hash_set) = group.typing {
                 match action {
                     TypingAction::Started => {
