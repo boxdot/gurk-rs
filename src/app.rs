@@ -12,7 +12,6 @@ use anyhow::{anyhow, Context as _};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use itertools::FoldWhile::{Continue, Done};
 use itertools::Itertools;
-use log::error;
 use notify_rust::Notification;
 use phonenumber::{Mode, PhoneNumber};
 use presage::prelude::proto::{AttachmentPointer, ReceiptMessage, TypingMessage};
@@ -539,6 +538,10 @@ impl Message {
             receipt: Receipt::Sent,
         })
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.message.is_none() && self.attachments.is_empty() && self.reactions.is_empty()
+    }
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -872,7 +875,7 @@ impl App {
                     self.ensure_contact_channel_exists(destination_uuid, &destination_e164)
                         .await
                 } else {
-                    log::error!("shit");
+                    log::warn!("unhandled message from us");
                     return Ok(());
                 };
 
@@ -940,20 +943,22 @@ impl App {
                     (channel_idx, from)
                 };
 
-                if let Some(text) = &body {
-                    self.notify(&from, text);
-                }
+                let attachments = self.save_attachments(attachment_pointers).await;
+                self.notify_about_message(&from, body.as_deref(), &attachments);
 
                 // Send "Delivered" receipt
                 self.add_receipt_event(ReceiptEvent::new(uuid, timestamp, Receipt::Received));
 
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
-
-                let attachments = self.save_attachments(attachment_pointers).await;
                 let message = Message {
                     quote,
                     ..Message::new(uuid, body, timestamp, attachments)
                 };
+
+                if message.is_empty() {
+                    return Ok(());
+                }
+
                 (channel_idx, message)
             }
             // reactions
@@ -1110,6 +1115,17 @@ impl App {
         self.add_message_to_channel(channel_idx, message);
 
         Ok(())
+    }
+
+    fn notify_about_message(&mut self, from: &str, body: Option<&str>, attachments: &[Attachment]) {
+        let attachments_text = notification_text_for_attachments(attachments);
+        let notification = [body, attachments_text.as_deref()]
+            .into_iter()
+            .flatten()
+            .join(" ");
+        if !notification.is_empty() {
+            self.notify(from, &notification);
+        }
     }
 
     pub fn step_receipts(&mut self) -> anyhow::Result<()> {
@@ -1494,7 +1510,7 @@ impl App {
 
     fn notify(&self, summary: &str, text: &str) {
         if let Err(e) = Notification::new().summary(summary).body(text).show() {
-            error!("failed to send notification: {}", e);
+            log::error!("failed to send notification: {}", e);
         }
     }
 
@@ -1592,9 +1608,17 @@ fn open_url(message: &Message, url_regex: &Regex) -> Option<()> {
     let (start, end) = url_regex.find(text.as_bytes())?;
     let url = &text[start..end];
     if let Err(e) = opener::open(url) {
-        error!("failed to open {}: {}", url, e);
+        log::error!("failed to open {}: {}", url, e);
     }
     Some(())
+}
+
+fn notification_text_for_attachments(attachments: &[Attachment]) -> Option<String> {
+    match attachments.len() {
+        0 => None,
+        1 => Some("<attachment>".into()),
+        n => Some(format!("<attachments ({n})>")),
+    }
 }
 
 #[cfg(test)]
