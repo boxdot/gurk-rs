@@ -15,6 +15,9 @@ pub struct Config {
     /// Whether only to show the first name of a contact
     #[serde(default)]
     pub first_name_only: bool,
+    /// Whether to show receipts (sent, delivered, read) information next to your user name in UI
+    #[serde(default = "default_true")]
+    pub show_receipts: bool,
     /// User configuration
     pub user: User,
 }
@@ -35,6 +38,7 @@ impl Config {
             data_path: default_data_path(),
             signal_db_path: default_signal_db_path(),
             first_name_only: false,
+            show_receipts: true,
         }
     }
 
@@ -147,6 +151,10 @@ fn default_data_dir() -> PathBuf {
 
 fn default_data_path() -> PathBuf {
     default_data_dir().join("gurk.data.json")
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[cfg(test)]

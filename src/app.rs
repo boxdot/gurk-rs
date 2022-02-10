@@ -10,7 +10,6 @@ use crate::util::{
 
 use anyhow::{anyhow, Context as _};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
-use itertools::FoldWhile::{Continue, Done};
 use itertools::Itertools;
 use notify_rust::Notification;
 use phonenumber::{Mode, PhoneNumber};
@@ -29,6 +28,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use std::borrow::Cow;
+use std::cmp::Reverse;
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::path::Path;
@@ -465,19 +465,6 @@ impl Default for Receipt {
 }
 
 impl Receipt {
-    pub fn write(&self) -> &'static str {
-        match self {
-            Self::Nothing => "",
-            Self::Sent => "(x)",
-            Self::Received => "(xx)",
-            Self::Delivered => "(xxx)",
-        }
-    }
-
-    pub fn update(&self, other: Self) -> Self {
-        *self.max(&other)
-    }
-
     pub fn from_i32(i: i32) -> Self {
         match i {
             0 => Self::Received,
@@ -1018,9 +1005,9 @@ impl App {
                 read.into_iter().for_each(|r| {
                     self.handle_receipt(
                         Uuid::from_str(r.sender_uuid.unwrap().as_str()).unwrap(),
-                        1,
+                        Receipt::Delivered,
                         vec![r.timestamp.unwrap()],
-                    )
+                    );
                 });
                 return Ok(());
             }
@@ -1081,11 +1068,12 @@ impl App {
                     ..
                 },
                 ContentBody::ReceiptMessage(ReceiptMessage {
-                    r#type: Some(typ),
+                    r#type: Some(receipt_type),
                     timestamp: timestamps,
                 }),
             ) => {
-                self.handle_receipt(sender_uuid, typ, timestamps);
+                let receipt = Receipt::from_i32(receipt_type);
+                self.handle_receipt(sender_uuid, receipt, timestamps);
                 return Ok(());
             }
 
@@ -1207,41 +1195,47 @@ impl App {
         self.receipt_handler.add_receipt_event(event);
     }
 
-    fn handle_receipt(&mut self, sender_uuid: Uuid, typ: i32, timestamps: Vec<u64>) {
-        let earliest = timestamps.iter().min().unwrap();
-        for c in self.data.channels.items.iter_mut() {
-            match c.id {
-                ChannelId::User(other_uuid) if other_uuid == sender_uuid => {
-                    c.messages.items.iter_mut().rev().fold_while(0, |_, b| {
-                        match b.arrived_at.cmp(earliest) {
-                            std::cmp::Ordering::Less => Done(0),
-                            _ => {
-                                if timestamps.contains(&b.arrived_at) {
-                                    b.receipt = b.receipt.update(Receipt::from_i32(typ));
-                                }
-                                Continue(0)
-                            }
-                        }
-                    });
+    fn handle_receipt(&mut self, sender_uuid: Uuid, receipt: Receipt, mut timestamps: Vec<u64>) {
+        let sender_channels =
+            self.data
+                .channels
+                .items
+                .iter_mut()
+                .filter(|channel| match channel.id {
+                    ChannelId::User(uuid) => uuid == sender_uuid,
+                    ChannelId::Group(_) => channel
+                        .group_data
+                        .as_ref()
+                        .map(|group_data| group_data.members.contains(&sender_uuid))
+                        .unwrap_or(false),
+                });
+
+        timestamps.sort_unstable_by_key(|&ts| Reverse(ts));
+        if timestamps.is_empty() {
+            return;
+        }
+
+        let mut is_found = false;
+
+        for channel in sender_channels {
+            let mut messages = channel.messages.items.iter_mut().rev();
+            for &ts in &timestamps {
+                // Note: `&mut` is needed to advance the iterator `messages` with each `ts`.
+                // Since these are sorted in reverse order, we can continue advancing messages
+                // without consuming them.
+                if let Some(msg) = (&mut messages)
+                    .take_while(|msg| msg.arrived_at >= ts)
+                    .find(|msg| msg.arrived_at == ts)
+                {
+                    msg.receipt = msg.receipt.max(receipt);
+                    is_found = true;
                 }
-                ChannelId::Group(_) => {
-                    if let Some(ref g_data) = c.group_data {
-                        if g_data.members.contains(&sender_uuid) {
-                            c.messages.items.iter_mut().rev().fold_while(0, |_, b| {
-                                match b.arrived_at.cmp(earliest) {
-                                    std::cmp::Ordering::Less => Done(0),
-                                    _ => {
-                                        if timestamps.contains(&b.arrived_at) {
-                                            b.receipt = b.receipt.update(Receipt::from_i32(typ));
-                                        }
-                                        Continue(0)
-                                    }
-                                }
-                            });
-                        }
-                    }
-                }
-                _ => (),
+            }
+
+            if is_found {
+                // if one ts was found, then all other ts have to be in the same channel
+                self.save().unwrap();
+                return;
             }
         }
     }
