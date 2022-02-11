@@ -760,8 +760,6 @@ impl<'a> NameResolver<'a> {
     }
 
     fn resolve(&self, id: Uuid) -> (&str, Color) {
-        println!("{:?}", self.names_and_colors);
-        println!("{:?}", id);
         match self
             .names_and_colors
             .binary_search_by_key(&id, |&(id, _, _)| id)
