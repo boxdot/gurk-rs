@@ -396,7 +396,7 @@ pub async fn ensure_linked_device(relink: bool) -> anyhow::Result<(Manager, Conf
                 .find(|s| !s.is_empty())
                 .map(|s| format!("@{}", s))
         })
-        .unwrap_or_else(String::new);
+        .unwrap_or_default();
     let device_name = format!("gurk{}", at_hostname);
     println!("Linking new device with device name: {}", device_name);
     manager
