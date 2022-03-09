@@ -12,6 +12,7 @@
 ## Changed
 
 - Add cursor tracking and multiline input navigation ([#131])
+- New visual style for receipts ([#135], [#142])
 
 ### Fixed
 
@@ -23,6 +24,8 @@
 [#129]: https://github.com/boxdot/gurk-rs/pull/129
 [#130]: https://github.com/boxdot/gurk-rs/pull/130
 [#131]: https://github.com/boxdot/gurk-rs/pull/131
+[#135]: https://github.com/boxdot/gurk-rs/pull/135
+[#142]: https://github.com/boxdot/gurk-rs/pull/142
 
 ## 0.2.3
 
