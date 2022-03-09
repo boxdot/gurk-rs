@@ -335,12 +335,15 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     // message display options
     const TIME_WIDTH: usize = 10;
     const DELIMITER_WIDTH: usize = 2;
-    let prefix_width = TIME_WIDTH + max_username_width + DELIMITER_WIDTH;
+    let mut prefix_width = TIME_WIDTH + max_username_width + DELIMITER_WIDTH;
+    if app.config.show_receipts {
+        prefix_width += RECEIPT_WIDTH;
+    }
     let prefix = " ".repeat(prefix_width);
 
     let messages_from_offset = messages.iter().rev().skip(offset).filter_map(|msg| {
-        let print_receipt = app.user_id == msg.from_id;
-        display_message(&names, msg, &prefix, width as usize, height, print_receipt)
+        let show_receipt = ShowReceipt::from_msg(msg, app.user_id, app.config.show_receipts);
+        display_message(&names, msg, &prefix, width as usize, height, show_receipt)
     });
 
     // counters to accumulate messages as long they fit into the list height,
@@ -411,6 +414,44 @@ fn display_datetime(timestamp: u64) -> String {
     format!("{} {:02}:{:02} ", dt.weekday(), dt.hour(), dt.minute())
 }
 
+const RECEIPT_WIDTH: usize = 2;
+
+/// Ternary state whether to show receipt for a message
+enum ShowReceipt {
+    // show receipt for this message
+    Yes,
+    // don't show receipt for this message
+    No,
+    // don't show receipt for any message
+    Never,
+}
+
+impl ShowReceipt {
+    fn from_msg(msg: &app::Message, user_id: Uuid, config_show_receipts: bool) -> Self {
+        if config_show_receipts {
+            if user_id == msg.from_id {
+                Self::Yes
+            } else {
+                Self::No
+            }
+        } else {
+            Self::Never
+        }
+    }
+}
+
+fn display_receipt(receipt: Receipt, show: ShowReceipt) -> &'static str {
+    use ShowReceipt::*;
+    match (show, receipt) {
+        (Yes, Receipt::Nothing) => "  ",
+        (Yes, Receipt::Sent) => "○ ",
+        (Yes, Receipt::Received) => "◉ ",
+        (Yes, Receipt::Delivered) => "● ",
+        (No, _) => "  ",
+        (Never, _) => "",
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn display_message(
     names: &NameResolver,
@@ -418,8 +459,13 @@ fn display_message(
     prefix: &str,
     width: usize,
     height: usize,
-    print_receipt: bool,
+    show_receipt: ShowReceipt,
 ) -> Option<ListItem<'static>> {
+    let receipt = Span::styled(
+        display_receipt(msg.receipt, show_receipt),
+        Style::default().fg(Color::Yellow),
+    );
+
     let time = Span::styled(
         display_datetime(msg.arrived_at),
         Style::default().fg(Color::Yellow),
@@ -452,9 +498,6 @@ fn display_message(
         return None; // no text => nothing to render
     }
     add_reactions(msg, &mut text);
-    if print_receipt {
-        add_receipt(msg, &mut text);
-    }
 
     let mut spans: Vec<Spans> = vec![];
 
@@ -475,6 +518,7 @@ fn display_message(
             .map(|(idx, line)| {
                 let res = if idx == 0 {
                     vec![
+                        receipt.clone(),
                         time.clone(),
                         from.clone(),
                         delimiter.clone(),
@@ -496,6 +540,7 @@ fn display_message(
             .map(|(idx, line)| {
                 let res = if add_time && idx == 0 {
                     vec![
+                        receipt.clone(),
                         time.clone(),
                         from.clone(),
                         delimiter.clone(),
@@ -549,11 +594,6 @@ fn add_reactions(msg: &app::Message, out: &mut String) {
         )
         .expect("formatting reactions failed");
     }
-}
-
-fn add_receipt(msg: &app::Message, out: &mut String) {
-    out.push(' ');
-    out.push_str(msg.receipt.write());
 }
 
 fn draw_help<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
@@ -614,8 +654,6 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
                     let spans = Spans::from(truc);
                     res.push(spans);
                 });
-
-                //let spans = Spans::from(res);
 
                 ListItem::new(Text::from(res))
             },
@@ -754,15 +792,24 @@ mod tests {
 
     use super::*;
 
+    const USER_ID: Uuid = Uuid::nil();
+
     // formatting test options
     const PREFIX: &str = "                  ";
     const WIDTH: usize = 60;
     const HEIGHT: usize = 10;
-    const PRINT_RECEIPT: bool = true;
+
+    fn name_resolver(user_id: Uuid) -> NameResolver<'static> {
+        NameResolver {
+            app: None,
+            names_and_colors: vec![(user_id, "boxdot", Color::Green)],
+            max_name_width: 6,
+        }
+    }
 
     fn test_message() -> Message {
         Message {
-            from_id: Uuid::nil(),
+            from_id: USER_ID,
             message: None,
             arrived_at: 1642334397421,
             quote: None,
@@ -783,20 +830,16 @@ mod tests {
 
     #[test]
     fn test_display_attachment_only_message() {
-        let names = NameResolver {
-            app: None,
-            names_and_colors: vec![(Uuid::nil(), "boxdot", Color::Green)],
-            max_name_width: 6,
-        };
-
+        let names = name_resolver(USER_ID);
         let msg = Message {
             attachments: vec![test_attachment()],
             ..test_message()
         };
-        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, PRINT_RECEIPT);
+        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, ShowReceipt::Never);
 
         let expected = ListItem::new(Text::from(vec![
             Spans(vec![
+                Span::styled("", Style::default().fg(Color::Yellow)),
                 Span::styled(
                     display_datetime(msg.arrived_at),
                     Style::default().fg(Color::Yellow),
@@ -806,7 +849,7 @@ mod tests {
                 Span::raw("<file:///tmp/gurk/signal-2022-01-"),
             ]),
             Spans(vec![Span::raw(
-                "                  16T11:59:58.405665+00:00.jpg> (x)",
+                "                  16T11:59:58.405665+00:00.jpg>",
             )]),
         ]));
         assert_eq!(rendered, Some(expected));
@@ -814,21 +857,17 @@ mod tests {
 
     #[test]
     fn test_display_text_and_attachment_message() {
-        let names = NameResolver {
-            app: None,
-            names_and_colors: vec![(Uuid::nil(), "boxdot", Color::Green)],
-            max_name_width: 6,
-        };
-
+        let names = name_resolver(USER_ID);
         let msg = Message {
             message: Some("Hello, World!".into()),
             attachments: vec![test_attachment()],
             ..test_message()
         };
-        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, PRINT_RECEIPT);
+        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, ShowReceipt::Never);
 
         let expected = ListItem::new(Text::from(vec![
             Spans(vec![
+                Span::styled("", Style::default().fg(Color::Yellow)),
                 Span::styled(
                     display_datetime(msg.arrived_at),
                     Style::default().fg(Color::Yellow),
@@ -841,9 +880,131 @@ mod tests {
                 "                  <file:///tmp/gurk/signal-2022-01-",
             )]),
             Spans(vec![Span::raw(
-                "                  16T11:59:58.405665+00:00.jpg> (x)",
+                "                  16T11:59:58.405665+00:00.jpg>",
             )]),
         ]));
+        assert_eq!(rendered, Some(expected));
+    }
+
+    #[test]
+    fn test_display_sent_receipt() {
+        let names = name_resolver(USER_ID);
+        let msg = Message {
+            message: Some("Hello, World!".into()),
+            receipt: Receipt::Sent,
+            ..test_message()
+        };
+        let show_receipt = ShowReceipt::from_msg(&msg, USER_ID, true);
+        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, show_receipt);
+
+        let expected = ListItem::new(Text::from(vec![Spans(vec![
+            Span::styled("○ ", Style::default().fg(Color::Yellow)),
+            Span::styled(
+                display_datetime(msg.arrived_at),
+                Style::default().fg(Color::Yellow),
+            ),
+            Span::styled("boxdot", Style::default().fg(Color::Green)),
+            Span::raw(": "),
+            Span::raw("Hello, World!"),
+        ])]));
+        assert_eq!(rendered, Some(expected));
+    }
+
+    #[test]
+    fn test_display_received_receipt() {
+        let names = name_resolver(USER_ID);
+        let msg = Message {
+            message: Some("Hello, World!".into()),
+            receipt: Receipt::Received,
+            ..test_message()
+        };
+        let show_receipt = ShowReceipt::from_msg(&msg, USER_ID, true);
+        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, show_receipt);
+
+        let expected = ListItem::new(Text::from(vec![Spans(vec![
+            Span::styled("◉ ", Style::default().fg(Color::Yellow)),
+            Span::styled(
+                display_datetime(msg.arrived_at),
+                Style::default().fg(Color::Yellow),
+            ),
+            Span::styled("boxdot", Style::default().fg(Color::Green)),
+            Span::raw(": "),
+            Span::raw("Hello, World!"),
+        ])]));
+        assert_eq!(rendered, Some(expected));
+    }
+
+    #[test]
+    fn test_display_delivered_receipt() {
+        let names = name_resolver(USER_ID);
+        let msg = Message {
+            message: Some("Hello, World!".into()),
+            receipt: Receipt::Delivered,
+            ..test_message()
+        };
+        let show_receipt = ShowReceipt::from_msg(&msg, USER_ID, true);
+        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, show_receipt);
+
+        let expected = ListItem::new(Text::from(vec![Spans(vec![
+            Span::styled("● ", Style::default().fg(Color::Yellow)),
+            Span::styled(
+                display_datetime(msg.arrived_at),
+                Style::default().fg(Color::Yellow),
+            ),
+            Span::styled("boxdot", Style::default().fg(Color::Green)),
+            Span::raw(": "),
+            Span::raw("Hello, World!"),
+        ])]));
+        assert_eq!(rendered, Some(expected));
+    }
+
+    #[test]
+    fn test_display_show_receipts_disabled() {
+        let names = name_resolver(USER_ID);
+        let msg = Message {
+            message: Some("Hello, World!".into()),
+            receipt: Receipt::Delivered,
+            ..test_message()
+        };
+        let show_receipt = ShowReceipt::from_msg(&msg, USER_ID, false);
+        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, show_receipt);
+
+        let expected = ListItem::new(Text::from(vec![Spans(vec![
+            Span::styled("", Style::default().fg(Color::Yellow)),
+            Span::styled(
+                display_datetime(msg.arrived_at),
+                Style::default().fg(Color::Yellow),
+            ),
+            Span::styled("boxdot", Style::default().fg(Color::Green)),
+            Span::raw(": "),
+            Span::raw("Hello, World!"),
+        ])]));
+        assert_eq!(rendered, Some(expected));
+    }
+
+    #[test]
+    fn test_display_receipts_for_incoming_message() {
+        let user_id = Uuid::from_u128(1);
+        let names = name_resolver(user_id);
+        let msg = Message {
+            from_id: user_id,
+            message: Some("Hello, World!".into()),
+            receipt: Receipt::Delivered,
+            ..test_message()
+        };
+        let show_receipt = ShowReceipt::from_msg(&msg, USER_ID, true);
+        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, show_receipt);
+
+        let expected = ListItem::new(Text::from(vec![Spans(vec![
+            Span::styled("  ", Style::default().fg(Color::Yellow)),
+            Span::styled(
+                display_datetime(msg.arrived_at),
+                Style::default().fg(Color::Yellow),
+            ),
+            Span::styled("boxdot", Style::default().fg(Color::Green)),
+            Span::raw(": "),
+            Span::raw("Hello, World!"),
+        ])]));
         assert_eq!(rendered, Some(expected));
     }
 }
