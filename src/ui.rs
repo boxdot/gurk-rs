@@ -275,18 +275,18 @@ fn prepare_receipts(app: &mut App, height: usize) {
         .rev()
         .skip(offset)
         .for_each(|msg| match msg.receipt {
-            Receipt::Delivered | Receipt::Nothing | Receipt::Sent => (),
-            Receipt::Received => {
+            Receipt::Read | Receipt::Nothing | Receipt::Sent => (),
+            Receipt::Delivered => {
                 if msg.from_id != user_id {
                     to_send.push((msg.from_id, msg.arrived_at));
-                    msg.receipt = Receipt::Delivered
+                    msg.receipt = Receipt::Read
                 }
             }
         });
     if !to_send.is_empty() {
         to_send
             .into_iter()
-            .for_each(|(u, t)| app.add_receipt_event(ReceiptEvent::new(u, t, Receipt::Delivered)))
+            .for_each(|(u, t)| app.add_receipt_event(ReceiptEvent::new(u, t, Receipt::Read)))
     }
 }
 
@@ -445,8 +445,8 @@ fn display_receipt(receipt: Receipt, show: ShowReceipt) -> &'static str {
     match (show, receipt) {
         (Yes, Receipt::Nothing) => "  ",
         (Yes, Receipt::Sent) => "○ ",
-        (Yes, Receipt::Received) => "◉ ",
-        (Yes, Receipt::Delivered) => "● ",
+        (Yes, Receipt::Delivered) => "◉ ",
+        (Yes, Receipt::Read) => "● ",
         (No, _) => "  ",
         (Never, _) => "",
     }
@@ -667,7 +667,7 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
 fn displayed_name(name: &str, first_name_only: bool) -> &str {
     if first_name_only {
-        let space_pos = name.find(' ').unwrap_or_else(|| name.len());
+        let space_pos = name.find(' ').unwrap_or(name.len());
         &name[0..space_pos]
     } else {
         name
@@ -915,7 +915,7 @@ mod tests {
         let names = name_resolver(USER_ID);
         let msg = Message {
             message: Some("Hello, World!".into()),
-            receipt: Receipt::Received,
+            receipt: Receipt::Delivered,
             ..test_message()
         };
         let show_receipt = ShowReceipt::from_msg(&msg, USER_ID, true);
@@ -939,7 +939,7 @@ mod tests {
         let names = name_resolver(USER_ID);
         let msg = Message {
             message: Some("Hello, World!".into()),
-            receipt: Receipt::Delivered,
+            receipt: Receipt::Read,
             ..test_message()
         };
         let show_receipt = ShowReceipt::from_msg(&msg, USER_ID, true);
@@ -963,7 +963,7 @@ mod tests {
         let names = name_resolver(USER_ID);
         let msg = Message {
             message: Some("Hello, World!".into()),
-            receipt: Receipt::Delivered,
+            receipt: Receipt::Read,
             ..test_message()
         };
         let show_receipt = ShowReceipt::from_msg(&msg, USER_ID, false);
@@ -989,7 +989,7 @@ mod tests {
         let msg = Message {
             from_id: user_id,
             message: Some("Hello, World!".into()),
-            receipt: Receipt::Delivered,
+            receipt: Receipt::Read,
             ..test_message()
         };
         let show_receipt = ShowReceipt::from_msg(&msg, USER_ID, true);
