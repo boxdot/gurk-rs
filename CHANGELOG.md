@@ -4,20 +4,46 @@
 
 ### Added
 
--  Add help panel ([#107])
--  Basic multiline editing support ([#109])
+- Add support for downloading attachments ([#122])
+- Add release build for `aarch64-unknown-musl` ([#126])
+- Show qrcode in terminal instead of PNG viewer ([#128])
+- Document key bindings and packages ([#130])
+
+## Changed
+
+- Add cursor tracking and multiline input navigation ([#131])
+
+### Fixed
+
+- Bug: infinite loop while skkiping words on input box ([#129], [#131])
+
+[#122]: https://github.com/boxdot/gurk-rs/pull/122
+[#126]: https://github.com/boxdot/gurk-rs/pull/126
+[#128]: https://github.com/boxdot/gurk-rs/pull/128
+[#129]: https://github.com/boxdot/gurk-rs/pull/129
+[#130]: https://github.com/boxdot/gurk-rs/pull/130
+[#131]: https://github.com/boxdot/gurk-rs/pull/131
+
+## 0.2.3
+
+### Added
+
+- Add help panel ([#107])
+- Basic multiline editing support ([#109])
+- Add search bar + receipt notifications ([#114])
 
 [#107]: https://github.com/boxdot/gurk-rs/pull/107
 [#109]: https://github.com/boxdot/gurk-rs/pull/109
-
-## 0.2.3
+[#114]: https://github.com/boxdot/gurk-rs/pull/114
 
 ### Fixed
 
 - Fix linking device ([#101], [#102])
+- Fix and isolate message receipts ([#116])
 
 [#101]: https://github.com/boxdot/gurk-rs/pull/101
 [#102]: https://github.com/boxdot/gurk-rs/pull/102
+[#116]: https://github.com/boxdot/gurk-rs/pull/116
 
 ## 0.2.2
 

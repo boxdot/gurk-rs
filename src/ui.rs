@@ -1,6 +1,9 @@
+use crate::app::ReceiptEvent;
+use crate::cursor::Cursor;
 use crate::shortcuts::{ShortCut, SHORTCUTS};
 use crate::util;
 use crate::{app, App};
+use app::Receipt;
 
 use chrono::{Datelike, Timelike};
 use itertools::Itertools;
@@ -10,18 +13,50 @@ use tui::style::{Color, Style};
 use tui::text::{Span, Spans, Text};
 use tui::widgets::{Block, Borders, List, ListItem, Paragraph};
 use tui::Frame;
-use unicode_width::UnicodeWidthStr;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use uuid::Uuid;
 
-use std::borrow::Cow;
+use std::fmt;
 
 pub const CHANNEL_VIEW_RATIO: u32 = 4;
 
-pub fn coords_within_channels_view<B: Backend>(f: &Frame<B>, x: u16, y: u16) -> Option<(u16, u16)> {
+pub fn coords_within_channels_view<B: Backend>(
+    f: &Frame<B>,
+    app: &App,
+    x: u16,
+    y: u16,
+) -> Option<(u16, u16)> {
     let rect = f.size();
+
+    // Compute the offset due to the lines in the search bar
+    let text_width = app.channel_text_width;
+    let lines: Vec<String> =
+        app.data
+            .search_box
+            .data
+            .chars()
+            .enumerate()
+            .fold(Vec::new(), |mut lines, (idx, c)| {
+                if idx % text_width == 0 {
+                    lines.push(String::new());
+                }
+                match c {
+                    '\n' => {
+                        lines.last_mut().unwrap().push('\n');
+                        lines.push(String::new())
+                    }
+                    _ => lines.last_mut().unwrap().push(c),
+                }
+                lines
+            });
+    let num_input_lines = lines.len().max(1);
+
+    if y < 3 + num_input_lines as u16 {
+        return None;
+    }
     // 1 offset around the view for taking the border into account
     if 0 < x && x < rect.width / CHANNEL_VIEW_RATIO as u16 && 0 < y && y + 1 < rect.height {
-        Some((x - 1, y - 1))
+        Some((x - 1, y - (3 + num_input_lines as u16)))
     } else {
         None
     }
@@ -52,11 +87,50 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
         .direction(Direction::Horizontal)
         .split(f.size());
 
-    let channel_list_width = chunks[0].width.saturating_sub(2) as usize;
+    draw_channels_column(f, app, chunks[0]);
+    draw_chat(f, app, chunks[1]);
+}
+
+fn draw_channels_column<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
+    let text_width = area.width.saturating_sub(2) as usize;
+    let (wrapped_input, cursor, num_input_lines) = wrap(
+        &app.data.search_box.data,
+        app.data.search_box.cursor.clone(),
+        text_width,
+    );
+
+    let chunks = Layout::default()
+        .constraints(
+            [
+                Constraint::Length(num_input_lines as u16 + 2),
+                Constraint::Min(0),
+            ]
+            .as_ref(),
+        )
+        .direction(Direction::Vertical)
+        .split(area);
+
+    draw_channels(f, app, chunks[1]);
+
+    let input = Paragraph::new(Text::from(wrapped_input))
+        .block(Block::default().borders(Borders::ALL).title("Search"));
+    f.render_widget(input, chunks[0]);
+    if app.is_searching {
+        f.set_cursor(
+            chunks[0].x + cursor.col as u16 + 1,
+            chunks[0].y + cursor.line as u16 + 1,
+        );
+    }
+}
+
+fn draw_channels<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
+    let channel_list_width = area.width.saturating_sub(2) as usize;
+    let pattern = app.data.search_box.data.as_str();
+    app.channel_text_width = channel_list_width;
+    app.data.channels.filter_channels(pattern, &app.data.names);
     let channels: Vec<ListItem> = app
         .data
         .channels
-        .items
         .iter()
         .map(|channel| {
             let unread_messages_label = if channel.unread_messages != 0 {
@@ -82,56 +156,68 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     let channels = List::new(channels)
         .block(Block::default().borders(Borders::ALL).title("Channels"))
         .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray));
-    f.render_stateful_widget(channels, chunks[0], &mut app.data.channels.state);
+    f.render_stateful_widget(channels, area, &mut app.data.channels.state);
+}
 
-    draw_chat(f, app, chunks[1]);
+fn wrap(text: &str, mut cursor: Cursor, width: usize) -> (String, Cursor, usize) {
+    let mut res = String::new();
+
+    let mut line = 0;
+    let mut col = 0;
+
+    for c in text.chars() {
+        // current line too long => wrap
+        if col > 0 && col % width == 0 {
+            res.push('\n');
+
+            // adjust cursor
+            if line < cursor.line {
+                cursor.line += 1;
+                cursor.idx += 1;
+            } else if line == cursor.line && col <= cursor.col {
+                cursor.line += 1;
+                cursor.col -= col;
+                cursor.idx += 1;
+            }
+
+            line += 1;
+            col = 0;
+        }
+
+        if c == '\n' {
+            line += 1;
+            col = 0;
+        } else {
+            col += c.width().unwrap_or(0);
+        }
+        res.push(c);
+    }
+
+    // special case: cursor is at the end of the text and overflows `width`
+    if cursor.idx == res.len() && cursor.col == width {
+        res.push('\n');
+        cursor.line += 1;
+        cursor.col = 0;
+        cursor.idx += 1;
+        line += 1;
+    }
+
+    (res, cursor, line + 1)
 }
 
 fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let text_width = area.width.saturating_sub(2) as usize;
-    let lines: Vec<String> =
-        app.data
-            .input
-            .chars()
-            .enumerate()
-            .fold(Vec::new(), |mut lines, (idx, c)| {
-                if idx % text_width == 0 {
-                    lines.push(String::new());
-                }
-                match c {
-                    '\n' => {
-                        // This is currently unused
-                        // lines.last_mut().unwrap().push('\n');
-                        lines.push(String::new())
-                    }
-                    _ => lines.last_mut().unwrap().push(c),
-                }
-                lines
-            });
-    // chars since newline on `cursor_y` line
-    let mut cursor_x = app.data.input_cursor_chars;
-    // line selected by `app.data.input_cursor`
-    let mut cursor_y = 0;
-    for (i, string) in (&lines).iter().enumerate() {
-        cursor_y += 1;
-        match string.width().cmp(&cursor_x) {
-            std::cmp::Ordering::Less => cursor_x -= string.width(),
-            std::cmp::Ordering::Equal if i < lines.len() - 1 => cursor_x -= string.width(),
-            _ => break,
-        };
-    }
-    let num_input_lines = lines.len().max(1);
-    let input: Vec<Spans> = lines.into_iter().map(Spans::from).collect();
-    let extra_cursor_line = if cursor_x > 0 && cursor_x % text_width == 0 {
-        1
-    } else {
-        0
-    };
+    let (wrapped_input, cursor, num_input_lines) = wrap(
+        &app.data.input.data,
+        app.data.input.cursor.clone(),
+        text_width,
+    );
+
     let chunks = Layout::default()
         .constraints(
             [
                 Constraint::Min(0),
-                Constraint::Length(num_input_lines as u16 + 2 + extra_cursor_line),
+                Constraint::Length(num_input_lines as u16 + 2),
             ]
             .as_ref(),
         )
@@ -140,37 +226,94 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
     draw_messages(f, app, chunks[0]);
 
-    let input = Paragraph::new(Text::from(input))
-        .block(Block::default().borders(Borders::ALL).title("Input"));
+    let title = if app.data.is_multiline_input {
+        "Input (Multiline)"
+    } else {
+        "Input"
+    };
+
+    let input = Paragraph::new(Text::from(wrapped_input))
+        .block(Block::default().borders(Borders::ALL).title(title));
     f.render_widget(input, chunks[1]);
-    f.set_cursor(
-        // Put cursor past the end of the input text
-        chunks[1].x + ((cursor_x as u16) % text_width as u16) + 1,
-        // Move one line down, from the border to the input line
-        chunks[1].y + (cursor_x as u16 / (text_width as u16)) + cursor_y.max(1) as u16,
-    );
+    if !app.is_searching {
+        f.set_cursor(
+            chunks[1].x + cursor.col as u16 + 1,  // +1 for frame
+            chunks[1].y + cursor.line as u16 + 1, // +1 for frame
+        );
+    }
     // completion needs to set_cursor to the new input
     // and make this input widget render
 }
 
-fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
+fn prepare_receipts(app: &mut App, height: usize) {
+    let mut to_send = Vec::new();
+    let user_id = app.user_id;
     let channel = app
         .data
         .channels
         .state
         .selected()
-        .and_then(|idx| app.data.channels.items.get(idx));
+        .and_then(|idx| app.data.channels.items.get_mut(idx));
     let channel = match channel {
         Some(c) if !c.messages.items.is_empty() => c,
         _ => return,
     };
 
+    let offset = if let Some(selected) = channel.messages.state.selected() {
+        channel
+            .messages
+            .rendered
+            .offset
+            .min(selected)
+            .max(selected.saturating_sub(height))
+    } else {
+        channel.messages.rendered.offset
+    };
+
+    let messages = &mut channel.messages.items[..];
+
+    let _ = messages
+        .iter_mut()
+        .rev()
+        .skip(offset)
+        .for_each(|msg| match msg.receipt {
+            Receipt::Delivered | Receipt::Nothing | Receipt::Sent => (),
+            Receipt::Received => {
+                if msg.from_id != user_id {
+                    to_send.push((msg.from_id, msg.arrived_at));
+                    msg.receipt = Receipt::Delivered
+                }
+            }
+        });
+    if !to_send.is_empty() {
+        to_send
+            .into_iter()
+            .for_each(|(u, t)| app.add_receipt_event(ReceiptEvent::new(u, t, Receipt::Delivered)))
+    }
+}
+
+fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     // area without borders
     let height = area.height.saturating_sub(2) as usize;
     if height == 0 {
         return;
     }
     let width = area.width.saturating_sub(2) as usize;
+
+    prepare_receipts(app, height);
+
+    let channel = app.data.channels.state.selected().and_then(|idx| {
+        app.data
+            .channels
+            .items
+            .get(*app.data.channels.filtered_items.get(idx).unwrap())
+    });
+    let channel = match channel {
+        Some(c) if !c.messages.items.is_empty() => c,
+        _ => return,
+    };
+
+    let writing_people = app.writing_people(channel);
 
     // Calculate the offset in messages we start rendering with.
     // `offset` includes the selected message (if any), and is at most height-many messages to
@@ -188,31 +331,18 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
     let messages = &channel.messages.items[..];
 
-    let names_and_colors = compute_names_and_colors(app, channel);
-    let max_username_width = names_and_colors
-        .iter()
-        .map(|(_, name, _)| name.width())
-        .max()
-        .unwrap_or(0);
+    let names = NameResolver::compute_for_channel(app, channel);
+    let max_username_width = names.max_name_width();
 
     // message display options
-    let first_name_only = app.config.first_name_only;
     const TIME_WIDTH: usize = 10;
     const DELIMITER_WIDTH: usize = 2;
     let prefix_width = TIME_WIDTH + max_username_width + DELIMITER_WIDTH;
     let prefix = " ".repeat(prefix_width);
 
     let messages_from_offset = messages.iter().rev().skip(offset).filter_map(|msg| {
-        display_message(
-            app,
-            msg,
-            &names_and_colors,
-            max_username_width,
-            first_name_only,
-            &prefix,
-            width as usize,
-            height,
-        )
+        let print_receipt = app.user_id == msg.from_id;
+        display_message(&names, msg, &prefix, width as usize, height, print_receipt)
     });
 
     // counters to accumulate messages as long they fit into the list height,
@@ -253,8 +383,10 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         items.insert(unread_messages, ListItem::new(Span::from(new_message_line)));
     }
 
+    let title = format!("Messages {}", writing_people);
+
     let list = List::new(items)
-        .block(Block::default().title("Messages").borders(Borders::ALL))
+        .block(Block::default().title(title).borders(Borders::ALL))
         .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray))
         .start_corner(Corner::BottomLeft);
 
@@ -276,49 +408,33 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     channel.messages.rendered.offset = offset;
 }
 
+fn display_datetime(timestamp: u64) -> String {
+    let dt = util::utc_timestamp_msec_to_local(timestamp);
+    format!("{} {:02}:{:02} ", dt.weekday(), dt.hour(), dt.minute())
+}
+
 #[allow(clippy::too_many_arguments)]
 fn display_message(
-    app: &App,
+    names: &NameResolver,
     msg: &app::Message,
-    names_and_colors: &[(Uuid, &str, Color)],
-    max_username_width: usize,
-    first_name_only: bool,
     prefix: &str,
     width: usize,
     height: usize,
+    print_receipt: bool,
 ) -> Option<ListItem<'static>> {
-    let arrived_at = util::utc_timestamp_msec_to_local(msg.arrived_at);
-
     let time = Span::styled(
-        format!(
-            "{} {:02}:{:02} ",
-            arrived_at.weekday(),
-            arrived_at.hour(),
-            arrived_at.minute()
-        ),
+        display_datetime(msg.arrived_at),
         Style::default().fg(Color::Yellow),
     );
 
-    let result = names_and_colors.binary_search_by_key(&msg.from_id, |&(id, _, _)| id);
-    let from;
-    let from_color;
-    match result {
-        Ok(idx) => {
-            let (_, f, c) = names_and_colors[idx];
-            from = f;
-            from_color = c;
-        }
-        Err(_) => {
-            from = app::App::name_by_id(app, msg.from_id);
-            from_color = Color::Magenta;
-        }
-    }
+    let (from, from_color) = names.resolve(msg.from_id);
 
     let from = Span::styled(
         textwrap::indent(
             from,
             &" ".repeat(
-                max_username_width
+                names
+                    .max_name_width()
                     .checked_sub(from.width())
                     .unwrap_or_default(),
             ),
@@ -331,15 +447,16 @@ fn display_message(
         .initial_indent(prefix)
         .subsequent_indent(prefix);
 
-    let text = if msg.reactions.is_empty() {
-        Cow::from(msg.message.as_ref()?)
-    } else {
-        Cow::from(format!(
-            "{} [{}]",
-            msg.message.as_ref()?,
-            msg.reactions.iter().map(|(_, emoji)| emoji).format(""),
-        ))
-    };
+    // collect message text
+    let mut text = msg.message.clone().unwrap_or_default();
+    add_attachments(msg, &mut text);
+    if text.is_empty() {
+        return None; // no text => nothing to render
+    }
+    add_reactions(msg, &mut text);
+    if print_receipt {
+        add_receipt(msg, &mut text);
+    }
 
     let mut spans: Vec<Spans> = vec![];
 
@@ -347,7 +464,7 @@ fn display_message(
     let quote_text = msg
         .quote
         .as_ref()
-        .and_then(|quote| displayed_quote(quote, names_and_colors, first_name_only));
+        .and_then(|quote| displayed_quote(names, quote));
     if let Some(quote_text) = quote_text.as_ref() {
         let quote_prefix = format!("{}> ", prefix);
         let quote_wrap_opts = textwrap::Options::new(width.saturating_sub(2))
@@ -375,7 +492,7 @@ fn display_message(
 
     let add_time = spans.is_empty();
     spans.extend(
-        textwrap::wrap(&text, wrap_opts)
+        textwrap::wrap(&text, &wrap_opts)
             .into_iter()
             .enumerate()
             .map(|(idx, line)| {
@@ -399,6 +516,46 @@ fn display_message(
         spans.push(Spans::from(format!("{}[...]", prefix)));
     }
     Some(ListItem::new(Text::from(spans)))
+}
+
+fn add_attachments(msg: &app::Message, out: &mut String) {
+    if !msg.attachments.is_empty() {
+        if !out.is_empty() {
+            out.push('\n');
+        }
+
+        fmt::write(
+            out,
+            format_args!(
+                "{}",
+                msg.attachments
+                    .iter()
+                    .format_with("\n", |attachment, f| f(&format_args!(
+                        "<file://{}>",
+                        attachment.filename.display()
+                    )))
+            ),
+        )
+        .expect("formatting attachments failed");
+    }
+}
+
+fn add_reactions(msg: &app::Message, out: &mut String) {
+    if !msg.reactions.is_empty() {
+        fmt::write(
+            out,
+            format_args!(
+                " [{}]",
+                msg.reactions.iter().map(|(_, emoji)| emoji).format("")
+            ),
+        )
+        .expect("formatting reactions failed");
+    }
+}
+
+fn add_receipt(msg: &app::Message, out: &mut String) {
+    out.push(' ');
+    out.push_str(msg.receipt.write());
 }
 
 fn draw_help<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
@@ -472,58 +629,6 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     f.render_stateful_widget(shorts_widget, area, &mut app.data.channels.state);
 }
 
-/// Returns a sorted vector of `(id, name, color)` by id.
-fn compute_names_and_colors<'a, 'b>(
-    app: &'a app::App,
-    channel: &'b app::Channel,
-) -> Vec<(Uuid, &'a str, Color)> {
-    let first_name_only = app.config.first_name_only;
-    let mut res = if let Some(group_data) = channel.group_data.as_ref() {
-        group_data
-            .members
-            .iter()
-            .map(|&uuid| {
-                let name = app.name_by_id(uuid);
-                let color = user_color(name);
-                let name = displayed_name(name, first_name_only);
-                (uuid, name, color)
-            })
-            .collect()
-    } else {
-        let user_id = app.user_id;
-        let user_name = app.name_by_id(user_id);
-        let mut self_color = user_color(user_name);
-        let user_name = displayed_name(user_name, first_name_only);
-
-        let contact_uuid = match channel.id {
-            app::ChannelId::User(uuid) => uuid,
-            _ => unreachable!("logic error"),
-        };
-
-        if contact_uuid == user_id {
-            vec![(user_id, user_name, self_color)]
-        } else {
-            let contact_name = app.name_by_id(contact_uuid);
-            let contact_color = user_color(contact_name);
-            let contact_name = displayed_name(contact_name, first_name_only);
-
-            if self_color == contact_color {
-                // use differnt color for our user name
-                if let Some(idx) = USER_COLORS.iter().position(|&c| c == self_color) {
-                    self_color = USER_COLORS[(idx + 1) % USER_COLORS.len()];
-                }
-            }
-
-            vec![
-                (user_id, user_name, self_color),
-                (contact_uuid, contact_name, contact_color),
-            ]
-        }
-    };
-    res.sort_unstable_by_key(|&(id, _, _)| id);
-    res
-}
-
 fn displayed_name(name: &str, first_name_only: bool) -> &str {
     if first_name_only {
         let space_pos = name.find(' ').unwrap_or_else(|| name.len());
@@ -551,17 +656,196 @@ fn user_color(username: &str) -> Color {
     USER_COLORS[idx]
 }
 
-fn displayed_quote(
-    quote: &app::Message,
-    names_and_colors: &[(Uuid, &str, Color)],
-    first_name_only: bool,
-) -> Option<String> {
-    let idx = names_and_colors.binary_search_by_key(&quote.from_id, |&(id, _, _)| id);
-    if let Ok(idx) = idx {
-        let name = names_and_colors[idx].1;
-        let name = displayed_name(name, first_name_only);
-        Some(format!("({}) {}", name, quote.message.as_ref()?))
-    } else {
-        quote.message.clone()
+/// Resolves names in a channel
+struct NameResolver<'a> {
+    app: Option<&'a App>,
+    names_and_colors: Vec<(Uuid, &'a str, Color)>,
+    max_name_width: usize,
+}
+
+impl<'a> NameResolver<'a> {
+    fn compute_for_channel<'b>(app: &'a app::App, channel: &'b app::Channel) -> Self {
+        let first_name_only = app.config.first_name_only;
+        let mut names_and_colors = if let Some(group_data) = channel.group_data.as_ref() {
+            group_data
+                .members
+                .iter()
+                .map(|&uuid| {
+                    let name = app.name_by_id(uuid);
+                    let color = user_color(name);
+                    let name = displayed_name(name, first_name_only);
+                    (uuid, name, color)
+                })
+                .collect()
+        } else {
+            let user_id = app.user_id;
+            let user_name = app.name_by_id(user_id);
+            let mut self_color = user_color(user_name);
+            let user_name = displayed_name(user_name, first_name_only);
+
+            let contact_uuid = match channel.id {
+                app::ChannelId::User(uuid) => uuid,
+                _ => unreachable!("logic error"),
+            };
+
+            if contact_uuid == user_id {
+                vec![(user_id, user_name, self_color)]
+            } else {
+                let contact_name = app.name_by_id(contact_uuid);
+                let contact_color = user_color(contact_name);
+                let contact_name = displayed_name(contact_name, first_name_only);
+
+                if self_color == contact_color {
+                    // use differnt color for our user name
+                    if let Some(idx) = USER_COLORS.iter().position(|&c| c == self_color) {
+                        self_color = USER_COLORS[(idx + 1) % USER_COLORS.len()];
+                    }
+                }
+
+                vec![
+                    (user_id, user_name, self_color),
+                    (contact_uuid, contact_name, contact_color),
+                ]
+            }
+        };
+        names_and_colors.sort_unstable_by_key(|&(id, _, _)| id);
+
+        let max_name_width = names_and_colors
+            .iter()
+            .map(|(_, name, _)| name.width())
+            .max()
+            .unwrap_or(0);
+
+        Self {
+            app: Some(app),
+            names_and_colors,
+            max_name_width,
+        }
+    }
+
+    fn resolve(&self, id: Uuid) -> (&str, Color) {
+        match self
+            .names_and_colors
+            .binary_search_by_key(&id, |&(id, _, _)| id)
+        {
+            Ok(idx) => {
+                let (_, from, from_color) = self.names_and_colors[idx];
+                (from, from_color)
+            }
+            Err(_) => (
+                app::App::name_by_id(self.app.expect("logic error"), id),
+                Color::Magenta,
+            ),
+        }
+    }
+
+    fn max_name_width(&self) -> usize {
+        self.max_name_width
+    }
+}
+
+fn displayed_quote(names: &NameResolver, quote: &app::Message) -> Option<String> {
+    let (name, _) = names.resolve(quote.from_id);
+    Some(format!("({}) {}", name, quote.message.as_ref()?))
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::app::{Message, Receipt};
+    use crate::signal::Attachment;
+
+    use super::*;
+
+    // formatting test options
+    const PREFIX: &str = "                  ";
+    const WIDTH: usize = 60;
+    const HEIGHT: usize = 10;
+    const PRINT_RECEIPT: bool = true;
+
+    fn test_message() -> Message {
+        Message {
+            from_id: Uuid::nil(),
+            message: None,
+            arrived_at: 1642334397421,
+            quote: None,
+            attachments: vec![],
+            reactions: vec![],
+            receipt: Receipt::Sent,
+        }
+    }
+
+    fn test_attachment() -> Attachment {
+        Attachment {
+            id: "2022-01-16T11:59:58.405665+00:00".to_string(),
+            content_type: "image/jpeg".into(),
+            filename: "/tmp/gurk/signal-2022-01-16T11:59:58.405665+00:00.jpg".into(),
+            size: 238987,
+        }
+    }
+
+    #[test]
+    fn test_display_attachment_only_message() {
+        let names = NameResolver {
+            app: None,
+            names_and_colors: vec![(Uuid::nil(), "boxdot", Color::Green)],
+            max_name_width: 6,
+        };
+
+        let msg = Message {
+            attachments: vec![test_attachment()],
+            ..test_message()
+        };
+        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, PRINT_RECEIPT);
+
+        let expected = ListItem::new(Text::from(vec![
+            Spans(vec![
+                Span::styled(
+                    display_datetime(msg.arrived_at),
+                    Style::default().fg(Color::Yellow),
+                ),
+                Span::styled("boxdot", Style::default().fg(Color::Green)),
+                Span::raw(": "),
+                Span::raw("<file:///tmp/gurk/signal-2022-01-"),
+            ]),
+            Spans(vec![Span::raw(
+                "                  16T11:59:58.405665+00:00.jpg> (x)",
+            )]),
+        ]));
+        assert_eq!(rendered, Some(expected));
+    }
+
+    #[test]
+    fn test_display_text_and_attachment_message() {
+        let names = NameResolver {
+            app: None,
+            names_and_colors: vec![(Uuid::nil(), "boxdot", Color::Green)],
+            max_name_width: 6,
+        };
+
+        let msg = Message {
+            message: Some("Hello, World!".into()),
+            attachments: vec![test_attachment()],
+            ..test_message()
+        };
+        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, PRINT_RECEIPT);
+
+        let expected = ListItem::new(Text::from(vec![
+            Spans(vec![
+                Span::styled(
+                    display_datetime(msg.arrived_at),
+                    Style::default().fg(Color::Yellow),
+                ),
+                Span::styled("boxdot", Style::default().fg(Color::Green)),
+                Span::raw(": "),
+                Span::raw("Hello, World!"),
+            ]),
+            Spans(vec![Span::raw(
+                "                  <file:///tmp/gurk/signal-2022-01-",
+            )]),
+            Spans(vec![Span::raw(
+                "                  16T11:59:58.405665+00:00.jpg> (x)",
+            )]),
+        ]));
+        assert_eq!(rendered, Some(expected));
     }
 }

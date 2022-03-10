@@ -1,13 +1,16 @@
-use crate::app::{Channel, ChannelId, GroupData, Message};
+use crate::app::{Channel, ChannelId, GroupData, Message, Receipt};
 use crate::config::{self, Config};
 use crate::util::utc_now_timestamp_msec;
 
+use anyhow::anyhow;
 use anyhow::{bail, Context as _};
 use async_trait::async_trait;
+use chrono::Utc;
 use gh_emoji::Replacer;
 use log::error;
 use presage::prelude::content::Reaction;
 use presage::prelude::proto::data_message::Quote;
+use presage::prelude::proto::{AttachmentPointer, ReceiptMessage};
 use presage::prelude::{
     AttachmentSpec, ContentBody, DataMessage, GroupContextV2, GroupMasterKey, SignalServers,
 };
@@ -35,6 +38,13 @@ pub trait SignalManager {
         &mut self,
         master_key_bytes: GroupMasterKeyBytes,
     ) -> anyhow::Result<ResolvedGroup>;
+
+    async fn save_attachment(
+        &mut self,
+        attachment_pointer: AttachmentPointer,
+    ) -> anyhow::Result<Attachment>;
+
+    fn send_receipt(&self, sender_uuid: Uuid, timestamps: Vec<u64>, receipt: Receipt);
 
     fn send_text(
         &self,
@@ -71,6 +81,25 @@ impl PresageManager {
 impl SignalManager for PresageManager {
     fn user_id(&self) -> Uuid {
         self.manager.uuid()
+    }
+
+    fn send_receipt(&self, _sender_uuid: Uuid, timestamps: Vec<u64>, receipt: Receipt) {
+        let now_timestamp = utc_now_timestamp_msec();
+        let data_message = ReceiptMessage {
+            r#type: Some(receipt.to_i32()),
+            timestamp: timestamps,
+        };
+
+        let manager = self.manager.clone();
+        tokio::task::spawn_local(async move {
+            let body = ContentBody::ReceiptMessage(data_message);
+            if let Err(e) = manager
+                .send_message(_sender_uuid, body, now_timestamp)
+                .await
+            {
+                log::error!("Failed to send message to {}: {}", _sender_uuid, e);
+            }
+        });
     }
 
     fn send_text(
@@ -157,6 +186,7 @@ impl SignalManager for PresageManager {
             quote: quote_message,
             attachments: Default::default(),
             reactions: Default::default(),
+            receipt: Receipt::Sent,
         }
     }
 
@@ -219,7 +249,7 @@ impl SignalManager for PresageManager {
         match self.manager.retrieve_profile_by_uuid(id, profile_key).await {
             Ok(profile) => Some(profile.name?.given_name),
             Err(e) => {
-                error!("failed to retreive user profile: {}", e);
+                error!("failed to retrieve user profile: {}", e);
                 None
             }
         }
@@ -256,6 +286,40 @@ impl SignalManager for PresageManager {
             profile_keys,
         })
     }
+
+    async fn save_attachment(
+        &mut self,
+        attachment_pointer: AttachmentPointer,
+    ) -> anyhow::Result<Attachment> {
+        let data_dir = dirs::data_dir()
+            .ok_or_else(|| anyhow!("could not find data directory"))?
+            .join("gurk");
+        let attachment_data = self.manager.get_attachment(&attachment_pointer).await?;
+
+        let date = Utc::now().to_rfc3339();
+        let filename = match attachment_pointer.content_type.as_deref() {
+            Some("image/jpeg") => format!("signal-{}.jpg", date),
+            Some("image/gif") => format!("signal-{}.gif", date),
+            Some("image/png") => format!("signal-{}.png", date),
+            Some(mimetype) => {
+                log::warn!("unsupported attachment mimetype: {}", mimetype);
+                format!("signal-{}", date)
+            }
+            None => {
+                format!("signal-{}", date)
+            }
+        };
+
+        let filepath = data_dir.join(filename);
+        std::fs::write(&filepath, &attachment_data)?;
+
+        Ok(Attachment {
+            id: date,
+            content_type: attachment_pointer.content_type.unwrap(),
+            filename: filepath,
+            size: attachment_pointer.size.unwrap(),
+        })
+    }
 }
 
 async fn upload_attachments(
@@ -287,7 +351,7 @@ pub struct Attachment {
     pub id: String,
     pub content_type: String,
     pub filename: PathBuf,
-    pub size: u64,
+    pub size: u32,
 }
 
 /// If `db_path` does not exist, it will be created (including parent directories).
@@ -400,6 +464,8 @@ pub mod test {
             self.user_id
         }
 
+        fn send_receipt(&self, _: Uuid, _: Vec<u64>, _: Receipt) {}
+
         async fn contact_name(&self, _id: Uuid, _profile_key: [u8; 32]) -> Option<String> {
             None
         }
@@ -434,6 +500,8 @@ pub mod test {
                 quote: quote_message,
                 attachments: Default::default(),
                 reactions: Default::default(),
+                // TODO make sure the message sending procedure did not fail
+                receipt: Receipt::Sent,
             };
             self.sent_messages.borrow_mut().push(message.clone());
             println!("sent messages: {:?}", self.sent_messages.borrow());
@@ -447,6 +515,13 @@ pub mod test {
             _emoji: String,
             _remove: bool,
         ) {
+        }
+
+        async fn save_attachment(
+            &mut self,
+            _attachment_pointer: AttachmentPointer,
+        ) -> anyhow::Result<Attachment> {
+            bail!("mocked signal manager cannot save attachments");
         }
     }
 }

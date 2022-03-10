@@ -1,9 +1,9 @@
 [package]
 name = "gurk"
 description = "Signal messenger client for terminal"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["boxdot <d@zerovolt.org>"]
-edition = "2018"
+edition = "2021"
 keywords = ["signal", "tui"]
 repository = "https://github.com/boxdot/gurk-rs"
 license = "AGPL-3.0-only"
@@ -56,6 +56,8 @@ uuid = "0.8.2"
 whoami = "1.1.2"
 
 [dev-dependencies]
+quickcheck = "1.0.3"
+quickcheck_macros = "1.0.0"
 tempfile = "3.2.0"
 uuid = { version = "0.8.2", features = ["v4"] }
 

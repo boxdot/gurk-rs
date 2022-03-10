@@ -2,6 +2,7 @@
 
 mod app;
 mod config;
+mod cursor;
 mod shortcuts;
 mod signal;
 mod storage;
@@ -30,7 +31,9 @@ use std::time::{Duration, Instant};
 use crate::{signal::PresageManager, storage::JsonStorage};
 
 const TARGET_FPS: u64 = 144;
+const RECEIPT_TICK_PERIOD: u64 = 144;
 const FRAME_BUDGET: Duration = Duration::from_millis(1000 / TARGET_FPS);
+const RECEIPT_BUDGET: Duration = Duration::from_millis(RECEIPT_TICK_PERIOD * 1000 / TARGET_FPS);
 const MESSAGE_SCROLL_BACK: bool = false;
 
 #[derive(Debug, StructOpt)]
@@ -166,6 +169,19 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
     let mut last_render_at = Instant::now();
     let is_render_spawned = Arc::new(AtomicBool::new(false));
 
+    let tick_tx = tx.clone();
+    // Tick to trigger receipt sending
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(RECEIPT_BUDGET);
+        loop {
+            interval.tick().await;
+            tick_tx
+                .send(Event::Tick)
+                .await
+                .expect("Cannot tick: events channel closed.");
+        }
+    });
+
     loop {
         // render
         let left_frame_budget = FRAME_BUDGET.checked_sub(last_render_at.elapsed());
@@ -191,16 +207,19 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
         }
 
         match rx.recv().await {
+            Some(Event::Tick) => {
+                let _ = app.step_receipts();
+            }
             Some(Event::Click(event)) => match event.kind {
                 MouseEventKind::Down(MouseButton::Left) => {
                     let col = event.column;
                     let row = event.row;
                     if let Some(channel_idx) =
-                        ui::coords_within_channels_view(&terminal.get_frame(), col, row)
+                        ui::coords_within_channels_view(&terminal.get_frame(), &app, col, row)
                             .map(|(_, row)| row as usize)
                             .filter(|&idx| idx < app.data.channels.items.len())
                     {
-                        app.data.channels.state.select(Some(channel_idx as usize));
+                        app.data.channels.state.select(Some(channel_idx));
                         if app.reset_unread_messages() {
                             app.save().unwrap();
                         }
@@ -239,57 +258,72 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                         .modifiers
                         .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
                     {
-                        app.move_back_word();
+                        app.get_input().move_back_word();
                     } else {
-                        app.on_left();
+                        app.get_input().on_left();
                     }
                 }
                 KeyCode::Up if event.modifiers.contains(KeyModifiers::ALT) => app.on_pgup(),
-                KeyCode::Up => app.select_previous_channel(),
                 KeyCode::Right => {
                     if event
                         .modifiers
                         .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
                     {
-                        app.move_forward_word();
+                        app.get_input().move_forward_word();
                     } else {
-                        app.on_right();
+                        app.get_input().on_right();
                     }
                 }
                 KeyCode::Down if event.modifiers.contains(KeyModifiers::ALT) => app.on_pgdn(),
-                KeyCode::Down => app.select_next_channel(),
                 KeyCode::PageUp => app.on_pgup(),
                 KeyCode::PageDown => app.on_pgdn(),
+                KeyCode::Tab if event.modifiers.contains(KeyModifiers::ALT) => app.toggle_search(),
                 KeyCode::Char('f') if event.modifiers.contains(KeyModifiers::ALT) => {
-                    app.move_forward_word();
+                    app.get_input().move_forward_word();
                 }
                 KeyCode::Char('b') if event.modifiers.contains(KeyModifiers::ALT) => {
-                    app.move_back_word();
-                }
-                KeyCode::Char('a') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                    app.on_home();
-                }
-                KeyCode::Char('e') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                    app.on_end();
+                    app.get_input().move_back_word();
                 }
                 KeyCode::Char('w') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                    app.on_delete_word();
+                    app.get_input().on_delete_word();
+                }
+                KeyCode::Down => {
+                    if app.data.is_multiline_input {
+                        app.data.input.move_line_down();
+                    } else {
+                        app.select_next_channel();
+                    }
                 }
                 KeyCode::Char('j') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                    app.select_next_channel();
+                    if app.data.is_multiline_input {
+                        app.data.input.move_line_down();
+                    } else {
+                        app.select_next_channel();
+                    }
+                }
+                KeyCode::Up => {
+                    if app.data.is_multiline_input {
+                        app.data.input.move_line_up();
+                    } else {
+                        app.select_previous_channel();
+                    }
                 }
                 KeyCode::Char('k') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                    app.select_previous_channel();
+                    if app.data.is_multiline_input {
+                        app.data.input.move_line_up();
+                    } else {
+                        app.select_previous_channel();
+                    }
                 }
                 KeyCode::Backspace
                     if event
                         .modifiers
                         .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
                 {
-                    app.on_delete_word();
+                    app.get_input().on_delete_word();
                 }
                 KeyCode::Char('k') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                    app.on_delete_suffix();
+                    app.get_input().on_delete_suffix();
                 }
                 _ => app.on_key(event)?,
             },

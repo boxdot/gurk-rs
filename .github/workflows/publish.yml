@@ -10,7 +10,6 @@ env:
   RUSTFLAGS: "-D warnings"
   RUSTUP_MAX_RETRIES: 10
   FETCH_DEPTH: 0 # pull in the tags for the version string
-  NIGHTLY_VERSION: nightly-2021-06-08
 
 jobs:
   dist-changelog:
@@ -101,7 +100,7 @@ jobs:
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: ${{ env.NIGHTLY_VERSION }}
+          toolchain: stable
           target: aarch64-unknown-linux-gnu
           profile: minimal
           override: true
@@ -113,6 +112,38 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: dist-aarch64-unknown-linux-gnu
+          path: dist
+
+  dist-aarch64-unknown-linux-musl:
+    name: dist (aarch64-unknown-linux-musl)
+    runs-on: ubuntu-20.04
+    container:
+      image: rust:alpine
+      volumes:
+        - /usr/local/cargo/registry
+    env:
+      # For some reason `-crt-static` is not working for clang without lld
+      GURK_TARGET: aarch64-unknown-linux-musl
+      RUSTFLAGS: "-C link-arg=-fuse-ld=lld -C target-feature=-crt-static"
+    steps:
+      - name: Install dependencies
+        run: apk add --no-cache musl-dev clang lld protoc
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: ${{ env.FETCH_DEPTH }}
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          target: aarch64-unknown-linux-musl
+      - name: Dist
+        run: cargo xtask dist
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: dist-aarch64-unknown-linux-musl
           path: dist
 
   dist-x86_64-apple-darwin:
@@ -157,7 +188,7 @@ jobs:
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: ${{ env.NIGHTLY_VERSION }}
+          toolchain: stable
           target: aarch64-apple-darwin
           profile: minimal
           override: true
@@ -180,6 +211,7 @@ jobs:
       - dist-x86_64-unknown-linux-gnu
       - dist-x86_64-unknown-linux-musl
       - dist-aarch64-unknown-linux-gnu
+      - dist-aarch64-unknown-linux-musl
       - dist-x86_64-apple-darwin
       - dist-aarch64-apple-darwin
     steps:
@@ -206,6 +238,10 @@ jobs:
       - uses: actions/download-artifact@v2
         with:
           name: dist-aarch64-unknown-linux-gnu
+          path: dist
+      - uses: actions/download-artifact@v2
+        with:
+          name: dist-aarch64-unknown-linux-musl
           path: dist
 
       - run: ls -al
