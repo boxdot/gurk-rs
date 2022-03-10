@@ -452,10 +452,11 @@ impl TypingAction {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Receipt {
-    Nothing, // Do not do anything to these receipts in order to avoid spamming receipt messages when an old database is loaded
     Sent,
     Delivered,
     Read,
+    #[serde(other)]
+    Nothing, // Do not do anything to these receipts in order to avoid spamming receipt messages when an old database is loaded
 }
 
 impl Default for Receipt {
