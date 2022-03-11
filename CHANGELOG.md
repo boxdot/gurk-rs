@@ -12,7 +12,7 @@
 ## Changed
 
 - Add cursor tracking and multiline input navigation ([#131])
-- New visual style for receipts ([#135], [#142])
+- New visual style for receipts ([#135], [#142], [#144])
 
 ### Fixed
 
