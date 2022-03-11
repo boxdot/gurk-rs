@@ -89,15 +89,12 @@ async fn is_online() -> bool {
 
 async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
     let (signal_manager, config) = signal::ensure_linked_device(relink).await?;
-
     let storage = JsonStorage::new(config.data_path.clone(), config::fallback_data_path());
     let mut app = App::try_new(
         config,
         Box::new(PresageManager::new(signal_manager.clone())),
         Box::new(storage),
     )?;
-
-    app.request_contacts_sync().await?;
 
     enable_raw_mode()?;
     let _raw_mode_guard = scopeguard::guard((), |_| {

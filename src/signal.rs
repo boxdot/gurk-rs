@@ -12,8 +12,7 @@ use presage::prelude::content::Reaction;
 use presage::prelude::proto::data_message::Quote;
 use presage::prelude::proto::{AttachmentPointer, ReceiptMessage};
 use presage::prelude::{
-    AttachmentSpec, Contact, ContentBody, DataMessage, GroupContextV2, GroupMasterKey,
-    SignalServers,
+    AttachmentSpec, ContentBody, DataMessage, GroupContextV2, GroupMasterKey, SignalServers,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -32,6 +31,8 @@ pub type Manager = presage::Manager<presage::SledConfigStore>;
 #[async_trait(?Send)]
 pub trait SignalManager {
     fn user_id(&self) -> Uuid;
+
+    async fn contact_name(&self, id: Uuid, profile_key: [u8; 32]) -> Option<String>;
 
     async fn resolve_group(
         &mut self,
@@ -54,18 +55,6 @@ pub trait SignalManager {
     ) -> Message;
 
     fn send_reaction(&self, channel: &Channel, message: &Message, emoji: String, remove: bool);
-
-    /// Resolves contact name from its profile
-    async fn resolve_name_from_profile(&self, id: Uuid, profile_key: [u8; 32]) -> Option<String>;
-
-    async fn request_contacts_sync(&self) -> anyhow::Result<()>;
-
-    /// Retrieves contact information store in the manager
-    ///
-    /// The information is based on the contact book of the client and is only available after
-    /// [`request_contacts_sync`] was called **and** contacts where received from Signal server.
-    /// This usually happens shortly after the latter method is called.
-    fn contact_by_id(&self, id: Uuid) -> anyhow::Result<Option<Contact>>;
 }
 
 pub struct ResolvedGroup {
@@ -256,7 +245,7 @@ impl SignalManager for PresageManager {
         }
     }
 
-    async fn resolve_name_from_profile(&self, id: Uuid, profile_key: [u8; 32]) -> Option<String> {
+    async fn contact_name(&self, id: Uuid, profile_key: [u8; 32]) -> Option<String> {
         match self.manager.retrieve_profile_by_uuid(id, profile_key).await {
             Ok(profile) => Some(profile.name?.given_name),
             Err(e) => {
@@ -331,14 +320,6 @@ impl SignalManager for PresageManager {
             size: attachment_pointer.size.unwrap(),
         })
     }
-
-    async fn request_contacts_sync(&self) -> anyhow::Result<()> {
-        Ok(self.manager.request_contacts_sync().await?)
-    }
-
-    fn contact_by_id(&self, id: Uuid) -> anyhow::Result<Option<Contact>> {
-        Ok(self.manager.get_contact_by_id(id)?)
-    }
 }
 
 async fn upload_attachments(
@@ -380,7 +361,7 @@ fn get_signal_manager(db_path: PathBuf) -> anyhow::Result<Manager> {
     Ok(manager)
 }
 
-/// Makes sure that we have a linked device.
+/// Makes sure that we have linked device.
 ///
 /// Either,
 ///
@@ -485,6 +466,10 @@ pub mod test {
 
         fn send_receipt(&self, _: Uuid, _: Vec<u64>, _: Receipt) {}
 
+        async fn contact_name(&self, _id: Uuid, _profile_key: [u8; 32]) -> Option<String> {
+            None
+        }
+
         async fn resolve_group(
             &mut self,
             _master_key_bytes: super::GroupMasterKeyBytes,
@@ -537,22 +522,6 @@ pub mod test {
             _attachment_pointer: AttachmentPointer,
         ) -> anyhow::Result<Attachment> {
             bail!("mocked signal manager cannot save attachments");
-        }
-
-        async fn resolve_name_from_profile(
-            &self,
-            _id: Uuid,
-            _profile_key: [u8; 32],
-        ) -> Option<String> {
-            None
-        }
-
-        async fn request_contacts_sync(&self) -> anyhow::Result<()> {
-            Ok(())
-        }
-
-        fn contact_by_id(&self, _id: Uuid) -> anyhow::Result<Option<Contact>> {
-            Ok(None)
         }
     }
 }

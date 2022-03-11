@@ -22,7 +22,7 @@ debug = 0
 lto = "thin"
 
 [dependencies]
-presage = { git = "https://github.com/whisperfish/presage.git", rev = "f09db39" }
+presage = { git = "https://github.com/whisperfish/presage.git", branch = "main" }
 
 anyhow = "1.0.40"
 async-trait = "0.1.51"

@@ -9,10 +9,8 @@ use crate::util::{
 };
 
 use anyhow::{anyhow, Context as _};
-use chrono::{DateTime, Duration, Utc};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use itertools::Itertools;
-use log::info;
 use notify_rust::Notification;
 use phonenumber::{Mode, PhoneNumber};
 use presage::prelude::proto::{AttachmentPointer, ReceiptMessage, TypingMessage};
@@ -35,9 +33,6 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::path::Path;
 use std::str::FromStr;
-
-/// Amount of time to skip contacts sync after the last sync
-const CONTACTS_SYNC_DEADLINE_SEC: i64 = 60 * 60; // 1h
 
 pub struct App {
     pub config: Config,
@@ -260,9 +255,6 @@ impl BoxData {
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppData {
     pub channels: FilteredStatefulList<Channel>,
-    /// Names retrieved from profiles or phone number if it failed
-    ///
-    /// Do not use directly, use [`App::name_by_id`] instead.
     pub names: HashMap<Uuid, String>,
     #[serde(skip)] // ! We may want to save it
     pub input: BoxData,
@@ -270,8 +262,6 @@ pub struct AppData {
     pub search_box: BoxData,
     #[serde(skip)]
     pub is_multiline_input: bool,
-    #[serde(default)]
-    pub contacts_sync_request_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -348,6 +338,23 @@ pub struct GroupData {
 }
 
 impl Channel {
+    pub fn contains_user(&self, name: &str, hm: &HashMap<Uuid, String>) -> bool {
+        match self.group_data {
+            Some(ref gd) => gd.members.iter().any(|u| name_by_id(hm, *u).contains(name)),
+            None => self.name.contains(name),
+        }
+    }
+
+    pub fn match_pattern(&self, pattern: &str, hm: &HashMap<Uuid, String>) -> bool {
+        if pattern.is_empty() {
+            return true;
+        }
+        match pattern.chars().next().unwrap() {
+            '@' => self.contains_user(&pattern[1..], hm),
+            _ => self.name.contains(pattern),
+        }
+    }
+
     pub fn reset_writing(&mut self, user: Uuid) {
         match &mut self.typing {
             TypingSet::GroupTyping(ref mut hash_set) => {
@@ -544,7 +551,7 @@ impl App {
         storage: Box<dyn Storage>,
     ) -> anyhow::Result<Self> {
         let user_id = signal_manager.user_id();
-        let data = storage.load_app_data()?;
+        let data = storage.load_app_data(user_id, config.user.name.clone())?;
         Ok(Self {
             config,
             signal_manager,
@@ -569,59 +576,35 @@ impl App {
         }
     }
 
-    pub fn writing_people(&self, channel: &Channel) -> Option<String> {
-        if channel.is_writing() {
-            let uuids: Box<dyn Iterator<Item = Uuid>> = match &channel.typing {
-                TypingSet::GroupTyping(uuids) => Box::new(uuids.iter().copied()),
-                TypingSet::SingleTyping(a) => {
-                    if *a {
-                        Box::new(std::iter::once(channel.user_id().unwrap()))
-                    } else {
-                        Box::new(std::iter::empty())
-                    }
-                }
-            };
-            Some(format!(
-                "[{}] writing...",
-                uuids.map(|id| self.name_by_id(id)).format(", ")
-            ))
-        } else {
-            None
+    pub fn writing_people(&self, channel: &Channel) -> String {
+        if !channel.is_writing() {
+            return String::from("");
         }
+        let uuids: Vec<Uuid> = match &channel.typing {
+            TypingSet::GroupTyping(hash_set) => hash_set.clone().into_iter().collect(),
+            TypingSet::SingleTyping(a) => {
+                if *a {
+                    vec![channel.user_id().unwrap()]
+                } else {
+                    Vec::new()
+                }
+            }
+        };
+        format!(
+            "{:?} writing...",
+            uuids
+                .into_iter()
+                .map(|u| self.name_by_id(u))
+                .collect::<Vec<&str>>()
+        )
     }
 
     pub fn save(&self) -> anyhow::Result<()> {
         self.storage.save_app_data(&self.data)
     }
 
-    pub fn name_by_id(&self, id: Uuid) -> String {
-        if self.user_id == id {
-            // it's me
-            self.config.user.name.clone()
-        } else if let Some(contact) = self
-            .signal_manager
-            .contact_by_id(id)
-            .ok()
-            .flatten()
-            .filter(|contact| !contact.name.is_empty())
-        {
-            // user is known via our contact list
-            contact.name
-        } else if let Some(name) = self.data.names.get(&id) {
-            // user should be at least known via their profile or phone number
-            name.clone()
-        } else {
-            // give up
-            "Unknown User".to_string()
-        }
-    }
-
-    pub fn channel_name<'a>(&self, channel: &'a Channel) -> Cow<'a, str> {
-        if let Some(id) = channel.user_id() {
-            self.name_by_id(id).into()
-        } else {
-            (&channel.name).into()
-        }
+    pub fn name_by_id(&self, id: Uuid) -> &str {
+        name_by_id(&self.data.names, id)
     }
 
     pub fn on_key(&mut self, key: KeyEvent) -> anyhow::Result<()> {
@@ -928,17 +911,18 @@ impl App {
                         .ensure_group_channel_exists(master_key, revision)
                         .await
                         .context("failed to create group channel")?;
-
-                    self.ensure_user_is_known(uuid, profile_key, phone_number)
-                        .await;
-                    let from = self.name_by_id(uuid);
+                    let from = self
+                        .ensure_user_is_known(uuid, profile_key, phone_number)
+                        .await
+                        .to_string();
 
                     (channel_idx, from)
                 } else {
                     // incoming direct message
-                    self.ensure_user_is_known(uuid, profile_key, phone_number)
-                        .await;
-                    let name = self.name_by_id(uuid);
+                    let name = self
+                        .ensure_user_is_known(uuid, profile_key, phone_number)
+                        .await
+                        .to_string();
                     let channel_idx = self.ensure_contact_channel_exists(uuid, &name).await;
                     let from = self.data.channels.items[channel_idx].name.clone();
                     // Reset typing notification as the Tipyng::Stop are not always sent by the server when a message is sent.
@@ -1273,13 +1257,11 @@ impl App {
             .iter()
             .position(|channel| channel.id == channel_id)?;
         let channel = &mut self.data.channels.items[channel_idx];
-
         let message = channel
             .messages
             .items
             .iter_mut()
             .find(|m| m.arrived_at == target_sent_timestamp)?;
-
         let reaction_idx = message
             .reactions
             .iter()
@@ -1299,25 +1281,19 @@ impl App {
 
         if is_added && channel_id != ChannelId::User(self.user_id) {
             // Notification
-            let mut notification = format!("reacted {}", emoji);
+            let sender_name = name_by_id(&self.data.names, sender_uuid);
+            let summary = if let ChannelId::Group(_) = channel.id {
+                Cow::from(format!("{} in {}", sender_name, channel.name))
+            } else {
+                Cow::from(sender_name)
+            };
+            let mut notification = format!("{} reacted {}", summary, emoji);
             if let Some(text) = message.message.as_ref() {
                 notification.push_str(" to: ");
                 notification.push_str(text);
             }
-
-            // makes borrow checker happy
-            let channel_id = channel.id;
-            let channel_name = channel.name.clone();
-
-            let sender_name = self.name_by_id(sender_uuid);
-            let summary = if let ChannelId::Group(_) = channel_id {
-                Cow::from(format!("{} in {}", sender_name, channel_name))
-            } else {
-                Cow::from(sender_name)
-            };
-
             if notify {
-                self.notify(&summary, &format!("{summary} {notification}"));
+                self.notify(&summary, &notification);
             }
 
             self.touch_channel(channel_idx);
@@ -1399,15 +1375,19 @@ impl App {
         uuid: Uuid,
         profile_key: Vec<u8>,
         phone_number: PhoneNumber,
-    ) {
-        if !self.try_ensure_user_is_known(uuid, profile_key).await {
+    ) -> &str {
+        if self
+            .try_ensure_user_is_known(uuid, profile_key)
+            .await
+            .is_none()
+        {
             let phone_number_name = phone_number.format().mode(Mode::E164).to_string();
             self.data.names.insert(uuid, phone_number_name);
         }
+        self.data.names.get(&uuid).unwrap()
     }
 
-    /// Returns `true`, if user name was resolved successfully, otherwise `false`
-    async fn try_ensure_user_is_known(&mut self, uuid: Uuid, profile_key: Vec<u8>) -> bool {
+    async fn try_ensure_user_is_known(&mut self, uuid: Uuid, profile_key: Vec<u8>) -> Option<&str> {
         let is_phone_number_or_unknown = self
             .data
             .names
@@ -1416,18 +1396,12 @@ impl App {
             .unwrap_or(true);
         if is_phone_number_or_unknown {
             let name = match profile_key.try_into() {
-                Ok(key) => {
-                    self.signal_manager
-                        .resolve_name_from_profile(uuid, key)
-                        .await
-                }
+                Ok(key) => self.signal_manager.contact_name(uuid, key).await,
                 Err(_) => None,
             };
-            if let Some(name) = name {
-                self.data.names.insert(uuid, name);
-            }
+            self.data.names.insert(uuid, name?);
         }
-        self.data.names.contains_key(&uuid)
+        self.data.names.get(&uuid).map(|s| s.as_str())
     }
 
     async fn try_ensure_users_are_known(
@@ -1471,9 +1445,11 @@ impl App {
             .iter()
             .position(|channel| channel.user_id() == Some(uuid))
         {
-            let channel = &mut self.data.channels.items[channel_idx];
-            if channel.name != name {
-                channel.name = name.to_string();
+            if let Some(name) = self.data.names.get(&uuid) {
+                let channel = &mut self.data.channels.items[channel_idx];
+                if &channel.name != name {
+                    channel.name = name.clone();
+                }
             }
             channel_idx
         } else {
@@ -1604,44 +1580,10 @@ impl App {
     pub fn is_help(&self) -> bool {
         self.display_help
     }
+}
 
-    pub(crate) async fn request_contacts_sync(&mut self) -> anyhow::Result<()> {
-        let now = Utc::now();
-        let do_sync = self
-            .data
-            .contacts_sync_request_at
-            .map(|dt| dt + Duration::seconds(CONTACTS_SYNC_DEADLINE_SEC) < now)
-            .unwrap_or(true);
-        if do_sync {
-            info!("requesting contact sync");
-            self.signal_manager.request_contacts_sync().await?;
-            self.data.contacts_sync_request_at = Some(now);
-            self.save().unwrap();
-        }
-        Ok(())
-    }
-
-    /// Filters visible channel based on the provided `pattern`
-    ///
-    /// `pattern` is compared to channel name or channel member contact names, case insensitively.
-    pub(crate) fn filter_channels(&mut self, pattern: &str) {
-        let pattern = pattern.to_lowercase();
-
-        // move out `channels` temporarily to make borrow checker happy
-        let mut channels = std::mem::take(&mut self.data.channels);
-        channels.filter(|channel: &Channel| match pattern.chars().next() {
-            None => true,
-            Some('@') => match channel.group_data.as_ref() {
-                Some(group_data) => group_data
-                    .members
-                    .iter()
-                    .any(|&id| self.name_by_id(id).to_lowercase().contains(&pattern[1..])),
-                None => channel.name.to_lowercase().contains(&pattern[1..]),
-            },
-            _ => channel.name.to_lowercase().contains(&pattern),
-        });
-        self.data.channels = channels;
-    }
+pub fn name_by_id(names: &HashMap<Uuid, String>, id: Uuid) -> &str {
+    names.get(&id).map(|s| s.as_ref()).unwrap_or("Unknown Name")
 }
 
 /// Returns an emoji string if `s` is an emoji or if `s` is a GitHub emoji shortcode.

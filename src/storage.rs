@@ -3,6 +3,7 @@ use crate::cursor::Cursor;
 
 use anyhow::Context;
 use log::info;
+use uuid::Uuid;
 
 use std::fs::File;
 use std::io::BufReader;
@@ -20,7 +21,10 @@ pub trait Storage {
     /// In case, the app data exists, but can't be deserialized/loaded, this method should fail with
     /// an error, instead of returning a *new* app data which would override the old incompatible
     /// one.
-    fn load_app_data(&self) -> anyhow::Result<AppData>;
+    ///
+    /// After the app data is loaded, this method must ensure that the user with the given`user_id`
+    /// and `user_name` is indexed in the app data names.
+    fn load_app_data(&self, user_id: Uuid, user_name: String) -> anyhow::Result<AppData>;
 }
 
 /// Storage based on a single JSON file.
@@ -34,8 +38,11 @@ impl Storage for JsonStorage {
         Self::save_to(data, &self.data_path)
     }
 
-    fn load_app_data(&self) -> anyhow::Result<AppData> {
+    fn load_app_data(&self, user_id: Uuid, user_name: String) -> anyhow::Result<AppData> {
         let mut data = self.load_app_data_impl()?;
+
+        // ensure that our name is up to date
+        data.names.insert(user_id, user_name);
 
         // select the first channel if none is selected
         if data.channels.state.selected().is_none() && !data.channels.items.is_empty() {
@@ -118,8 +125,11 @@ pub mod test {
             Ok(())
         }
 
-        fn load_app_data(&self) -> anyhow::Result<AppData> {
-            Ok(Default::default())
+        fn load_app_data(&self, user_id: uuid::Uuid, user_name: String) -> anyhow::Result<AppData> {
+            Ok(AppData {
+                names: IntoIterator::into_iter([(user_id, user_name)]).collect(),
+                ..Default::default()
+            })
         }
     }
 }
@@ -134,20 +144,22 @@ mod tests {
 
     use super::*;
     use tempfile::NamedTempFile;
-    use uuid::Uuid;
 
     #[test]
     fn test_json_storage_load_existing_app_data() -> anyhow::Result<()> {
+        let user_id = Uuid::new_v4();
+        let user_name = "Tyler Durden".to_string();
         let app_data = AppData {
             input: BoxData::empty(),
             search_box: BoxData::empty(),
+            names: [(user_id, user_name.clone())].iter().cloned().collect(),
             ..Default::default()
         };
 
         let file = NamedTempFile::new()?;
         let storage = JsonStorage::new(file.path().to_owned(), None);
         storage.save_app_data(&app_data)?;
-        let loaded_app_data = storage.load_app_data()?;
+        let loaded_app_data = storage.load_app_data(user_id, user_name)?;
 
         assert_eq!(loaded_app_data, app_data);
         assert_eq!(loaded_app_data.channels.state.selected(), None);
@@ -161,17 +173,29 @@ mod tests {
 
         let storage = JsonStorage::new(data_path, None);
 
-        let app_data = storage.load_app_data()?;
-        assert_eq!(app_data, Default::default());
+        let user_id = Uuid::new_v4();
+        let user_name = "Tyler Durden".to_string();
+        let app_data = storage.load_app_data(user_id, user_name.clone())?;
+
+        assert_eq!(
+            app_data,
+            AppData {
+                names: [(user_id, user_name)].iter().cloned().collect(),
+                ..Default::default()
+            }
+        );
 
         Ok(())
     }
 
     #[test]
     fn test_json_storage_load_app_data_from_fallback() -> anyhow::Result<()> {
+        let user_id = Uuid::new_v4();
+        let user_name = "Tyler Durden".to_string();
         let app_data = AppData {
             input: BoxData::empty(),
             search_box: BoxData::empty(),
+            names: [(user_id, user_name.clone())].iter().cloned().collect(),
             ..Default::default()
         };
 
@@ -181,7 +205,7 @@ mod tests {
 
         let storage = JsonStorage::new(data_path, Some(fallback_data_path.path().to_owned()));
 
-        let loaded_app_data = storage.load_app_data()?;
+        let loaded_app_data = storage.load_app_data(user_id, user_name)?;
 
         assert_eq!(loaded_app_data, app_data);
 
@@ -202,22 +226,21 @@ mod tests {
                 cursor: Cursor::end("some search"),
             },
             is_multiline_input: false,
-            names: Default::default(),
+            names: [(user_id, user_name.clone())].iter().cloned().collect(),
             channels: FilteredStatefulList::_with_items(vec![Channel {
                 id: ChannelId::User(user_id),
-                name: user_name,
+                name: user_name.clone(),
                 group_data: None,
                 messages: Default::default(),
                 unread_messages: 0,
                 typing: TypingSet::SingleTyping(false),
             }]),
-            contacts_sync_request_at: None,
         };
 
         let file = NamedTempFile::new()?;
         let storage = JsonStorage::new(file.path().to_owned(), None);
         storage.save_app_data(&app_data)?;
-        let app_data = storage.load_app_data()?;
+        let app_data = storage.load_app_data(user_id, user_name)?;
 
         assert_eq!(app_data.channels.state.selected(), Some(0));
 

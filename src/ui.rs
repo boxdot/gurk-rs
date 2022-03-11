@@ -16,7 +16,6 @@ use tui::Frame;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use uuid::Uuid;
 
-use std::borrow::Cow;
 use std::fmt;
 
 pub const CHANNEL_VIEW_RATIO: u32 = 4;
@@ -126,10 +125,9 @@ fn draw_channels_column<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect)
 
 fn draw_channels<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let channel_list_width = area.width.saturating_sub(2) as usize;
-    let pattern = app.data.search_box.data.clone();
+    let pattern = app.data.search_box.data.as_str();
     app.channel_text_width = channel_list_width;
-    app.filter_channels(&pattern);
-
+    app.data.channels.filter_channels(pattern, &app.data.names);
     let channels: Vec<ListItem> = app
         .data
         .channels
@@ -140,7 +138,7 @@ fn draw_channels<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
             } else {
                 String::new()
             };
-            let label = format!("{}{}", app.channel_name(channel), unread_messages_label);
+            let label = format!("{}{}", channel.name, unread_messages_label);
             let label_width = label.width();
             let label = if label.width() <= channel_list_width || unread_messages_label.is_empty() {
                 label
@@ -386,11 +384,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         items.insert(unread_messages, ListItem::new(Span::from(new_message_line)));
     }
 
-    let title: String = if let Some(writing_people) = writing_people {
-        format!("Messages {}", writing_people)
-    } else {
-        "Messages".to_string()
-    };
+    let title = format!("Messages {}", writing_people);
 
     let list = List::new(items)
         .block(Block::default().title(title).borders(Borders::ALL))
@@ -481,7 +475,7 @@ fn display_message(
 
     let from = Span::styled(
         textwrap::indent(
-            &from,
+            from,
             &" ".repeat(
                 names
                     .max_name_width()
@@ -671,10 +665,10 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     f.render_stateful_widget(shorts_widget, area, &mut app.data.channels.state);
 }
 
-fn displayed_name(name: String, first_name_only: bool) -> String {
+fn displayed_name(name: &str, first_name_only: bool) -> &str {
     if first_name_only {
         let space_pos = name.find(' ').unwrap_or(name.len());
-        name[0..space_pos].to_string()
+        &name[0..space_pos]
     } else {
         name
     }
@@ -701,56 +695,55 @@ fn user_color(username: &str) -> Color {
 /// Resolves names in a channel
 struct NameResolver<'a> {
     app: Option<&'a App>,
-    names_and_colors: Vec<(Uuid, String, Color)>,
+    names_and_colors: Vec<(Uuid, &'a str, Color)>,
     max_name_width: usize,
 }
 
 impl<'a> NameResolver<'a> {
     fn compute_for_channel<'b>(app: &'a app::App, channel: &'b app::Channel) -> Self {
         let first_name_only = app.config.first_name_only;
-        let mut names_and_colors: Vec<(Uuid, String, Color)> =
-            if let Some(group_data) = channel.group_data.as_ref() {
-                group_data
-                    .members
-                    .iter()
-                    .map(|&uuid| {
-                        let name = app.name_by_id(uuid);
-                        let color = user_color(&name);
-                        let name = displayed_name(name, first_name_only);
-                        (uuid, name, color)
-                    })
-                    .collect()
-            } else {
-                let user_id = app.user_id;
-                let user_name = app.name_by_id(user_id);
-                let mut self_color = user_color(&user_name);
-                let user_name = displayed_name(user_name, first_name_only);
+        let mut names_and_colors = if let Some(group_data) = channel.group_data.as_ref() {
+            group_data
+                .members
+                .iter()
+                .map(|&uuid| {
+                    let name = app.name_by_id(uuid);
+                    let color = user_color(name);
+                    let name = displayed_name(name, first_name_only);
+                    (uuid, name, color)
+                })
+                .collect()
+        } else {
+            let user_id = app.user_id;
+            let user_name = app.name_by_id(user_id);
+            let mut self_color = user_color(user_name);
+            let user_name = displayed_name(user_name, first_name_only);
 
-                let contact_uuid = match channel.id {
-                    app::ChannelId::User(uuid) => uuid,
-                    _ => unreachable!("logic error"),
-                };
-
-                if contact_uuid == user_id {
-                    vec![(user_id, user_name, self_color)]
-                } else {
-                    let contact_name = app.name_by_id(contact_uuid);
-                    let contact_color = user_color(&contact_name);
-                    let contact_name = displayed_name(contact_name, first_name_only);
-
-                    if self_color == contact_color {
-                        // use differnt color for our user name
-                        if let Some(idx) = USER_COLORS.iter().position(|&c| c == self_color) {
-                            self_color = USER_COLORS[(idx + 1) % USER_COLORS.len()];
-                        }
-                    }
-
-                    vec![
-                        (user_id, user_name, self_color),
-                        (contact_uuid, contact_name, contact_color),
-                    ]
-                }
+            let contact_uuid = match channel.id {
+                app::ChannelId::User(uuid) => uuid,
+                _ => unreachable!("logic error"),
             };
+
+            if contact_uuid == user_id {
+                vec![(user_id, user_name, self_color)]
+            } else {
+                let contact_name = app.name_by_id(contact_uuid);
+                let contact_color = user_color(contact_name);
+                let contact_name = displayed_name(contact_name, first_name_only);
+
+                if self_color == contact_color {
+                    // use differnt color for our user name
+                    if let Some(idx) = USER_COLORS.iter().position(|&c| c == self_color) {
+                        self_color = USER_COLORS[(idx + 1) % USER_COLORS.len()];
+                    }
+                }
+
+                vec![
+                    (user_id, user_name, self_color),
+                    (contact_uuid, contact_name, contact_color),
+                ]
+            }
+        };
         names_and_colors.sort_unstable_by_key(|&(id, _, _)| id);
 
         let max_name_width = names_and_colors
@@ -766,17 +759,17 @@ impl<'a> NameResolver<'a> {
         }
     }
 
-    fn resolve(&self, id: Uuid) -> (Cow<str>, Color) {
+    fn resolve(&self, id: Uuid) -> (&str, Color) {
         match self
             .names_and_colors
             .binary_search_by_key(&id, |&(id, _, _)| id)
         {
             Ok(idx) => {
-                let (_, from, from_color) = &self.names_and_colors[idx];
-                (from.into(), *from_color)
+                let (_, from, from_color) = self.names_and_colors[idx];
+                (from, from_color)
             }
             Err(_) => (
-                self.app.expect("logic error").name_by_id(id).into(),
+                app::App::name_by_id(self.app.expect("logic error"), id),
                 Color::Magenta,
             ),
         }
@@ -809,7 +802,7 @@ mod tests {
     fn name_resolver(user_id: Uuid) -> NameResolver<'static> {
         NameResolver {
             app: None,
-            names_and_colors: vec![(user_id, "boxdot".to_string(), Color::Green)],
+            names_and_colors: vec![(user_id, "boxdot", Color::Green)],
             max_name_width: 6,
         }
     }
