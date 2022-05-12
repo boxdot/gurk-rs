@@ -1970,7 +1970,7 @@ checksum = "ac74c624d6b2d21f425f752262f42188365d7b8ff1aff74c82e45136510a4857"
 [[package]]
 name = "presage"
 version = "0.2.0"
-source = "git+https://github.com/whisperfish/presage.git?rev=f09db39#f09db3926fd02f61f94cc6fc786d81ca52f9f245"
+source = "git+https://github.com/whisperfish/presage.git?rev=8fcfb65#8fcfb6510c3a3ae4aeb9bafb535091d5b6ef1824"
 dependencies = [
  "async-trait",
  "base64 0.12.3",
