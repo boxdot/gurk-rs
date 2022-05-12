@@ -1,14 +1,12 @@
-use std::collections::HashMap;
-
 use crate::app::Channel;
 
-use super::MESSAGE_SCROLL_BACK;
 use chrono::{DateTime, Local, NaiveDateTime, TimeZone as _, Utc};
 use presage::prelude::PhoneNumber;
 use regex_automata::Regex;
 use serde::{Deserialize, Serialize};
 use tui::widgets::ListState;
-use uuid::Uuid;
+
+use crate::MESSAGE_SCROLL_BACK;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StatefulList<T> {
@@ -62,9 +60,8 @@ impl<T> Default for StatefulList<T> {
 }
 
 impl FilteredStatefulList<Channel> {
-    pub fn filter_channels(&mut self, pattern: &str, hm: &HashMap<Uuid, String>) {
-        let lambda = |c: &Channel| c.match_pattern(pattern, hm);
-        self.filter_elements(lambda);
+    pub fn filter(&mut self, filter: impl Fn(&Channel) -> bool) {
+        self.filter_elements(filter);
         // Update the selected message to not got past the bound of `self.filtered_items`
         self.state.select(if self.filtered_items.is_empty() {
             None
