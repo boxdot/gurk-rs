@@ -17,6 +17,7 @@
 ### Fixed
 
 - Bug: infinite loop while skkiping words on input box ([#129], [#131])
+- Fix fail on contact sync for contacts without a UUID ([#152])
 
 [#122]: https://github.com/boxdot/gurk-rs/pull/122
 [#126]: https://github.com/boxdot/gurk-rs/pull/126
@@ -26,6 +27,7 @@
 [#131]: https://github.com/boxdot/gurk-rs/pull/131
 [#135]: https://github.com/boxdot/gurk-rs/pull/135
 [#142]: https://github.com/boxdot/gurk-rs/pull/142
+[#152]: https://github.com/boxdot/gurk-rs/pull/152
 
 ## 0.2.3
 
