@@ -589,7 +589,7 @@ fn add_attachments(msg: &app::Message, out: &mut String) {
     }
 }
 
-fn add_reactions(msg: &app::Message, out: &mut String) {
+fn add_reactions(msg: &app::Message, out: &mut dyn fmt::Write) {
     if !msg.reactions.is_empty() {
         fmt::write(
             out,
