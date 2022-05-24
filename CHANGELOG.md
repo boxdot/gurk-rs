@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.4
 
 ### Added
 
@@ -8,15 +8,20 @@
 - Add release build for `aarch64-unknown-musl` ([#126])
 - Show qrcode in terminal instead of PNG viewer ([#128])
 - Document key bindings and packages ([#130])
+- Sync contacts ([#146])
+- Add visual aid (emoji) for stickers ([#148])
 
 ## Changed
 
-- Add cursor tracking and multiline input navigation ([#131])
+- Add cursor tracking and multi-line input navigation ([#131])
 - New visual style for receipts ([#135], [#142], [#144])
 
 ### Fixed
 
-- Bug: infinite loop while skkiping words on input box ([#129], [#131])
+- Bug: infinite loop while skipping words on input box ([#129], [#131])
+- Fix fail on contact sync for contacts without a UUID ([#152])
+- Return upon unknown group ([#133])
+- Fix: Notifications bump direct messages channel up ([#134])
 - Fix fail on contact sync for contacts without a UUID ([#152])
 
 [#122]: https://github.com/boxdot/gurk-rs/pull/122
@@ -25,8 +30,13 @@
 [#129]: https://github.com/boxdot/gurk-rs/pull/129
 [#130]: https://github.com/boxdot/gurk-rs/pull/130
 [#131]: https://github.com/boxdot/gurk-rs/pull/131
+[#133]: https://github.com/boxdot/gurk-rs/pull/133
+[#134]: https://github.com/boxdot/gurk-rs/pull/134
 [#135]: https://github.com/boxdot/gurk-rs/pull/135
 [#142]: https://github.com/boxdot/gurk-rs/pull/142
+[#144]: https://github.com/boxdot/gurk-rs/pull/144
+[#146]: https://github.com/boxdot/gurk-rs/pull/146
+[#148]: https://github.com/boxdot/gurk-rs/pull/148
 [#152]: https://github.com/boxdot/gurk-rs/pull/152
 
 ## 0.2.3
