@@ -19,7 +19,7 @@ use presage::prelude::proto::{AttachmentPointer, ReceiptMessage, TypingMessage};
 use presage::prelude::{
     content::{ContentBody, DataMessage, Metadata, SyncMessage},
     proto::{
-        data_message::{Quote, Reaction},
+        data_message::{Quote, Reaction, Sticker},
         sync_message::Sent,
         GroupContextV2,
     },
@@ -816,8 +816,9 @@ impl App {
                             timestamp: Some(timestamp),
                             message:
                                 Some(DataMessage {
-                                    body,
+                                    mut body,
                                     attachments: attachment_pointers,
+                                    sticker,
                                     ..
                                 }),
                             ..
@@ -827,6 +828,8 @@ impl App {
             ) if destination_uuid.parse() == Ok(user_id) => {
                 let channel_idx = self.ensure_own_channel_exists();
                 let attachments = self.save_attachments(attachment_pointers).await;
+                add_emoji_from_sticker(&mut body, sticker);
+
                 let message = Message::new(user_id, body, timestamp, attachments);
                 (channel_idx, message)
             }
@@ -848,10 +851,11 @@ impl App {
                             timestamp: Some(timestamp),
                             message:
                                 Some(DataMessage {
-                                    body,
+                                    mut body,
                                     group_v2,
                                     quote,
                                     attachments: attachment_pointers,
+                                    sticker,
                                     ..
                                 }),
                             ..
@@ -884,6 +888,7 @@ impl App {
                     return Ok(());
                 };
 
+                add_emoji_from_sticker(&mut body, sticker);
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let attachments = self.save_attachments(attachment_pointers).await;
                 let message = Message {
@@ -905,12 +910,13 @@ impl App {
                     ..
                 },
                 ContentBody::DataMessage(DataMessage {
-                    body,
+                    mut body,
                     group_v2,
                     timestamp: Some(timestamp),
                     profile_key: Some(profile_key),
                     quote,
                     attachments: attachment_pointers,
+                    sticker,
                     ..
                 }),
             ) => {
@@ -946,6 +952,8 @@ impl App {
 
                     (channel_idx, from)
                 };
+
+                add_emoji_from_sticker(&mut body, sticker);
 
                 let attachments = self.save_attachments(attachment_pointers).await;
                 self.notify_about_message(&from, body.as_deref(), &attachments);
@@ -1671,6 +1679,12 @@ fn notification_text_for_attachments(attachments: &[Attachment]) -> Option<Strin
         0 => None,
         1 => Some("<attachment>".into()),
         n => Some(format!("<attachments ({n})>")),
+    }
+}
+
+fn add_emoji_from_sticker(body: &mut Option<String>, sticker: Option<Sticker>) {
+    if let Some(Sticker { emoji: Some(e), .. }) = sticker {
+        *body = Some(format!("<{}>", e));
     }
 }
 
