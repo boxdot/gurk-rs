@@ -1,2 +1,16 @@
 [alias]
 xtask = "run --package xtask --"
+
+[env]
+CC_aarch64_unknown_linux_musl = "clang"
+AR_aarch64_unknown_linux_musl = "llvm-ar"
+
+[target.aarch64-unknown-linux-gnu]
+linker = "aarch64-linux-gnu-gcc"
+
+[target.aarch64-unknown-linux-musl]
+rustflags = ["-Clink-self-contained=yes"]
+linker = "rust-lld"
+
+[target.x86_64-unknown-linux-musl]
+rustflags = ["-Clink-self-contained=yes"]
