@@ -5,14 +5,13 @@ name: ci
 env:
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
-  RUSTFLAGS: "-D warnings"
   RUSTUP_MAX_RETRIES: 10
   FETCH_DEPTH: 0
 
 jobs:
   rustfmt:
     name: rustfmt
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
@@ -24,6 +23,7 @@ jobs:
           toolchain: stable
           profile: minimal
           components: rustfmt
+          override: true
       - name: Check format
         uses: actions-rs/cargo@v1
         with:
@@ -32,7 +32,7 @@ jobs:
 
   clippy:
     name: clippy
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
@@ -44,6 +44,7 @@ jobs:
           toolchain: stable
           profile: minimal
           components: clippy
+          override: true
       - name: Clippy
         uses: actions-rs/cargo@v1
         with:
@@ -51,7 +52,7 @@ jobs:
 
   build-test-x86_64-unknown-linux-gnu:
     name: build and test (x86_64-unknown-linux-gnu)
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
@@ -78,9 +79,6 @@ jobs:
       image: rust:alpine
       volumes:
         - /usr/local/cargo/registry
-    env:
-      # For some reason `-crt-static` is not working for clang without lld
-      RUSTFLAGS: "-C link-arg=-fuse-ld=lld -C target-feature=-crt-static"
     steps:
       - name: Install dependencies
         run: apk add --no-cache musl-dev lld protoc
@@ -102,9 +100,7 @@ jobs:
 
   build-aarch64-unknown-linux-gnu:
     name: build (aarch64-unknown-linux-gnu)
-    runs-on: ubuntu-18.04
-    env:
-      CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
@@ -132,12 +128,9 @@ jobs:
       image: rust:alpine
       volumes:
         - /usr/local/cargo/registry
-    env:
-      # For some reason `-crt-static` is not working for clang without lld
-      RUSTFLAGS: "-C link-arg=-fuse-ld=lld -C target-feature=-crt-static"
     steps:
       - name: Install dependencies
-        run: apk add --no-cache musl-dev lld protoc
+        run: apk add --no-cache musl-dev clang lld llvm protoc
       - name: Checkout repository
         uses: actions/checkout@v2
         with:
@@ -148,6 +141,7 @@ jobs:
           toolchain: stable
           profile: minimal
           target: aarch64-unknown-linux-musl
+          override: true
       - name: Build
         uses: actions-rs/cargo@v1
         with:
@@ -171,6 +165,7 @@ jobs:
         with:
           toolchain: stable
           profile: minimal
+          override: true
       - name: Build
         uses: actions-rs/cargo@v1
         with:
@@ -200,7 +195,7 @@ jobs:
           profile: minimal
           override: true
       - name: Build
-        run: |
-          export SDKROOT=$(xcrun -sdk macosx11.0 --show-sdk-path)
-          export MACOSX_DEPLOYMENT_TARGET=$(xcrun -sdk macosx11.0 --show-sdk-platform-version)
-          cargo build --target aarch64-apple-darwin
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --target aarch64-apple-darwin
