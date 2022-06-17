@@ -19,9 +19,9 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use log::{error, info};
 use structopt::StructOpt;
 use tokio_stream::StreamExt;
+use tracing::{error, info, metadata::LevelFilter};
 use tui::{backend::CrosstermBackend, Terminal};
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -46,34 +46,23 @@ struct Args {
     relink: bool,
 }
 
-fn init_file_logger(verbosity: u8) -> anyhow::Result<()> {
-    use log::LevelFilter;
-    use log4rs::append::file::FileAppender;
-    use log4rs::config::{Appender, Config, Root};
-    use log4rs::encode::pattern::PatternEncoder;
-
-    let logfile = FileAppender::builder()
-        .encoder(Box::new(PatternEncoder::new("[{d} {l} {M}] {m}\n")))
-        .build("gurk.log")?;
-
-    let config = Config::builder()
-        .appender(Appender::builder().build("logfile", Box::new(logfile)))
-        .build(Root::builder().appender("logfile").build(match verbosity {
-            1 => LevelFilter::Info,
-            2 => LevelFilter::Debug,
-            _ => LevelFilter::Trace,
-        }))?;
-
-    log4rs::init_config(config)?;
-    Ok(())
-}
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::from_args();
-    if args.verbosity > 0 {
-        init_file_logger(args.verbosity)?;
-    }
+
+    let file_appender = tracing_appender::rolling::never("./", "gurk.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+    tracing_subscriber::fmt()
+        .with_max_level(dbg!(match args.verbosity {
+            0 => LevelFilter::OFF,
+            1 => LevelFilter::INFO,
+            2 => LevelFilter::DEBUG,
+            _ => LevelFilter::TRACE,
+        }))
+        .with_writer(non_blocking)
+        .with_ansi(false)
+        .init();
+
     log_panics::init();
 
     tokio::task::LocalSet::new()

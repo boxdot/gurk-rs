@@ -12,7 +12,6 @@ use anyhow::{anyhow, Context as _};
 use chrono::{DateTime, Duration, Utc};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use itertools::Itertools;
-use log::info;
 use notify_rust::Notification;
 use phonenumber::{Mode, PhoneNumber};
 use presage::prelude::proto::{AttachmentPointer, ReceiptMessage, TypingMessage};
@@ -27,6 +26,7 @@ use presage::prelude::{
 };
 use regex_automata::Regex;
 use serde::{Deserialize, Serialize};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use std::borrow::Cow;
@@ -149,7 +149,7 @@ impl ReceiptQueues {
 
     pub fn add_received(&mut self, timestamp: u64) {
         if !self.received_msg.insert(timestamp) {
-            log::error!("Somehow got duplicate Received receipt @ {}", timestamp);
+            error!("Somehow got duplicate Received receipt @ {}", timestamp);
         }
     }
 
@@ -158,7 +158,7 @@ impl ReceiptQueues {
         // in the case a message is immediatly received and read.
         self.received_msg.remove(&timestamp);
         if !self.read_msg.insert(timestamp) {
-            log::error!("Somehow got duplicate Delivered receipt @ {}", timestamp);
+            error!("Somehow got duplicate Delivered receipt @ {}", timestamp);
         }
     }
 
@@ -436,7 +436,7 @@ impl TypingAction {
             0 => Self::Started,
             1 => Self::Stopped,
             _ => {
-                log::error!("Got incorrect TypingAction : {}", i);
+                error!("Got incorrect TypingAction : {}", i);
                 Self::Stopped
             }
         }
@@ -884,7 +884,7 @@ impl App {
                     self.ensure_contact_channel_exists(destination_uuid, &destination_e164)
                         .await
                 } else {
-                    log::warn!("unhandled message from us");
+                    warn!("unhandled message from us");
                     return Ok(());
                 };
 
@@ -1182,7 +1182,7 @@ impl App {
                     }
                 }
             } else {
-                log::error!("Got a single typing hash set on a group.");
+                error!("Got a single typing hash set on a group.");
             }
         } else {
             let chan = self
@@ -1210,7 +1210,7 @@ impl App {
                     }
                 }
             } else {
-                log::error!("Got a single typing hash set on a group.");
+                error!("Got a single typing hash set on a group.");
             }
         }
         Ok(())
@@ -1537,7 +1537,7 @@ impl App {
 
     fn notify(&self, summary: &str, text: &str) {
         if let Err(e) = Notification::new().summary(summary).body(text).show() {
-            log::error!("failed to send notification: {}", e);
+            error!("failed to send notification: {}", e);
         }
     }
 
@@ -1595,7 +1595,7 @@ impl App {
                 .await
             {
                 Ok(attachment) => attachments.push(attachment),
-                Err(e) => log::warn!("failed to save attachment: {}", e),
+                Err(e) => warn!("failed to save attachment: {}", e),
             }
         }
         attachments
@@ -1669,7 +1669,7 @@ fn open_url(message: &Message, url_regex: &Regex) -> Option<()> {
     let (start, end) = url_regex.find(text.as_bytes())?;
     let url = &text[start..end];
     if let Err(e) = opener::open(url) {
-        log::error!("failed to open {}: {}", url, e);
+        error!("failed to open {}: {}", url, e);
     }
     Some(())
 }

@@ -2,7 +2,7 @@ use crate::app::AppData;
 use crate::cursor::Cursor;
 
 use anyhow::Context;
-use log::info;
+use tracing::info;
 
 use std::fs::File;
 use std::io::BufReader;
