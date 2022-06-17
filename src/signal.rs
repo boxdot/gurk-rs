@@ -20,14 +20,16 @@ use uuid::Uuid;
 
 use std::path::PathBuf;
 
+pub const PROFILE_KEY_LEN: usize = 32;
 pub const GROUP_MASTER_KEY_LEN: usize = 32;
 pub const GROUP_IDENTIFIER_LEN: usize = 32;
 
+pub type ProfileKey = [u8; PROFILE_KEY_LEN];
 pub type GroupMasterKeyBytes = [u8; GROUP_MASTER_KEY_LEN];
 pub type GroupIdentifierBytes = [u8; GROUP_IDENTIFIER_LEN];
 
 /// Signal Manager backed by a `sled` store.
-pub type Manager = presage::Manager<presage::SledConfigStore>;
+pub type Manager = presage::Manager<presage::SledConfigStore, presage::Registered>;
 
 #[async_trait(?Send)]
 pub trait SignalManager {
@@ -56,7 +58,7 @@ pub trait SignalManager {
     fn send_reaction(&self, channel: &Channel, message: &Message, emoji: String, remove: bool);
 
     /// Resolves contact name from its profile
-    async fn resolve_name_from_profile(&self, id: Uuid, profile_key: [u8; 32]) -> Option<String>;
+    async fn resolve_name_from_profile(&self, id: Uuid, profile_key: ProfileKey) -> Option<String>;
 
     async fn request_contacts_sync(&self) -> anyhow::Result<()>;
 
@@ -71,7 +73,7 @@ pub trait SignalManager {
 pub struct ResolvedGroup {
     pub name: String,
     pub group_data: GroupData,
-    pub profile_keys: Vec<Vec<u8>>,
+    pub profile_keys: Vec<ProfileKey>,
 }
 
 pub struct PresageManager {
@@ -256,7 +258,7 @@ impl SignalManager for PresageManager {
         }
     }
 
-    async fn resolve_name_from_profile(&self, id: Uuid, profile_key: [u8; 32]) -> Option<String> {
+    async fn resolve_name_from_profile(&self, id: Uuid, profile_key: ProfileKey) -> Option<String> {
         match self.manager.retrieve_profile_by_uuid(id, profile_key).await {
             Ok(profile) => Some(profile.name?.given_name),
             Err(e) => {
@@ -276,19 +278,15 @@ impl SignalManager for PresageManager {
         let mut members = Vec::with_capacity(decrypted_group.members.len());
         let mut profile_keys = Vec::with_capacity(decrypted_group.members.len());
         for member in decrypted_group.members {
-            let uuid = match Uuid::from_slice(&member.uuid) {
-                Ok(id) => id,
-                Err(_) => continue,
-            };
-            members.push(uuid);
-            profile_keys.push(member.profile_key);
+            members.push(member.uuid);
+            profile_keys.push(member.profile_key.get_bytes());
         }
 
         let name = decrypted_group.title;
         let group_data = GroupData {
             master_key_bytes,
             members,
-            revision: decrypted_group.revision,
+            revision: decrypted_group.version,
         };
 
         Ok(ResolvedGroup {
@@ -342,7 +340,7 @@ impl SignalManager for PresageManager {
 }
 
 async fn upload_attachments(
-    manager: &presage::Manager<presage::SledConfigStore>,
+    manager: &Manager,
     attachments: Vec<(AttachmentSpec, Vec<u8>)>,
     data_message: &mut DataMessage,
 ) {
@@ -373,13 +371,6 @@ pub struct Attachment {
     pub size: u32,
 }
 
-/// If `db_path` does not exist, it will be created (including parent directories).
-fn get_signal_manager(db_path: PathBuf) -> anyhow::Result<Manager> {
-    let store = presage::SledConfigStore::new(db_path)?;
-    let manager = presage::Manager::with_store(store)?;
-    Ok(manager)
-}
-
 /// Makes sure that we have a linked device.
 ///
 /// Either,
@@ -389,19 +380,22 @@ fn get_signal_manager(db_path: PathBuf) -> anyhow::Result<Manager> {
 /// 2. loads the config file and tries to create the Signal manager from configured Signal database
 ///    path.
 pub async fn ensure_linked_device(relink: bool) -> anyhow::Result<(Manager, Config)> {
-    let config = Config::load_installed()?;
-    let db_path = config
-        .as_ref()
-        .map(|c| c.signal_db_path.clone())
-        .unwrap_or_else(config::default_signal_db_path);
+    if !relink {
+        let config = Config::load_installed()?;
+        let db_path = config
+            .as_ref()
+            .map(|c| c.signal_db_path.clone())
+            .unwrap_or_else(config::default_signal_db_path);
 
-    let mut manager = get_signal_manager(db_path)?;
-
-    let is_registered = !relink && manager.is_registered();
-
-    if is_registered {
-        if let Some(config) = config {
-            return Ok((manager, config));
+        let store = presage::SledConfigStore::new(&db_path)?;
+        match (Manager::load_registered(store), config) {
+            (Ok(manager), Some(config)) => return Ok((manager, config)),
+            (Err(e), _) => {
+                log::warn!("failed to load registered client: {}, linking", e);
+            }
+            (_, None) => {
+                log::warn!("failed to load config, linking");
+            }
         }
     }
 
@@ -418,14 +412,25 @@ pub async fn ensure_linked_device(relink: bool) -> anyhow::Result<(Manager, Conf
         .unwrap_or_default();
     let device_name = format!("gurk{}", at_hostname);
     println!("Linking new device with device name: {}", device_name);
-    manager
-        .link_secondary_device(SignalServers::Production, device_name.clone())
-        .await?;
+
+    let config = Config::load_installed()?;
+    let db_path = config
+        .as_ref()
+        .map(|c| c.signal_db_path.clone())
+        .unwrap_or_else(config::default_signal_db_path);
+
+    let store = presage::SledConfigStore::new(db_path)?;
+    let manager = presage::Manager::link_secondary_device(
+        store,
+        SignalServers::Production,
+        device_name.clone(),
+    )
+    .await?;
 
     // get profile
     let phone_number = manager
-        .phone_number()
-        .expect("no phone number after device was linked")
+        .state()
+        .phone_number
         .format()
         .mode(phonenumber::Mode::E164)
         .to_string();
@@ -542,7 +547,7 @@ pub mod test {
         async fn resolve_name_from_profile(
             &self,
             _id: Uuid,
-            _profile_key: [u8; 32],
+            _profile_key: ProfileKey,
         ) -> Option<String> {
             None
         }

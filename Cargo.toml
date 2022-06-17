@@ -22,7 +22,7 @@ debug = 0
 lto = "thin"
 
 [dependencies]
-presage = { git = "https://github.com/whisperfish/presage.git", rev = "8fcfb65" }
+presage = { git = "https://github.com/whisperfish/presage.git", rev = "da3128b" }
 
 anyhow = "1.0.40"
 async-trait = "0.1.51"
@@ -61,8 +61,8 @@ quickcheck_macros = "1.0.0"
 tempfile = "3.2.0"
 uuid = { version = "0.8.2", features = ["v4"] }
 
-# [patch."https://github.com/whisperfish/presage.git"]
-# presage = { path = "../presage" }
+[patch."https://github.com/whisperfish/presage.git"]
+presage = { path = "../presage" }
 
 # [patch."https://github.com/whisperfish/libsignal-service-rs"]
 # libsignal-service = { path = "../libsignal-service-rs/libsignal-service" }
@@ -70,3 +70,6 @@ uuid = { version = "0.8.2", features = ["v4"] }
 
 # [patch."https://github.com/signalapp/libsignal-client"]
 # libsignal-protocol = { path = "../libsignal-client/rust/protocol" }
+
+[patch.crates-io]
+"curve25519-dalek" = { git = 'https://github.com/signalapp/curve25519-dalek', branch = 'lizard2' }
