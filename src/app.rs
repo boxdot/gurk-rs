@@ -15,7 +15,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use itertools::Itertools;
 use log::info;
 use notify_rust::Notification;
-use phonenumber::{Mode, PhoneNumber};
+use phonenumber::Mode;
 use presage::prelude::proto::{AttachmentPointer, ReceiptMessage, TypingMessage};
 use presage::prelude::{
     content::{ContentBody, DataMessage, Metadata, SyncMessage},
@@ -904,9 +904,7 @@ impl App {
                 Metadata {
                     sender:
                         ServiceAddress {
-                            uuid: Some(uuid),
-                            phonenumber: Some(phone_number),
-                            ..
+                            uuid: Some(uuid), ..
                         },
                     ..
                 },

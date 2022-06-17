@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fixed receiving direct messages sent from another device
+
 ## 0.2.4
 
 ### Added
@@ -11,7 +15,7 @@
 - Sync contacts ([#146])
 - Add visual aid (emoji) for stickers ([#148])
 
-## Changed
+### Changed
 
 - Add cursor tracking and multi-line input navigation ([#131])
 - New visual style for receipts ([#135], [#142], [#144])

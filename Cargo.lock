@@ -961,7 +961,7 @@ dependencies = [
 
 [[package]]
 name = "gurk"
-version = "0.2.4"
+version = "0.2.5-dev"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2002,6 +2002,7 @@ checksum = "eb9f9e6e233e5c4a35559a617bf40a4ec447db2e84c20b55a6f83167b7e57872"
 [[package]]
 name = "presage"
 version = "0.3.0"
+source = "git+https://github.com/whisperfish/presage.git?rev=da3128b#da3128b34a821af31f49bbf69513d038d1ff635a"
 dependencies = [
  "async-trait",
  "base64 0.12.3",
@@ -3014,9 +3015,9 @@ dependencies = [
 
 [[package]]
 name = "tower-service"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "360dfd1d6d30e05fda32ace2c8c70e9c0a9da713275777f5a4dbb8a1893930c6"
+checksum = "b6bc1c9ce2b5135ac7f93c72918fc37feb872bdc6a5533a8b85eb4b86bfdae52"
 
 [[package]]
 name = "tracing"
