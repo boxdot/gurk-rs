@@ -6,8 +6,9 @@
 
 - Fixed receiving direct messages sent from another device
 - Replace log4rs with tracing ([#158], [#160])
-  [#158]: https://github.com/boxdot/gurk-rs/pull/158
-  [#160]: https://github.com/boxdot/gurk-rs/pull/160
+
+[#158]: https://github.com/boxdot/gurk-rs/pull/158
+[#160]: https://github.com/boxdot/gurk-rs/pull/160
 
 ## 0.2.4
 
