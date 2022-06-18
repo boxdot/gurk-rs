@@ -20,9 +20,12 @@ use uuid::Uuid;
 
 use std::path::PathBuf;
 
+// TODO: these should be either re-exported from presage/libsignal-service
+pub const PROFILE_KEY_LEN: usize = 32;
 pub const GROUP_MASTER_KEY_LEN: usize = 32;
 pub const GROUP_IDENTIFIER_LEN: usize = 32;
 
+pub type ProfileKey = [u8; PROFILE_KEY_LEN];
 pub type GroupMasterKeyBytes = [u8; GROUP_MASTER_KEY_LEN];
 pub type GroupIdentifierBytes = [u8; GROUP_IDENTIFIER_LEN];
 
@@ -56,7 +59,7 @@ pub trait SignalManager {
     fn send_reaction(&self, channel: &Channel, message: &Message, emoji: String, remove: bool);
 
     /// Resolves contact name from its profile
-    async fn resolve_name_from_profile(&self, id: Uuid, profile_key: [u8; 32]) -> Option<String>;
+    async fn resolve_name_from_profile(&self, id: Uuid, profile_key: ProfileKey) -> Option<String>;
 
     async fn request_contacts_sync(&self) -> anyhow::Result<()>;
 
@@ -71,7 +74,7 @@ pub trait SignalManager {
 pub struct ResolvedGroup {
     pub name: String,
     pub group_data: GroupData,
-    pub profile_keys: Vec<Vec<u8>>,
+    pub profile_keys: Vec<ProfileKey>,
 }
 
 pub struct PresageManager {
@@ -256,7 +259,7 @@ impl SignalManager for PresageManager {
         }
     }
 
-    async fn resolve_name_from_profile(&self, id: Uuid, profile_key: [u8; 32]) -> Option<String> {
+    async fn resolve_name_from_profile(&self, id: Uuid, profile_key: ProfileKey) -> Option<String> {
         match self.manager.retrieve_profile_by_uuid(id, profile_key).await {
             Ok(profile) => Some(profile.name?.given_name),
             Err(e) => {
@@ -281,7 +284,7 @@ impl SignalManager for PresageManager {
                 Err(_) => continue,
             };
             members.push(uuid);
-            profile_keys.push(member.profile_key);
+            profile_keys.push(member.profile_key.try_into().map_err(|_| anyhow!("malformed profile key"))?);
         }
 
         let name = decrypted_group.title;
@@ -542,7 +545,7 @@ pub mod test {
         async fn resolve_name_from_profile(
             &self,
             _id: Uuid,
-            _profile_key: [u8; 32],
+            _profile_key: ProfileKey,
         ) -> Option<String> {
             None
         }
