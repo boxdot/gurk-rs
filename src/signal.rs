@@ -7,7 +7,6 @@ use anyhow::{bail, Context as _};
 use async_trait::async_trait;
 use chrono::Utc;
 use gh_emoji::Replacer;
-use log::error;
 use presage::prelude::content::Reaction;
 use presage::prelude::proto::data_message::Quote;
 use presage::prelude::proto::{AttachmentPointer, ReceiptMessage};
@@ -16,6 +15,7 @@ use presage::prelude::{
     SignalServers,
 };
 use serde::{Deserialize, Serialize};
+use tracing::{error, warn};
 use uuid::Uuid;
 
 use std::path::PathBuf;
@@ -108,7 +108,7 @@ impl SignalManager for PresageManager {
                 .send_message(_sender_uuid, body, now_timestamp)
                 .await
             {
-                log::error!("Failed to send message to {}: {}", _sender_uuid, e);
+                error!("Failed to send message to {}: {}", _sender_uuid, e);
             }
         });
     }
@@ -149,7 +149,7 @@ impl SignalManager for PresageManager {
                     let body = ContentBody::DataMessage(data_message);
                     if let Err(e) = manager.send_message(uuid, body, timestamp).await {
                         // TODO: Proper error handling
-                        log::error!("Failed to send message to {}: {}", uuid, e);
+                        error!("Failed to send message to {}: {}", uuid, e);
                     }
                 });
             }
@@ -176,7 +176,7 @@ impl SignalManager for PresageManager {
                             .await
                         {
                             // TODO: Proper error handling
-                            log::error!("Failed to send group message: {}", e);
+                            error!("Failed to send group message: {}", e);
                         }
                     });
                 } else {
@@ -223,7 +223,7 @@ impl SignalManager for PresageManager {
                 tokio::task::spawn_local(async move {
                     if let Err(e) = manager.send_message(uuid, body, timestamp).await {
                         // TODO: Proper error handling
-                        log::error!("failed to send reaction {} to {}: {}", &emoji, uuid, e);
+                        error!("failed to send reaction {} to {}: {}", &emoji, uuid, e);
                     }
                 });
             }
@@ -246,7 +246,7 @@ impl SignalManager for PresageManager {
                         .await
                     {
                         // TODO: Proper error handling
-                        log::error!("failed to send group reaction {}: {}", &emoji, e);
+                        error!("failed to send group reaction {}: {}", &emoji, e);
                     }
                 });
             }
@@ -313,7 +313,7 @@ impl SignalManager for PresageManager {
             Some("image/gif") => format!("signal-{}.gif", date),
             Some("image/png") => format!("signal-{}.png", date),
             Some(mimetype) => {
-                log::warn!("unsupported attachment mimetype: {}", mimetype);
+                warn!("unsupported attachment mimetype: {}", mimetype);
                 format!("signal-{}", date)
             }
             None => {
