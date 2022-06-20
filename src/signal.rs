@@ -284,7 +284,12 @@ impl SignalManager for PresageManager {
                 Err(_) => continue,
             };
             members.push(uuid);
-            profile_keys.push(member.profile_key.try_into().map_err(|_| anyhow!("malformed profile key"))?);
+            profile_keys.push(
+                member
+                    .profile_key
+                    .try_into()
+                    .map_err(|_| anyhow!("malformed profile key"))?,
+            );
         }
 
         let name = decrypted_group.title;

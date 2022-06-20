@@ -1,7 +1,8 @@
 use crate::config::Config;
 use crate::cursor::Cursor;
 use crate::signal::{
-    self, Attachment, GroupIdentifierBytes, GroupMasterKeyBytes, ResolvedGroup, SignalManager, ProfileKey,
+    self, Attachment, GroupIdentifierBytes, GroupMasterKeyBytes, ProfileKey, ResolvedGroup,
+    SignalManager,
 };
 use crate::storage::Storage;
 use crate::util::{
@@ -260,7 +261,10 @@ impl BoxData {
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppData {
     pub channels: FilteredStatefulList<Channel>,
-    /// Names retrieved from profiles or phone number if it failed
+    /// Names retrieved from:
+    /// - profiles, when registered as main device)
+    /// - contacts, when linked as secondary device
+    /// - UUID when both have failed
     ///
     /// Do not use directly, use [`App::name_by_id`] instead.
     pub names: HashMap<Uuid, String>,
@@ -1411,11 +1415,14 @@ impl App {
                 .contact_by_id(uuid)
                 .ok()
                 .flatten()
-                .map_or(uuid.to_string(), |c| match c.address.phonenumber {
-                    Some(p) => p.format().mode(Mode::E164).to_string(),
-                    None => uuid.to_string(),
+                .and_then(|c| {
+                    c.address
+                        .phonenumber
+                        .and_then(|p| Some(p.format().mode(Mode::E164).to_string()))
                 });
-            self.data.names.insert(uuid, name);
+            self.data
+                .names
+                .insert(uuid, name.unwrap_or_else(|| uuid.to_string()));
         }
     }
 
