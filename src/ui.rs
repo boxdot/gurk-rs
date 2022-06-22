@@ -1,11 +1,11 @@
 use crate::app::ReceiptEvent;
 use crate::cursor::Cursor;
 use crate::shortcuts::{ShortCut, SHORTCUTS};
-use crate::util;
+use crate::util::utc_timestamp_msec_to_local;
 use crate::{app, App};
 use app::Receipt;
 
-use chrono::{Datelike, Timelike};
+use chrono::Datelike;
 use itertools::Itertools;
 use tui::backend::Backend;
 use tui::layout::{Constraint, Corner, Direction, Layout, Rect};
@@ -343,10 +343,30 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     }
     let prefix = " ".repeat(prefix_width);
 
-    let messages_from_offset = messages.iter().rev().skip(offset).filter_map(|msg| {
-        let show_receipt = ShowReceipt::from_msg(msg, app.user_id, app.config.show_receipts);
-        display_message(&names, msg, &prefix, width as usize, height, show_receipt)
-    });
+    // The day of the message at the bottom of the viewport
+    let mut previous_msg_day = utc_timestamp_msec_to_local(
+        messages
+            .iter()
+            .rev()
+            .skip(offset)
+            .map(|msg| msg.arrived_at)
+            .next()
+            .unwrap_or_default(),
+    )
+    .num_days_from_ce();
+
+    let messages_from_offset = messages
+        .iter()
+        .rev()
+        .skip(offset)
+        .flat_map(|msg| {
+            let date_division = display_date_line(msg.arrived_at, &mut previous_msg_day, width);
+            let show_receipt = ShowReceipt::from_msg(msg, app.user_id, app.config.show_receipts);
+            let msg = display_message(&names, msg, &prefix, width as usize, height, show_receipt);
+
+            [date_division, msg]
+        })
+        .flatten();
 
     // counters to accumulate messages as long they fit into the list height,
     // or up to the selected message
@@ -415,9 +435,10 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     channel.messages.rendered.offset = offset;
 }
 
-fn display_datetime(timestamp: u64) -> String {
-    let dt = util::utc_timestamp_msec_to_local(timestamp);
-    format!("{} {:02}:{:02} ", dt.weekday(), dt.hour(), dt.minute())
+fn display_time(timestamp: u64) -> String {
+    utc_timestamp_msec_to_local(timestamp)
+        .format("%R ")
+        .to_string()
 }
 
 const RECEIPT_WIDTH: usize = 2;
@@ -473,7 +494,7 @@ fn display_message(
     );
 
     let time = Span::styled(
-        display_datetime(msg.arrived_at),
+        display_time(msg.arrived_at),
         Style::default().fg(Color::Yellow),
     );
 
@@ -565,6 +586,25 @@ fn display_message(
         spans.push(Spans::from(format!("{}[...]", prefix)));
     }
     Some(ListItem::new(Text::from(spans)))
+}
+
+fn display_date_line(
+    msg_timestamp: u64,
+    previous_msg_day: &mut i32,
+    width: usize,
+) -> Option<ListItem<'static>> {
+    let local_time = utc_timestamp_msec_to_local(msg_timestamp);
+    let current_msg_day = local_time.num_days_from_ce();
+
+    if current_msg_day != *previous_msg_day {
+        *previous_msg_day = current_msg_day;
+
+        // Weekday and locale's date representation (e.g., 12/31/99)
+        let date = format!("{:=^width$}", local_time.format(" %A, %x "));
+        Some(ListItem::new(Span::from(date)))
+    } else {
+        None
+    }
 }
 
 fn add_attachments(msg: &app::Message, out: &mut String) {
@@ -848,7 +888,7 @@ mod tests {
             Spans(vec![
                 Span::styled("", Style::default().fg(Color::Yellow)),
                 Span::styled(
-                    display_datetime(msg.arrived_at),
+                    display_time(msg.arrived_at),
                     Style::default().fg(Color::Yellow),
                 ),
                 Span::styled("boxdot", Style::default().fg(Color::Green)),
@@ -876,7 +916,7 @@ mod tests {
             Spans(vec![
                 Span::styled("", Style::default().fg(Color::Yellow)),
                 Span::styled(
-                    display_datetime(msg.arrived_at),
+                    display_time(msg.arrived_at),
                     Style::default().fg(Color::Yellow),
                 ),
                 Span::styled("boxdot", Style::default().fg(Color::Green)),
@@ -907,7 +947,7 @@ mod tests {
         let expected = ListItem::new(Text::from(vec![Spans(vec![
             Span::styled("○ ", Style::default().fg(Color::Yellow)),
             Span::styled(
-                display_datetime(msg.arrived_at),
+                display_time(msg.arrived_at),
                 Style::default().fg(Color::Yellow),
             ),
             Span::styled("boxdot", Style::default().fg(Color::Green)),
@@ -931,7 +971,7 @@ mod tests {
         let expected = ListItem::new(Text::from(vec![Spans(vec![
             Span::styled("◉ ", Style::default().fg(Color::Yellow)),
             Span::styled(
-                display_datetime(msg.arrived_at),
+                display_time(msg.arrived_at),
                 Style::default().fg(Color::Yellow),
             ),
             Span::styled("boxdot", Style::default().fg(Color::Green)),
@@ -955,7 +995,7 @@ mod tests {
         let expected = ListItem::new(Text::from(vec![Spans(vec![
             Span::styled("● ", Style::default().fg(Color::Yellow)),
             Span::styled(
-                display_datetime(msg.arrived_at),
+                display_time(msg.arrived_at),
                 Style::default().fg(Color::Yellow),
             ),
             Span::styled("boxdot", Style::default().fg(Color::Green)),
@@ -979,7 +1019,7 @@ mod tests {
         let expected = ListItem::new(Text::from(vec![Spans(vec![
             Span::styled("", Style::default().fg(Color::Yellow)),
             Span::styled(
-                display_datetime(msg.arrived_at),
+                display_time(msg.arrived_at),
                 Style::default().fg(Color::Yellow),
             ),
             Span::styled("boxdot", Style::default().fg(Color::Green)),
@@ -1005,7 +1045,7 @@ mod tests {
         let expected = ListItem::new(Text::from(vec![Spans(vec![
             Span::styled("  ", Style::default().fg(Color::Yellow)),
             Span::styled(
-                display_datetime(msg.arrived_at),
+                display_time(msg.arrived_at),
                 Style::default().fg(Color::Yellow),
             ),
             Span::styled("boxdot", Style::default().fg(Color::Green)),
