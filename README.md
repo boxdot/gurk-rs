@@ -28,6 +28,20 @@ cargo install --git https://github.com/boxdot/gurk-rs gurk
 
 Packaged in the AUR: `gurk-git` and `gurk-bin`
 
+## Nix/NixOS
+
+Either per user:
+
+```
+$ nix-env --install gurk-rs
+```
+
+or system-wide:
+
+```nix
+environment.systemPackages = with pkgs; [ gurk-rs ];
+```
+
 # Usage
 
 Run
