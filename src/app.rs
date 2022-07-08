@@ -1,7 +1,8 @@
 use crate::config::Config;
 use crate::cursor::Cursor;
 use crate::signal::{
-    self, Attachment, GroupIdentifierBytes, GroupMasterKeyBytes, ResolvedGroup, SignalManager,
+    self, Attachment, GroupIdentifierBytes, GroupMasterKeyBytes, ProfileKey, ResolvedGroup,
+    SignalManager,
 };
 use crate::storage::Storage;
 use crate::util::{
@@ -13,7 +14,7 @@ use chrono::{DateTime, Duration, Utc};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use itertools::Itertools;
 use notify_rust::Notification;
-use phonenumber::{Mode, PhoneNumber};
+use phonenumber::Mode;
 use presage::prelude::proto::{AttachmentPointer, ReceiptMessage, TypingMessage};
 use presage::prelude::{
     content::{ContentBody, DataMessage, Metadata, SyncMessage},
@@ -260,7 +261,10 @@ impl BoxData {
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppData {
     pub channels: FilteredStatefulList<Channel>,
-    /// Names retrieved from profiles or phone number if it failed
+    /// Names retrieved from:
+    /// - profiles, when registered as main device)
+    /// - contacts, when linked as secondary device
+    /// - UUID when both have failed
     ///
     /// Do not use directly, use [`App::name_by_id`] instead.
     pub names: HashMap<Uuid, String>,
@@ -846,12 +850,12 @@ impl App {
                 ContentBody::SynchronizeMessage(SyncMessage {
                     sent:
                         Some(Sent {
-                            destination_e164,
-                            destination_uuid,
+                            destination_uuid: Some(destination_uuid),
                             timestamp: Some(timestamp),
                             message:
                                 Some(DataMessage {
                                     mut body,
+                                    profile_key: Some(profile_key),
                                     group_v2,
                                     quote,
                                     attachments: attachment_pointers,
@@ -876,16 +880,16 @@ impl App {
                     self.ensure_group_channel_exists(master_key, revision)
                         .await
                         .context("failed to create group channel")?
-                } else if let (Some(destination_uuid), Some(destination_e164)) = (
-                    destination_uuid.and_then(|s| s.parse().ok()),
-                    destination_e164,
-                ) {
-                    // message to a contact
-                    self.ensure_contact_channel_exists(destination_uuid, &destination_e164)
-                        .await
                 } else {
-                    warn!("unhandled message from us");
-                    return Ok(());
+                    let profile_key = profile_key
+                        .try_into()
+                        .map_err(|_| anyhow!("invalid profile key"))?;
+                    let destination_uuid = Uuid::parse_str(&destination_uuid).unwrap();
+                    let name = self.name_by_id(destination_uuid);
+                    self.ensure_user_is_known(destination_uuid, profile_key)
+                        .await;
+                    self.ensure_contact_channel_exists(destination_uuid, &name)
+                        .await
                 };
 
                 add_emoji_from_sticker(&mut body, sticker);
@@ -903,9 +907,7 @@ impl App {
                 Metadata {
                     sender:
                         ServiceAddress {
-                            uuid: Some(uuid),
-                            phonenumber: Some(phone_number),
-                            ..
+                            uuid: Some(uuid), ..
                         },
                     ..
                 },
@@ -927,6 +929,9 @@ impl App {
                 }) = group_v2
                 {
                     // incoming group message
+                    let profile_key = profile_key
+                        .try_into()
+                        .map_err(|_| anyhow!("invalid profile key"))?;
                     let master_key = master_key
                         .try_into()
                         .map_err(|_| anyhow!("invalid group master key"))?;
@@ -935,15 +940,16 @@ impl App {
                         .await
                         .context("failed to create group channel")?;
 
-                    self.ensure_user_is_known(uuid, profile_key, phone_number)
-                        .await;
+                    self.ensure_user_is_known(uuid, profile_key).await;
                     let from = self.name_by_id(uuid);
 
                     (channel_idx, from)
                 } else {
                     // incoming direct message
-                    self.ensure_user_is_known(uuid, profile_key, phone_number)
-                        .await;
+                    let profile_key = profile_key
+                        .try_into()
+                        .map_err(|_| anyhow!("invalid profile key"))?;
+                    self.ensure_user_is_known(uuid, profile_key).await;
                     let name = self.name_by_id(uuid);
                     let channel_idx = self.ensure_contact_channel_exists(uuid, &name).await;
                     let from = self.data.channels.items[channel_idx].name.clone();
@@ -1402,20 +1408,26 @@ impl App {
         }
     }
 
-    async fn ensure_user_is_known(
-        &mut self,
-        uuid: Uuid,
-        profile_key: Vec<u8>,
-        phone_number: PhoneNumber,
-    ) {
+    async fn ensure_user_is_known(&mut self, uuid: Uuid, profile_key: ProfileKey) {
         if !self.try_ensure_user_is_known(uuid, profile_key).await {
-            let phone_number_name = phone_number.format().mode(Mode::E164).to_string();
-            self.data.names.insert(uuid, phone_number_name);
+            let name = self
+                .signal_manager
+                .contact_by_id(uuid)
+                .ok()
+                .flatten()
+                .and_then(|c| {
+                    c.address
+                        .phonenumber
+                        .and_then(|p| Some(p.format().mode(Mode::E164).to_string()))
+                });
+            self.data
+                .names
+                .insert(uuid, name.unwrap_or_else(|| uuid.to_string()));
         }
     }
 
     /// Returns `true`, if user name was resolved successfully, otherwise `false`
-    async fn try_ensure_user_is_known(&mut self, uuid: Uuid, profile_key: Vec<u8>) -> bool {
+    async fn try_ensure_user_is_known(&mut self, uuid: Uuid, profile_key: ProfileKey) -> bool {
         let is_phone_number_or_unknown = self
             .data
             .names
@@ -1440,7 +1452,7 @@ impl App {
 
     async fn try_ensure_users_are_known(
         &mut self,
-        users_with_keys: impl Iterator<Item = (Uuid, Vec<u8>)>,
+        users_with_keys: impl Iterator<Item = (Uuid, ProfileKey)>,
     ) {
         // TODO: Run in parallel
         for (uuid, profile_key) in users_with_keys {
