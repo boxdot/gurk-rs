@@ -1,5 +1,6 @@
-use crate::app::{Channel, ChannelId, GroupData, Message, Receipt};
+use crate::app::{Channel, ChannelId, GroupData, Message};
 use crate::config::{self, Config};
+use crate::receipt::Receipt;
 use crate::util::utc_now_timestamp_msec;
 
 use anyhow::anyhow;

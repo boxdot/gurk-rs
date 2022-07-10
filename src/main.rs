@@ -2,6 +2,7 @@
 
 mod app;
 mod config;
+mod receipt;
 mod cursor;
 mod shortcuts;
 mod signal;

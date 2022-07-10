@@ -1,9 +1,8 @@
-use crate::app::ReceiptEvent;
 use crate::cursor::Cursor;
+use crate::receipt::{Receipt, ReceiptEvent};
 use crate::shortcuts::{ShortCut, SHORTCUTS};
 use crate::util;
 use crate::{app, App};
-use app::Receipt;
 
 use chrono::{Datelike, Timelike};
 use itertools::Itertools;
@@ -272,19 +271,14 @@ fn prepare_receipts(app: &mut App, height: usize) {
 
     let messages = &mut channel.messages.items[..];
 
-    let _ = messages
-        .iter_mut()
-        .rev()
-        .skip(offset)
-        .for_each(|msg| match msg.receipt {
-            Receipt::Read | Receipt::Nothing | Receipt::Sent => (),
-            Receipt::Delivered => {
-                if msg.from_id != user_id {
-                    to_send.push((msg.from_id, msg.arrived_at));
-                    msg.receipt = Receipt::Read
-                }
+    for msg in messages.iter_mut().rev().skip(offset) {
+        if let Receipt::Delivered = msg.receipt {
+            if msg.from_id != user_id {
+                to_send.push((msg.from_id, msg.arrived_at));
+                msg.receipt = Receipt::Read
             }
-        });
+        }
+    }
     if !to_send.is_empty() {
         to_send
             .into_iter()
@@ -794,7 +788,7 @@ fn displayed_quote(names: &NameResolver, quote: &app::Message) -> Option<String>
 
 #[cfg(test)]
 mod tests {
-    use crate::app::{Message, Receipt};
+    use crate::app::Message;
     use crate::signal::Attachment;
 
     use super::*;
