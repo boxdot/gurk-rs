@@ -1,6 +1,6 @@
-use crate::receipt::{ReceiptEvent, ReceiptHandler, Receipt};
 use crate::config::Config;
 use crate::cursor::Cursor;
+use crate::receipt::{Receipt, ReceiptEvent, ReceiptHandler};
 use crate::signal::{
     self, Attachment, GroupIdentifierBytes, GroupMasterKeyBytes, ResolvedGroup, SignalManager,
 };
@@ -1682,5 +1682,4 @@ mod tests {
         let reactions = &app.data.channels.items[0].messages.items[0].reactions;
         assert!(reactions.is_empty());
     }
-
 }
