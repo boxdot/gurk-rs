@@ -64,7 +64,7 @@ pub trait SignalManager {
     /// Retrieves contact information store in the manager
     ///
     /// The information is based on the contact book of the client and is only available after
-    /// [`request_contacts_sync`] was called **and** contacts where received from Signal server.
+    /// [`Self::request_contacts_sync`] was called **and** contacts where received from Signal server.
     /// This usually happens shortly after the latter method is called.
     fn contact_by_id(&self, id: Uuid) -> anyhow::Result<Option<Contact>>;
 }

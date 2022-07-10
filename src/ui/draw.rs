@@ -1,8 +1,6 @@
-use crate::cursor::Cursor;
-use crate::receipt::{Receipt, ReceiptEvent};
-use crate::shortcuts::{ShortCut, SHORTCUTS};
-use crate::util;
-use crate::{app, App};
+//! Draw the UI
+
+use std::fmt;
 
 use chrono::{Datelike, Timelike};
 use itertools::Itertools;
@@ -15,53 +13,16 @@ use tui::Frame;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use uuid::Uuid;
 
-use std::borrow::Cow;
-use std::fmt;
+use crate::cursor::Cursor;
+use crate::receipt::{Receipt, ReceiptEvent};
+use crate::shortcuts::{ShortCut, SHORTCUTS};
+use crate::util;
+use crate::{app, App};
 
-pub const CHANNEL_VIEW_RATIO: u32 = 4;
+use super::name_resolver::NameResolver;
+use super::CHANNEL_VIEW_RATIO;
 
-pub fn coords_within_channels_view<B: Backend>(
-    f: &Frame<B>,
-    app: &App,
-    x: u16,
-    y: u16,
-) -> Option<(u16, u16)> {
-    let rect = f.size();
-
-    // Compute the offset due to the lines in the search bar
-    let text_width = app.channel_text_width;
-    let lines: Vec<String> =
-        app.data
-            .search_box
-            .data
-            .chars()
-            .enumerate()
-            .fold(Vec::new(), |mut lines, (idx, c)| {
-                if idx % text_width == 0 {
-                    lines.push(String::new());
-                }
-                match c {
-                    '\n' => {
-                        lines.last_mut().unwrap().push('\n');
-                        lines.push(String::new())
-                    }
-                    _ => lines.last_mut().unwrap().push(c),
-                }
-                lines
-            });
-    let num_input_lines = lines.len().max(1);
-
-    if y < 3 + num_input_lines as u16 {
-        return None;
-    }
-    // 1 offset around the view for taking the border into account
-    if 0 < x && x < rect.width / CHANNEL_VIEW_RATIO as u16 && 0 < y && y + 1 < rect.height {
-        Some((x - 1, y - (3 + num_input_lines as u16)))
-    } else {
-        None
-    }
-}
-
+/// The main function drawing the UI for each frame
 pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     if app.is_help() {
         // Display shortcut panel
@@ -665,122 +626,6 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     f.render_stateful_widget(shorts_widget, area, &mut app.data.channels.state);
 }
 
-fn displayed_name(name: String, first_name_only: bool) -> String {
-    if first_name_only {
-        let space_pos = name.find(' ').unwrap_or(name.len());
-        name[0..space_pos].to_string()
-    } else {
-        name
-    }
-}
-
-const USER_COLORS: &[Color] = &[
-    Color::Red,
-    Color::Green,
-    Color::Yellow,
-    Color::Blue,
-    Color::Magenta,
-    Color::Cyan,
-    Color::Gray,
-];
-
-// Randomly but deterministically choose a color for a username
-fn user_color(username: &str) -> Color {
-    let idx = username
-        .bytes()
-        .fold(0, |sum, b| (sum + usize::from(b)) % USER_COLORS.len());
-    USER_COLORS[idx]
-}
-
-/// Resolves names in a channel
-struct NameResolver<'a> {
-    app: Option<&'a App>,
-    names_and_colors: Vec<(Uuid, String, Color)>,
-    max_name_width: usize,
-}
-
-impl<'a> NameResolver<'a> {
-    fn compute_for_channel<'b>(app: &'a app::App, channel: &'b app::Channel) -> Self {
-        let first_name_only = app.config.first_name_only;
-        let mut names_and_colors: Vec<(Uuid, String, Color)> =
-            if let Some(group_data) = channel.group_data.as_ref() {
-                group_data
-                    .members
-                    .iter()
-                    .map(|&uuid| {
-                        let name = app.name_by_id(uuid);
-                        let color = user_color(&name);
-                        let name = displayed_name(name, first_name_only);
-                        (uuid, name, color)
-                    })
-                    .collect()
-            } else {
-                let user_id = app.user_id;
-                let user_name = app.name_by_id(user_id);
-                let mut self_color = user_color(&user_name);
-                let user_name = displayed_name(user_name, first_name_only);
-
-                let contact_uuid = match channel.id {
-                    app::ChannelId::User(uuid) => uuid,
-                    _ => unreachable!("logic error"),
-                };
-
-                if contact_uuid == user_id {
-                    vec![(user_id, user_name, self_color)]
-                } else {
-                    let contact_name = app.name_by_id(contact_uuid);
-                    let contact_color = user_color(&contact_name);
-                    let contact_name = displayed_name(contact_name, first_name_only);
-
-                    if self_color == contact_color {
-                        // use differnt color for our user name
-                        if let Some(idx) = USER_COLORS.iter().position(|&c| c == self_color) {
-                            self_color = USER_COLORS[(idx + 1) % USER_COLORS.len()];
-                        }
-                    }
-
-                    vec![
-                        (user_id, user_name, self_color),
-                        (contact_uuid, contact_name, contact_color),
-                    ]
-                }
-            };
-        names_and_colors.sort_unstable_by_key(|&(id, _, _)| id);
-
-        let max_name_width = names_and_colors
-            .iter()
-            .map(|(_, name, _)| name.width())
-            .max()
-            .unwrap_or(0);
-
-        Self {
-            app: Some(app),
-            names_and_colors,
-            max_name_width,
-        }
-    }
-
-    fn resolve(&self, id: Uuid) -> (Cow<str>, Color) {
-        match self
-            .names_and_colors
-            .binary_search_by_key(&id, |&(id, _, _)| id)
-        {
-            Ok(idx) => {
-                let (_, from, from_color) = &self.names_and_colors[idx];
-                (from.into(), *from_color)
-            }
-            Err(_) => (
-                self.app.expect("logic error").name_by_id(id).into(),
-                Color::Magenta,
-            ),
-        }
-    }
-
-    fn max_name_width(&self) -> usize {
-        self.max_name_width
-    }
-}
-
 fn displayed_quote(names: &NameResolver, quote: &app::Message) -> Option<String> {
     let (name, _) = names.resolve(quote.from_id);
     Some(format!("({}) {}", name, quote.message.as_ref()?))
@@ -800,12 +645,17 @@ mod tests {
     const WIDTH: usize = 60;
     const HEIGHT: usize = 10;
 
-    fn name_resolver(user_id: Uuid) -> NameResolver<'static> {
-        NameResolver {
-            app: None,
-            names_and_colors: vec![(user_id, "boxdot".to_string(), Color::Green)],
-            max_name_width: 6,
+    fn test_attachment() -> Attachment {
+        Attachment {
+            id: "2022-01-16T11:59:58.405665+00:00".to_string(),
+            content_type: "image/jpeg".into(),
+            filename: "/tmp/gurk/signal-2022-01-16T11:59:58.405665+00:00.jpg".into(),
+            size: 238987,
         }
+    }
+
+    fn name_resolver() -> NameResolver<'static> {
+        NameResolver::single_user(USER_ID, "boxdot".to_string(), Color::Green)
     }
 
     fn test_message() -> Message {
@@ -820,18 +670,9 @@ mod tests {
         }
     }
 
-    fn test_attachment() -> Attachment {
-        Attachment {
-            id: "2022-01-16T11:59:58.405665+00:00".to_string(),
-            content_type: "image/jpeg".into(),
-            filename: "/tmp/gurk/signal-2022-01-16T11:59:58.405665+00:00.jpg".into(),
-            size: 238987,
-        }
-    }
-
     #[test]
     fn test_display_attachment_only_message() {
-        let names = name_resolver(USER_ID);
+        let names = name_resolver();
         let msg = Message {
             attachments: vec![test_attachment()],
             ..test_message()
@@ -858,7 +699,7 @@ mod tests {
 
     #[test]
     fn test_display_text_and_attachment_message() {
-        let names = name_resolver(USER_ID);
+        let names = name_resolver();
         let msg = Message {
             message: Some("Hello, World!".into()),
             attachments: vec![test_attachment()],
@@ -889,7 +730,7 @@ mod tests {
 
     #[test]
     fn test_display_sent_receipt() {
-        let names = name_resolver(USER_ID);
+        let names = name_resolver();
         let msg = Message {
             message: Some("Hello, World!".into()),
             receipt: Receipt::Sent,
@@ -913,7 +754,7 @@ mod tests {
 
     #[test]
     fn test_display_received_receipt() {
-        let names = name_resolver(USER_ID);
+        let names = name_resolver();
         let msg = Message {
             message: Some("Hello, World!".into()),
             receipt: Receipt::Delivered,
@@ -937,7 +778,7 @@ mod tests {
 
     #[test]
     fn test_display_delivered_receipt() {
-        let names = name_resolver(USER_ID);
+        let names = name_resolver();
         let msg = Message {
             message: Some("Hello, World!".into()),
             receipt: Receipt::Read,
@@ -961,7 +802,7 @@ mod tests {
 
     #[test]
     fn test_display_show_receipts_disabled() {
-        let names = name_resolver(USER_ID);
+        let names = name_resolver();
         let msg = Message {
             message: Some("Hello, World!".into()),
             receipt: Receipt::Read,
@@ -986,7 +827,7 @@ mod tests {
     #[test]
     fn test_display_receipts_for_incoming_message() {
         let user_id = Uuid::from_u128(1);
-        let names = name_resolver(user_id);
+        let names = NameResolver::single_user(user_id, "boxdot".to_string(), Color::Green);
         let msg = Message {
             from_id: user_id,
             message: Some("Hello, World!".into()),
