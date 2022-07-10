@@ -29,7 +29,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::{signal::PresageManager, storage::JsonStorage};
+use crate::storage::JsonStorage;
 
 const TARGET_FPS: u64 = 144;
 const RECEIPT_TICK_PERIOD: u64 = 144;
@@ -81,11 +81,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
     let (signal_manager, config) = signal::ensure_linked_device(relink).await?;
 
     let storage = JsonStorage::new(config.data_path.clone(), config::fallback_data_path());
-    let mut app = App::try_new(
-        config,
-        Box::new(PresageManager::new(signal_manager.clone())),
-        Box::new(storage),
-    )?;
+    let mut app = App::try_new(config, signal_manager.clone_boxed(), Box::new(storage))?;
 
     app.request_contacts_sync().await?;
 
@@ -122,7 +118,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
     let inner_tx = tx.clone();
     tokio::task::spawn_local(async move {
         loop {
-            let messages = if !is_online().await {
+            let mut messages = if !is_online().await {
                 tokio::time::sleep(std::time::Duration::from_secs(10)).await;
                 continue;
             } else {
@@ -132,7 +128,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                         messages
                     }
                     Err(e) => {
-                        let e = anyhow::Error::from(e).context(
+                        let e = e.context(
                             "failed to initialize the stream of Signal messages.\n\
                             Maybe the device was unlinked? Please try to restart with '--relink` flag.",
                         );
@@ -145,7 +141,6 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                 }
             };
 
-            tokio::pin!(messages);
             while let Some(message) = messages.next().await {
                 inner_tx
                     .send(Event::Message(message))
