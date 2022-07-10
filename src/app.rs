@@ -598,6 +598,15 @@ impl App {
         self.storage.save_app_data(&self.data)
     }
 
+    // Resolves name of a user by their id
+    //
+    // The resolution is done in the following way:
+    //
+    // 1. It's us => name from config
+    // 2. User id is in presage's signal manager (that is, it is a known contact from our address
+    //    book) => use it,
+    // 3. User id is in the gurk's user name table (custom name) => use it,
+    // 4. give up with "Unknown User"
     pub fn name_by_id(&self, id: Uuid) -> String {
         if self.user_id == id {
             // it's me
@@ -1366,7 +1375,7 @@ impl App {
                     profile_keys,
                 } = self.signal_manager.resolve_group(master_key).await?;
 
-                self.try_ensure_users_are_known(
+                self.ensure_users_are_known(
                     group_data
                         .members
                         .iter()
@@ -1387,7 +1396,7 @@ impl App {
                 profile_keys,
             } = self.signal_manager.resolve_group(master_key).await?;
 
-            self.try_ensure_users_are_known(
+            self.ensure_users_are_known(
                 group_data
                     .members
                     .iter()
@@ -1409,8 +1418,18 @@ impl App {
     }
 
     async fn ensure_user_is_known(&mut self, uuid: Uuid, profile_key: ProfileKey) {
-        if !self.try_ensure_user_is_known(uuid, profile_key).await {
-            let name = self
+        // is_known <=>
+        //   * in names, or
+        //   * is not a phone numbers, or
+        //   * is not their uuid
+        let is_known = self
+            .data
+            .names
+            .get(&uuid)
+            .filter(|name| !util::is_phone_number(name) && Uuid::from_str(name) != Ok(uuid))
+            .is_some();
+        if !is_known {
+            if let Some(name) = self
                 .signal_manager
                 .contact_by_id(uuid)
                 .ok()
@@ -1419,44 +1438,31 @@ impl App {
                     c.address
                         .phonenumber
                         .and_then(|p| Some(p.format().mode(Mode::E164).to_string()))
-                });
-            self.data
-                .names
-                .insert(uuid, name.unwrap_or_else(|| uuid.to_string()));
-        }
-    }
-
-    /// Returns `true`, if user name was resolved successfully, otherwise `false`
-    async fn try_ensure_user_is_known(&mut self, uuid: Uuid, profile_key: ProfileKey) -> bool {
-        let is_phone_number_or_unknown = self
-            .data
-            .names
-            .get(&uuid)
-            .map(util::is_phone_number)
-            .unwrap_or(true);
-        if is_phone_number_or_unknown {
-            let name = match profile_key.try_into() {
-                Ok(key) => {
-                    self.signal_manager
-                        .resolve_name_from_profile(uuid, key)
-                        .await
-                }
-                Err(_) => None,
-            };
-            if let Some(name) = name {
+                })
+            {
+                // resolved from contact list
                 self.data.names.insert(uuid, name);
+            } else if let Some(name) = self
+                .signal_manager
+                .resolve_name_from_profile(uuid, profile_key)
+                .await
+            {
+                // resolved from signal service via their profile
+                self.data.names.insert(uuid, name);
+            } else {
+                // failed to resolve
+                self.data.names.insert(uuid, uuid.to_string());
             }
         }
-        self.data.names.contains_key(&uuid)
     }
 
-    async fn try_ensure_users_are_known(
+    async fn ensure_users_are_known(
         &mut self,
         users_with_keys: impl Iterator<Item = (Uuid, ProfileKey)>,
     ) {
         // TODO: Run in parallel
         for (uuid, profile_key) in users_with_keys {
-            self.try_ensure_user_is_known(uuid, profile_key).await;
+            self.ensure_user_is_known(uuid, profile_key).await;
         }
     }
 
