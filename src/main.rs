@@ -3,6 +3,7 @@
 mod app;
 mod config;
 mod cursor;
+mod input;
 mod receipt;
 mod shortcuts;
 mod signal;
@@ -276,29 +277,29 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                     app.get_input().on_delete_word();
                 }
                 KeyCode::Down => {
-                    if app.data.is_multiline_input {
-                        app.data.input.move_line_down();
+                    if app.is_multiline_input {
+                        app.input.move_line_down();
                     } else {
                         app.select_next_channel();
                     }
                 }
                 KeyCode::Char('j') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                    if app.data.is_multiline_input {
-                        app.data.input.move_line_down();
+                    if app.is_multiline_input {
+                        app.input.move_line_down();
                     } else {
                         app.select_next_channel();
                     }
                 }
                 KeyCode::Up => {
-                    if app.data.is_multiline_input {
-                        app.data.input.move_line_up();
+                    if app.is_multiline_input {
+                        app.input.move_line_up();
                     } else {
                         app.select_previous_channel();
                     }
                 }
                 KeyCode::Char('k') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                    if app.data.is_multiline_input {
-                        app.data.input.move_line_up();
+                    if app.is_multiline_input {
+                        app.input.move_line_up();
                     } else {
                         app.select_previous_channel();
                     }

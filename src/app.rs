@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::cursor::Cursor;
+use crate::input::Input;
 use crate::receipt::{Receipt, ReceiptEvent, ReceiptHandler};
 use crate::signal::{
     self, Attachment, GroupIdentifierBytes, GroupMasterKeyBytes, ProfileKey, ResolvedGroup,
@@ -54,76 +54,9 @@ pub struct App {
     pub is_searching: bool,
     pub channel_text_width: usize,
     receipt_handler: ReceiptHandler,
-}
-
-#[derive(Debug, Default, PartialEq, Eq)]
-pub struct BoxData {
-    pub data: String,
-    pub cursor: Cursor,
-}
-
-impl BoxData {
-    #[cfg(test)]
-    pub fn empty() -> Self {
-        Default::default()
-    }
-
-    pub fn put_char(&mut self, c: char) {
-        self.cursor.put(c, &mut self.data);
-    }
-
-    pub fn new_line(&mut self) {
-        self.cursor.new_line(&mut self.data);
-    }
-
-    pub fn on_left(&mut self) {
-        self.cursor.move_left(&self.data);
-    }
-
-    pub fn on_right(&mut self) {
-        self.cursor.move_right(&self.data);
-    }
-
-    pub fn move_line_down(&mut self) {
-        self.cursor.move_line_down(&self.data);
-    }
-
-    pub fn move_line_up(&mut self) {
-        self.cursor.move_line_up(&self.data);
-    }
-
-    pub fn move_back_word(&mut self) {
-        self.cursor.move_word_left(&self.data);
-    }
-
-    pub fn move_forward_word(&mut self) {
-        self.cursor.move_word_right(&self.data);
-    }
-
-    pub fn on_home(&mut self) {
-        self.cursor.start_of_line(&self.data);
-    }
-
-    pub fn on_end(&mut self) {
-        self.cursor.end_of_line(&self.data);
-    }
-
-    pub fn on_backspace(&mut self) {
-        self.cursor.delete_backward(&mut self.data);
-    }
-
-    pub fn on_delete_word(&mut self) {
-        self.cursor.delete_word_backward(&mut self.data);
-    }
-
-    pub fn on_delete_suffix(&mut self) {
-        self.cursor.delete_suffix(&mut self.data);
-    }
-
-    fn take(&mut self) -> String {
-        self.cursor = Default::default();
-        std::mem::take(&mut self.data)
-    }
+    pub input: Input,
+    pub search_box: Input,
+    pub is_multiline_input: bool,
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -136,12 +69,6 @@ pub struct AppData {
     ///
     /// Do not use directly, use [`App::name_by_id`] instead.
     pub names: HashMap<Uuid, String>,
-    #[serde(skip)] // ! We may want to save it
-    pub input: BoxData,
-    #[serde(skip)]
-    pub search_box: BoxData,
-    #[serde(skip)]
-    pub is_multiline_input: bool,
     #[serde(default)]
     pub contacts_sync_request_at: Option<DateTime<Utc>>,
 }
@@ -398,14 +325,17 @@ impl App {
             is_searching: false,
             channel_text_width: 0,
             receipt_handler: ReceiptHandler::new(),
+            input: Default::default(),
+            search_box: Default::default(),
+            is_multiline_input: false,
         })
     }
 
-    pub fn get_input(&mut self) -> &mut BoxData {
+    pub fn get_input(&mut self) -> &mut Input {
         if self.is_searching {
-            &mut self.data.search_box
+            &mut self.search_box
         } else {
-            &mut self.data.input
+            &mut self.input
         }
     }
 
@@ -477,9 +407,9 @@ impl App {
         match key.code {
             KeyCode::Char('\r') => self.get_input().put_char('\n'),
             KeyCode::Enter if key.modifiers.contains(KeyModifiers::ALT) && !self.is_searching => {
-                self.data.is_multiline_input = !self.data.is_multiline_input;
+                self.is_multiline_input = !self.is_multiline_input;
             }
-            KeyCode::Enter if self.data.is_multiline_input && !self.is_searching => {
+            KeyCode::Enter if self.is_multiline_input && !self.is_searching => {
                 self.get_input().new_line();
             }
             KeyCode::Enter if !self.get_input().data.is_empty() && !self.is_searching => {

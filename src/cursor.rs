@@ -28,6 +28,7 @@ impl Cursor {
         Default::default()
     }
 
+    #[cfg(test)]
     pub fn end(text: &str) -> Self {
         let idx = snap_to_char(text, text.len());
         let (line, col) = calc_line_column(text, idx);
@@ -314,6 +315,7 @@ impl Cursor {
 /// Snap the byte index `idx` to a char boundary in `s`.
 ///
 /// The snapping is always done to left starting at `idx`.
+#[cfg(test)]
 fn snap_to_char(s: &str, mut idx: usize) -> usize {
     if idx >= s.len() {
         s.len()
@@ -329,6 +331,7 @@ fn snap_to_char(s: &str, mut idx: usize) -> usize {
     }
 }
 
+#[cfg(test)]
 fn calc_line_column(s: &str, idx: usize) -> (usize, usize) {
     let mut col = 0;
     let mut line = 0;

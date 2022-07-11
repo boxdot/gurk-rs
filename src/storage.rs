@@ -1,12 +1,11 @@
-use crate::app::AppData;
-use crate::cursor::Cursor;
+use std::fs::File;
+use std::io::BufReader;
+use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 use tracing::info;
 
-use std::fs::File;
-use std::io::BufReader;
-use std::path::{Path, PathBuf};
+use crate::app::AppData;
 
 /// Data storage abstraction
 ///
@@ -92,9 +91,7 @@ impl JsonStorage {
     fn load_app_data_from(data_path: impl AsRef<Path>) -> anyhow::Result<AppData> {
         info!("loading app data from: {}", data_path.as_ref().display());
         let f = BufReader::new(File::open(data_path)?);
-        let mut data: AppData = serde_json::from_reader(f)?;
-        data.input.cursor = Cursor::end(&data.input.data);
-        Ok(data)
+        Ok(serde_json::from_reader(f)?)
     }
 }
 
@@ -127,8 +124,7 @@ pub mod test {
 #[cfg(test)]
 mod tests {
     use crate::{
-        app::{BoxData, Channel, ChannelId, TypingSet},
-        cursor::Cursor,
+        app::{Channel, ChannelId, TypingSet},
         util::FilteredStatefulList,
     };
 
@@ -138,11 +134,7 @@ mod tests {
 
     #[test]
     fn test_json_storage_load_existing_app_data() -> anyhow::Result<()> {
-        let app_data = AppData {
-            input: BoxData::empty(),
-            search_box: BoxData::empty(),
-            ..Default::default()
-        };
+        let app_data = Default::default();
 
         let file = NamedTempFile::new()?;
         let storage = JsonStorage::new(file.path().to_owned(), None);
@@ -169,11 +161,7 @@ mod tests {
 
     #[test]
     fn test_json_storage_load_app_data_from_fallback() -> anyhow::Result<()> {
-        let app_data = AppData {
-            input: BoxData::empty(),
-            search_box: BoxData::empty(),
-            ..Default::default()
-        };
+        let app_data = Default::default();
 
         let data_path = PathBuf::from("/tmp/some-non-existent-file.json");
         let fallback_data_path = NamedTempFile::new()?;
@@ -193,15 +181,6 @@ mod tests {
         let user_id = Uuid::new_v4();
         let user_name = "Tyler Durden".to_string();
         let app_data = AppData {
-            input: BoxData {
-                data: "some input".to_string(),
-                cursor: Cursor::end("some input"),
-            },
-            search_box: BoxData {
-                data: "some search".to_string(),
-                cursor: Cursor::end("some search"),
-            },
-            is_multiline_input: false,
             names: Default::default(),
             channels: FilteredStatefulList::_with_items(vec![Channel {
                 id: ChannelId::User(user_id),

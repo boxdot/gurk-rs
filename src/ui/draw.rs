@@ -55,8 +55,8 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
 fn draw_channels_column<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let text_width = area.width.saturating_sub(2) as usize;
     let (wrapped_input, cursor, num_input_lines) = wrap(
-        &app.data.search_box.data,
-        app.data.search_box.cursor.clone(),
+        &app.search_box.data,
+        app.search_box.cursor.clone(),
         text_width,
     );
 
@@ -86,7 +86,7 @@ fn draw_channels_column<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect)
 
 fn draw_channels<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let channel_list_width = area.width.saturating_sub(2) as usize;
-    let pattern = app.data.search_box.data.clone();
+    let pattern = app.search_box.data.clone();
     app.channel_text_width = channel_list_width;
     app.filter_channels(&pattern);
 
@@ -169,11 +169,8 @@ fn wrap(text: &str, mut cursor: Cursor, width: usize) -> (String, Cursor, usize)
 
 fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let text_width = area.width.saturating_sub(2) as usize;
-    let (wrapped_input, cursor, num_input_lines) = wrap(
-        &app.data.input.data,
-        app.data.input.cursor.clone(),
-        text_width,
-    );
+    let (wrapped_input, cursor, num_input_lines) =
+        wrap(&app.input.data, app.input.cursor.clone(), text_width);
 
     let chunks = Layout::default()
         .constraints(
@@ -188,7 +185,7 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
     draw_messages(f, app, chunks[0]);
 
-    let title = if app.data.is_multiline_input {
+    let title = if app.is_multiline_input {
         "Input (Multiline)"
     } else {
         "Input"

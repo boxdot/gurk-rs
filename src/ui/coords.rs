@@ -16,8 +16,7 @@ pub fn coords_within_channels_view<B: Backend>(
     // Compute the offset due to the lines in the search bar
     let text_width = app.channel_text_width;
     let lines: Vec<String> =
-        app.data
-            .search_box
+        app.search_box
             .data
             .chars()
             .enumerate()
