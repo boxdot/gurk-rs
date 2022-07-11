@@ -263,12 +263,11 @@ pub fn utc_now_timestamp_msec() -> u64 {
 }
 
 pub fn is_phone_number(s: impl AsRef<str>) -> bool {
-    use std::str::FromStr;
     // Note: previously we formatted phone numbers sometimes incorrectly (not always as E164). So,
     // some users might still have them stored with spaces and dashes. So, we strip them here, even
     // the formatting now is correct.
     let stripped = s.as_ref().replace(&[' ', '-'][..], "");
-    PhoneNumber::from_str(&stripped).is_ok()
+    stripped.parse::<PhoneNumber>().is_ok()
 }
 
 // Based on Alacritty, APACHE-2.0 License

@@ -31,7 +31,6 @@ use std::cmp::Reverse;
 use std::collections::HashSet;
 use std::convert::TryInto;
 use std::path::Path;
-use std::str::FromStr;
 
 /// Amount of time to skip contacts sync after the last sync
 const CONTACTS_SYNC_DEADLINE_SEC: i64 = 60 * 60; // 1h
@@ -560,7 +559,7 @@ impl App {
                 );
                 read.into_iter().for_each(|r| {
                     self.handle_receipt(
-                        Uuid::from_str(r.sender_uuid.unwrap().as_str()).unwrap(),
+                        Uuid::parse_str(r.sender_uuid.unwrap().as_str()).unwrap(),
                         Receipt::Read,
                         vec![r.timestamp.unwrap()],
                     );
@@ -942,7 +941,7 @@ impl App {
             .data
             .names
             .get(&uuid)
-            .filter(|name| !util::is_phone_number(name) && Uuid::from_str(name) != Ok(uuid))
+            .filter(|name| !util::is_phone_number(name) && Uuid::parse_str(name) != Ok(uuid))
             .is_some();
         if !is_known {
             if let Some(name) = self
