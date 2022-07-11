@@ -12,16 +12,17 @@ mod storage;
 mod ui;
 mod util;
 
-use app::{App, Event};
+use app::App;
 
 use crossterm::{
     event::{
-        DisableMouseCapture, EnableMouseCapture, Event as CEvent, EventStream, KeyCode,
-        KeyModifiers, MouseButton, MouseEventKind,
+        DisableMouseCapture, EnableMouseCapture, Event as CEvent, EventStream, KeyCode, KeyEvent,
+        KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
     },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use presage::prelude::Content;
 use structopt::StructOpt;
 use tokio_stream::StreamExt;
 use tracing::{error, info, metadata::LevelFilter};
@@ -77,6 +78,18 @@ async fn is_online() -> bool {
     tokio::net::TcpStream::connect("detectportal.firefox.com:80")
         .await
         .is_ok()
+}
+
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug)]
+pub enum Event {
+    Redraw,
+    Click(MouseEvent),
+    Input(KeyEvent),
+    Message(Content),
+    Resize { cols: u16, rows: u16 },
+    Quit(Option<anyhow::Error>),
+    Tick,
 }
 
 async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {

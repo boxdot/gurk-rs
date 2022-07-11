@@ -8,7 +8,7 @@ use crate::util::{self, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX};
 
 use anyhow::{anyhow, Context as _};
 use chrono::{Duration, Utc};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use itertools::Itertools;
 use notify_rust::Notification;
 use phonenumber::Mode;
@@ -52,18 +52,6 @@ pub struct App {
     pub input: Input,
     pub search_box: Input,
     pub is_multiline_input: bool,
-}
-
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug)]
-pub enum Event {
-    Redraw,
-    Click(MouseEvent),
-    Input(KeyEvent),
-    Message(Content),
-    Resize { cols: u16, rows: u16 },
-    Quit(Option<anyhow::Error>),
-    Tick,
 }
 
 impl App {
