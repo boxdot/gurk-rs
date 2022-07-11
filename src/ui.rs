@@ -335,7 +335,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let max_username_width = names.max_name_width();
 
     // message display options
-    const TIME_WIDTH: usize = 10;
+    const TIME_WIDTH: usize = 6; // width of "00:00 "
     const DELIMITER_WIDTH: usize = 2;
     let mut prefix_width = TIME_WIDTH + max_username_width + DELIMITER_WIDTH;
     if app.config.show_receipts {
