@@ -20,7 +20,7 @@ use crate::app::{Channel, ChannelId, GroupData, Message};
 use crate::receipt::Receipt;
 use crate::util::utc_now_timestamp_msec;
 
-use super::{Attachment, GroupMasterKeyBytes, ResolvedGroup, SignalManager};
+use super::{Attachment, GroupMasterKeyBytes, ProfileKey, ResolvedGroup, SignalManager};
 
 pub(super) struct PresageManager {
     manager: presage::Manager<presage::SledConfigStore>,
@@ -61,7 +61,12 @@ impl SignalManager for PresageManager {
                 Err(_) => continue,
             };
             members.push(uuid);
-            profile_keys.push(member.profile_key);
+            profile_keys.push(
+                member
+                    .profile_key
+                    .try_into()
+                    .map_err(|_| anyhow!("malformed profile key"))?,
+            );
         }
 
         let name = decrypted_group.title;
@@ -274,7 +279,7 @@ impl SignalManager for PresageManager {
         }
     }
 
-    async fn resolve_name_from_profile(&self, id: Uuid, profile_key: [u8; 32]) -> Option<String> {
+    async fn resolve_name_from_profile(&self, id: Uuid, profile_key: ProfileKey) -> Option<String> {
         match self.manager.retrieve_profile_by_uuid(id, profile_key).await {
             Ok(profile) => Some(profile.name?.given_name),
             Err(e) => {

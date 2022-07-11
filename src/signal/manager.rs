@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::app::{Channel, GroupData, Message};
 use crate::receipt::Receipt;
 
-use super::GroupMasterKeyBytes;
+use super::{GroupMasterKeyBytes, ProfileKey};
 
 /// Abstract functionalities of Signal required by the app, that is, dependency inversion
 #[async_trait(?Send)]
@@ -45,7 +45,7 @@ pub trait SignalManager {
     fn send_reaction(&self, channel: &Channel, message: &Message, emoji: String, remove: bool);
 
     /// Resolves contact name from user's profile via Signal server
-    async fn resolve_name_from_profile(&self, id: Uuid, profile_key: [u8; 32]) -> Option<String>;
+    async fn resolve_name_from_profile(&self, id: Uuid, profile_key: ProfileKey) -> Option<String>;
 
     async fn request_contacts_sync(&self) -> anyhow::Result<()>;
 
@@ -62,7 +62,7 @@ pub trait SignalManager {
 pub struct ResolvedGroup {
     pub name: String,
     pub group_data: GroupData,
-    pub profile_keys: Vec<Vec<u8>>,
+    pub profile_keys: Vec<ProfileKey>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

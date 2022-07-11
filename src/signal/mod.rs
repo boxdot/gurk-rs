@@ -13,9 +13,12 @@ use crate::config::{self, Config};
 pub use self::manager::{Attachment, ResolvedGroup, SignalManager};
 use self::r#impl::PresageManager;
 
+// TODO: these should be either re-exported from presage/libsignal-service
+const PROFILE_KEY_LEN: usize = 32;
 const GROUP_MASTER_KEY_LEN: usize = 32;
 const GROUP_IDENTIFIER_LEN: usize = 32;
 
+pub type ProfileKey = [u8; PROFILE_KEY_LEN];
 pub type GroupMasterKeyBytes = [u8; GROUP_MASTER_KEY_LEN];
 pub type GroupIdentifierBytes = [u8; GROUP_IDENTIFIER_LEN];
 

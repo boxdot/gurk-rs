@@ -14,7 +14,7 @@ use crate::app::Message;
 use crate::receipt::Receipt;
 use crate::util::utc_now_timestamp_msec;
 
-use super::{Attachment, SignalManager};
+use super::{Attachment, ProfileKey, SignalManager};
 
 /// Signal manager mock which does not send any messages.
 pub struct SignalManagerMock {
@@ -95,7 +95,11 @@ impl SignalManager for SignalManagerMock {
     ) {
     }
 
-    async fn resolve_name_from_profile(&self, _id: Uuid, _profile_key: [u8; 32]) -> Option<String> {
+    async fn resolve_name_from_profile(
+        &self,
+        _id: Uuid,
+        _profile_key: ProfileKey,
+    ) -> Option<String> {
         None
     }
 

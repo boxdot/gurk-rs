@@ -4,10 +4,20 @@
 
 ### Changed
 
+
 - Replace log4rs with tracing ([#158], [#160])
+- Display date only once per day ([#164], [#168])
+
+### Fixed
+
+- Fixed receiving direct messages sent from another device ([#162])
+- Improve name resolution ([#167])
 
 [#158]: https://github.com/boxdot/gurk-rs/pull/158
 [#160]: https://github.com/boxdot/gurk-rs/pull/160
+[#162]: https://github.com/boxdot/gurk-rs/pull/162
+[#167]: https://github.com/boxdot/gurk-rs/pull/167
+[#168]: https://github.com/boxdot/gurk-rs/pull/168
 
 ## 0.2.4
 
