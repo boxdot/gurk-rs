@@ -1203,7 +1203,7 @@ impl App {
                 .and_then(|c| {
                     c.address
                         .phonenumber
-                        .and_then(|p| Some(p.format().mode(Mode::E164).to_string()))
+                        .map(|p| p.format().mode(Mode::E164).to_string())
                 })
             {
                 // resolved from contact list
