@@ -4,7 +4,8 @@ use tui::style::Color;
 use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
 
-use crate::app::{self, App, Channel};
+use crate::app::App;
+use crate::data::{Channel, ChannelId};
 
 /// Once constructed for a channel, resolves uuid to name and color
 ///
@@ -42,7 +43,7 @@ impl<'a> NameResolver<'a> {
                 let user_name = displayed_name(user_name, first_name_only);
 
                 let contact_uuid = match channel.id {
-                    app::ChannelId::User(uuid) => uuid,
+                    ChannelId::User(uuid) => uuid,
                     _ => unreachable!("logic error"),
                 };
 

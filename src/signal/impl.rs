@@ -16,7 +16,7 @@ use tokio_stream::Stream;
 use tracing::{error, warn};
 use uuid::Uuid;
 
-use crate::app::{Channel, ChannelId, GroupData, Message};
+use crate::data::{Channel, ChannelId, GroupData, Message};
 use crate::receipt::Receipt;
 use crate::util::utc_now_timestamp_msec;
 

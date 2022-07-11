@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use tokio_stream::Stream;
 use uuid::Uuid;
 
-use crate::app::{Channel, GroupData, Message};
+use crate::data::{Channel, GroupData, Message};
 use crate::receipt::Receipt;
 
 use super::{GroupMasterKeyBytes, ProfileKey};

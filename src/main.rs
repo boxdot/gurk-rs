@@ -3,6 +3,7 @@
 mod app;
 mod config;
 mod cursor;
+mod data;
 mod input;
 mod receipt;
 mod shortcuts;

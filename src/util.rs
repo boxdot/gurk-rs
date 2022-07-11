@@ -1,11 +1,10 @@
-use crate::app::Channel;
-
 use chrono::{DateTime, Local, NaiveDateTime, TimeZone as _, Utc};
 use presage::prelude::PhoneNumber;
 use regex_automata::Regex;
 use serde::{Deserialize, Serialize};
 use tui::widgets::ListState;
 
+use crate::data::Channel;
 use crate::MESSAGE_SCROLL_BACK;
 
 #[derive(Debug, Serialize, Deserialize)]

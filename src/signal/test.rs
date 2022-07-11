@@ -10,7 +10,7 @@ use presage::prelude::{AttachmentSpec, Contact, Content};
 use tokio_stream::Stream;
 use uuid::Uuid;
 
-use crate::app::Message;
+use crate::data::{Channel, Message};
 use crate::receipt::Receipt;
 use crate::util::utc_now_timestamp_msec;
 
@@ -57,9 +57,9 @@ impl SignalManager for SignalManagerMock {
 
     fn send_text(
         &self,
-        _channel: &crate::app::Channel,
+        _channel: &Channel,
         text: String,
-        quote_message: Option<&crate::app::Message>,
+        quote_message: Option<&Message>,
         _attachments: Vec<(AttachmentSpec, Vec<u8>)>,
     ) -> Message {
         let message: String = self.emoji_replacer.replace_all(&text).into_owned();
@@ -86,13 +86,7 @@ impl SignalManager for SignalManagerMock {
         message
     }
 
-    fn send_reaction(
-        &self,
-        _channel: &crate::app::Channel,
-        _message: &crate::app::Message,
-        _emoji: String,
-        _remove: bool,
-    ) {
+    fn send_reaction(&self, _channel: &Channel, _message: &Message, _emoji: String, _remove: bool) {
     }
 
     async fn resolve_name_from_profile(

@@ -14,10 +14,11 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use uuid::Uuid;
 
 use crate::cursor::Cursor;
+use crate::data::Message;
 use crate::receipt::{Receipt, ReceiptEvent};
 use crate::shortcuts::{ShortCut, SHORTCUTS};
 use crate::util::utc_timestamp_msec_to_local;
-use crate::{app, App};
+use crate::App;
 
 use super::name_resolver::NameResolver;
 use super::CHANNEL_VIEW_RATIO;
@@ -406,7 +407,7 @@ enum ShowReceipt {
 }
 
 impl ShowReceipt {
-    fn from_msg(msg: &app::Message, user_id: Uuid, config_show_receipts: bool) -> Self {
+    fn from_msg(msg: &Message, user_id: Uuid, config_show_receipts: bool) -> Self {
         if config_show_receipts {
             if user_id == msg.from_id {
                 Self::Yes
@@ -434,7 +435,7 @@ fn display_receipt(receipt: Receipt, show: ShowReceipt) -> &'static str {
 #[allow(clippy::too_many_arguments)]
 fn display_message(
     names: &NameResolver,
-    msg: &app::Message,
+    msg: &Message,
     prefix: &str,
     width: usize,
     height: usize,
@@ -559,7 +560,7 @@ fn display_date_line(
     }
 }
 
-fn add_attachments(msg: &app::Message, out: &mut String) {
+fn add_attachments(msg: &Message, out: &mut String) {
     if !msg.attachments.is_empty() {
         if !out.is_empty() {
             out.push('\n');
@@ -581,7 +582,7 @@ fn add_attachments(msg: &app::Message, out: &mut String) {
     }
 }
 
-fn add_reactions(msg: &app::Message, out: &mut dyn fmt::Write) {
+fn add_reactions(msg: &Message, out: &mut dyn fmt::Write) {
     if !msg.reactions.is_empty() {
         fmt::write(
             out,
@@ -663,14 +664,13 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     f.render_stateful_widget(shorts_widget, area, &mut app.data.channels.state);
 }
 
-fn displayed_quote(names: &NameResolver, quote: &app::Message) -> Option<String> {
+fn displayed_quote(names: &NameResolver, quote: &Message) -> Option<String> {
     let (name, _) = names.resolve(quote.from_id);
     Some(format!("({}) {}", name, quote.message.as_ref()?))
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::app::Message;
     use crate::signal::Attachment;
 
     use super::*;

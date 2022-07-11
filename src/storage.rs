@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use tracing::info;
 
-use crate::app::AppData;
+use crate::data::AppData;
 
 /// Data storage abstraction
 ///
@@ -97,9 +97,9 @@ impl JsonStorage {
 
 #[cfg(test)]
 pub mod test {
-    use super::Storage;
+    use crate::data::AppData;
 
-    use crate::app::AppData;
+    use super::Storage;
 
     /// In-memory storage used for testing.
     pub struct InMemoryStorage {}
@@ -111,7 +111,7 @@ pub mod test {
     }
 
     impl Storage for InMemoryStorage {
-        fn save_app_data(&self, _data: &crate::app::AppData) -> anyhow::Result<()> {
+        fn save_app_data(&self, _data: &AppData) -> anyhow::Result<()> {
             Ok(())
         }
 
@@ -124,7 +124,7 @@ pub mod test {
 #[cfg(test)]
 mod tests {
     use crate::{
-        app::{Channel, ChannelId, TypingSet},
+        data::{Channel, ChannelId, TypingSet},
         util::FilteredStatefulList,
     };
 
