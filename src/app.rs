@@ -1,17 +1,14 @@
 use crate::config::Config;
-use crate::cursor::Cursor;
-use crate::signal::{
-    self, Attachment, GroupIdentifierBytes, GroupMasterKeyBytes, ProfileKey, ResolvedGroup,
-    SignalManager,
-};
+use crate::data::{AppData, Channel, ChannelId, Message, TypingAction, TypingSet};
+use crate::input::Input;
+use crate::receipt::{Receipt, ReceiptEvent, ReceiptHandler};
+use crate::signal::{Attachment, GroupMasterKeyBytes, ProfileKey, ResolvedGroup, SignalManager};
 use crate::storage::Storage;
-use crate::util::{
-    self, FilteredStatefulList, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX,
-};
+use crate::util::{self, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX};
 
 use anyhow::{anyhow, Context as _};
-use chrono::{DateTime, Duration, Utc};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
+use chrono::{Duration, Utc};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use itertools::Itertools;
 use notify_rust::Notification;
 use phonenumber::Mode;
@@ -19,23 +16,21 @@ use presage::prelude::proto::{AttachmentPointer, ReceiptMessage, TypingMessage};
 use presage::prelude::{
     content::{ContentBody, DataMessage, Metadata, SyncMessage},
     proto::{
-        data_message::{Quote, Reaction, Sticker},
+        data_message::{Reaction, Sticker},
         sync_message::Sent,
         GroupContextV2,
     },
-    AttachmentSpec, Content, GroupMasterKey, GroupSecretParams, ServiceAddress,
+    AttachmentSpec, Content, ServiceAddress,
 };
 use regex_automata::Regex;
-use serde::{Deserialize, Serialize};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use std::borrow::Cow;
 use std::cmp::Reverse;
-use std::collections::{hash_map::Entry, HashMap, HashSet};
-use std::convert::{TryFrom, TryInto};
+use std::collections::HashSet;
+use std::convert::TryInto;
 use std::path::Path;
-use std::str::FromStr;
 
 /// Amount of time to skip contacts sync after the last sync
 const CONTACTS_SYNC_DEADLINE_SEC: i64 = 60 * 60; // 1h
@@ -53,492 +48,9 @@ pub struct App {
     pub is_searching: bool,
     pub channel_text_width: usize,
     receipt_handler: ReceiptHandler,
-}
-
-#[derive(Debug, Default, PartialEq, Eq)]
-pub struct ReceiptHandler {
-    receipt_set: HashMap<Uuid, ReceiptQueues>,
-    time_since_update: u64,
-}
-
-impl ReceiptHandler {
-    pub fn new() -> Self {
-        Self {
-            receipt_set: HashMap::new(),
-            time_since_update: 0u64,
-        }
-    }
-
-    pub fn add_receipt_event(&mut self, event: ReceiptEvent) {
-        // Add a new set in the case no receipt had been handled for this contact
-        // over the current session
-        self.receipt_set
-            .entry(event.uuid)
-            .or_insert_with(ReceiptQueues::new)
-            .add(event.timestamp, event.receipt_type);
-    }
-
-    // Dictates whether receipts should be sent on the current tick
-    // Not used for now as
-    fn do_tick(&mut self) -> bool {
-        true
-    }
-
-    pub fn step(&mut self, signal_manager: &dyn SignalManager) -> bool {
-        if !self.do_tick() {
-            return false;
-        }
-        if self.receipt_set.is_empty() {
-            return false;
-        }
-
-        // Get any key
-        let uuid = *self.receipt_set.keys().next().unwrap();
-
-        let j = self.receipt_set.entry(uuid);
-        match j {
-            Entry::Occupied(mut e) => {
-                let u = e.get_mut();
-                if let Some((timestamps, receipt)) = u.get_data() {
-                    signal_manager.send_receipt(uuid, timestamps, receipt);
-                    if u.is_empty() {
-                        e.remove_entry();
-                    }
-                    true
-                } else {
-                    false
-                }
-            }
-            Entry::Vacant(_) => false,
-        }
-    }
-}
-
-/// This get built anywhere in the client and get passed to the App
-#[derive(Debug, Default, PartialEq, Eq)]
-pub struct ReceiptEvent {
-    uuid: Uuid,
-    /// Timestamp of the messages
-    timestamp: u64,
-    /// Type : Received, Delivered
-    receipt_type: Receipt,
-}
-
-impl ReceiptEvent {
-    pub fn new(uuid: Uuid, timestamp: u64, receipt_type: Receipt) -> Self {
-        Self {
-            uuid,
-            timestamp,
-            receipt_type,
-        }
-    }
-}
-
-#[derive(Debug, Default, PartialEq, Eq)]
-pub struct ReceiptQueues {
-    received_msg: HashSet<u64>,
-    read_msg: HashSet<u64>,
-}
-
-impl ReceiptQueues {
-    pub fn new() -> Self {
-        Self {
-            received_msg: HashSet::new(),
-            read_msg: HashSet::new(),
-        }
-    }
-
-    pub fn add_received(&mut self, timestamp: u64) {
-        if !self.received_msg.insert(timestamp) {
-            error!("Somehow got duplicate Received receipt @ {}", timestamp);
-        }
-    }
-
-    pub fn add_read(&mut self, timestamp: u64) {
-        // Ensures we do not send uselessly double the amount of receipts
-        // in the case a message is immediatly received and read.
-        self.received_msg.remove(&timestamp);
-        if !self.read_msg.insert(timestamp) {
-            error!("Somehow got duplicate Delivered receipt @ {}", timestamp);
-        }
-    }
-
-    pub fn add(&mut self, timestamp: u64, receipt: Receipt) {
-        match receipt {
-            Receipt::Delivered => self.add_received(timestamp),
-            Receipt::Read => self.add_read(timestamp),
-            _ => {}
-        }
-    }
-
-    pub fn get_data(&mut self) -> Option<(Vec<u64>, Receipt)> {
-        if !self.received_msg.is_empty() {
-            let timestamps = self.received_msg.drain().collect::<Vec<u64>>();
-            return Some((timestamps, Receipt::Delivered));
-        }
-        if !self.read_msg.is_empty() {
-            let timestamps = self.read_msg.drain().collect::<Vec<u64>>();
-            return Some((timestamps, Receipt::Read));
-        }
-        None
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.received_msg.is_empty() && self.read_msg.is_empty()
-    }
-}
-
-#[derive(Debug, Default, PartialEq, Eq)]
-pub struct BoxData {
-    pub data: String,
-    pub cursor: Cursor,
-}
-
-impl BoxData {
-    #[cfg(test)]
-    pub fn empty() -> Self {
-        Default::default()
-    }
-
-    pub fn put_char(&mut self, c: char) {
-        self.cursor.put(c, &mut self.data);
-    }
-
-    pub fn new_line(&mut self) {
-        self.cursor.new_line(&mut self.data);
-    }
-
-    pub fn on_left(&mut self) {
-        self.cursor.move_left(&self.data);
-    }
-
-    pub fn on_right(&mut self) {
-        self.cursor.move_right(&self.data);
-    }
-
-    pub fn move_line_down(&mut self) {
-        self.cursor.move_line_down(&self.data);
-    }
-
-    pub fn move_line_up(&mut self) {
-        self.cursor.move_line_up(&self.data);
-    }
-
-    pub fn move_back_word(&mut self) {
-        self.cursor.move_word_left(&self.data);
-    }
-
-    pub fn move_forward_word(&mut self) {
-        self.cursor.move_word_right(&self.data);
-    }
-
-    pub fn on_home(&mut self) {
-        self.cursor.start_of_line(&self.data);
-    }
-
-    pub fn on_end(&mut self) {
-        self.cursor.end_of_line(&self.data);
-    }
-
-    pub fn on_backspace(&mut self) {
-        self.cursor.delete_backward(&mut self.data);
-    }
-
-    pub fn on_delete_word(&mut self) {
-        self.cursor.delete_word_backward(&mut self.data);
-    }
-
-    pub fn on_delete_suffix(&mut self) {
-        self.cursor.delete_suffix(&mut self.data);
-    }
-
-    fn take(&mut self) -> String {
-        self.cursor = Default::default();
-        std::mem::take(&mut self.data)
-    }
-}
-
-#[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AppData {
-    pub channels: FilteredStatefulList<Channel>,
-    /// Names retrieved from:
-    /// - profiles, when registered as main device)
-    /// - contacts, when linked as secondary device
-    /// - UUID when both have failed
-    ///
-    /// Do not use directly, use [`App::name_by_id`] instead.
-    pub names: HashMap<Uuid, String>,
-    #[serde(skip)] // ! We may want to save it
-    pub input: BoxData,
-    #[serde(skip)]
-    pub search_box: BoxData,
-    #[serde(skip)]
+    pub input: Input,
+    pub search_box: Input,
     pub is_multiline_input: bool,
-    #[serde(default)]
-    pub contacts_sync_request_at: Option<DateTime<Utc>>,
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(try_from = "JsonChannel")]
-pub struct Channel {
-    pub id: ChannelId,
-    pub name: String,
-    pub group_data: Option<GroupData>,
-    #[serde(serialize_with = "Channel::serialize_msgs")]
-    pub messages: StatefulList<Message>,
-    pub unread_messages: usize,
-    pub typing: TypingSet,
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum TypingSet {
-    SingleTyping(bool),
-    GroupTyping(HashSet<Uuid>),
-}
-
-/// Proxy type which allows us to apply post-deserialization conversion.
-///
-/// Used to migrate the schema. Change this type only in backwards-compatible way.
-#[derive(Deserialize)]
-pub struct JsonChannel {
-    pub id: ChannelId,
-    pub name: String,
-    #[serde(default)]
-    pub group_data: Option<GroupData>,
-    #[serde(deserialize_with = "Channel::deserialize_msgs")]
-    pub messages: StatefulList<Message>,
-    #[serde(default)]
-    pub unread_messages: usize,
-}
-
-impl TryFrom<JsonChannel> for Channel {
-    type Error = anyhow::Error;
-    fn try_from(channel: JsonChannel) -> anyhow::Result<Self> {
-        let is_group = channel.group_data.is_some();
-        let mut channel = Channel {
-            id: channel.id,
-            name: channel.name,
-            group_data: channel.group_data,
-            messages: channel.messages,
-            unread_messages: channel.unread_messages,
-            typing: {
-                if is_group {
-                    TypingSet::GroupTyping(HashSet::new())
-                } else {
-                    TypingSet::SingleTyping(false)
-                }
-            },
-        };
-
-        // 1. The master key in ChannelId::Group was replaced by group identifier,
-        // the former was stored in group_data.
-        match (channel.id, channel.group_data.as_mut()) {
-            (ChannelId::Group(id), Some(group_data)) if group_data.master_key_bytes == [0; 32] => {
-                group_data.master_key_bytes = id;
-                channel.id = ChannelId::from_master_key_bytes(id)?;
-            }
-            _ => (),
-        }
-        Ok(channel)
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GroupData {
-    #[serde(default)]
-    pub master_key_bytes: GroupMasterKeyBytes,
-    pub members: Vec<Uuid>,
-    pub revision: u32,
-}
-
-impl Channel {
-    pub fn reset_writing(&mut self, user: Uuid) {
-        match &mut self.typing {
-            TypingSet::GroupTyping(ref mut hash_set) => {
-                hash_set.remove(&user);
-            }
-            TypingSet::SingleTyping(_) => {
-                self.typing = TypingSet::SingleTyping(false);
-            }
-        }
-    }
-
-    pub fn is_writing(&self) -> bool {
-        match &self.typing {
-            TypingSet::GroupTyping(a) => !a.is_empty(),
-            TypingSet::SingleTyping(a) => *a,
-        }
-    }
-
-    fn user_id(&self) -> Option<Uuid> {
-        match self.id {
-            ChannelId::User(id) => Some(id),
-            ChannelId::Group(_) => None,
-        }
-    }
-
-    fn selected_message(&self) -> Option<&Message> {
-        // Messages are shown in reversed order => selected is reversed
-        self.messages
-            .state
-            .selected()
-            .and_then(|idx| self.messages.items.len().checked_sub(idx + 1))
-            .and_then(|idx| self.messages.items.get(idx))
-    }
-
-    fn serialize_msgs<S>(messages: &StatefulList<Message>, ser: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::ser::Serializer,
-    {
-        // the messages StatefulList becomes the vec that was messages.items
-        messages.items.serialize(ser)
-    }
-
-    fn deserialize_msgs<'de, D>(deserializer: D) -> Result<StatefulList<Message>, D::Error>
-    where
-        D: serde::de::Deserializer<'de>,
-    {
-        let tmp: Vec<Message> = serde::de::Deserialize::deserialize(deserializer)?;
-        Ok(StatefulList::with_items(tmp))
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ChannelId {
-    User(Uuid),
-    Group(GroupIdentifierBytes),
-}
-
-impl From<Uuid> for ChannelId {
-    fn from(id: Uuid) -> Self {
-        ChannelId::User(id)
-    }
-}
-
-impl ChannelId {
-    fn from_master_key_bytes(bytes: impl AsRef<[u8]>) -> anyhow::Result<Self> {
-        let master_key_ar = bytes
-            .as_ref()
-            .try_into()
-            .map_err(|_| anyhow!("invalid group master key"))?;
-        let master_key = GroupMasterKey::new(master_key_ar);
-        let secret_params = GroupSecretParams::derive_from_master_key(master_key);
-        let group_id = secret_params.get_group_identifier();
-        Ok(Self::Group(group_id))
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum TypingAction {
-    Started,
-    Stopped,
-}
-
-impl TypingAction {
-    pub fn from_i32(i: i32) -> Self {
-        match i {
-            0 => Self::Started,
-            1 => Self::Stopped,
-            _ => {
-                error!("Got incorrect TypingAction : {}", i);
-                Self::Stopped
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub enum Receipt {
-    Sent = -1,
-    Delivered = 0,
-    Read = 1,
-    #[serde(other)]
-    Nothing = -2, // Do not do anything to these receipts in order to avoid spamming receipt messages when an old database is loaded
-}
-
-impl Default for Receipt {
-    fn default() -> Self {
-        Self::Nothing
-    }
-}
-
-impl Receipt {
-    pub fn from_i32(i: i32) -> Self {
-        match i {
-            0 => Self::Delivered,
-            1 => Self::Read,
-            _ => Self::Nothing,
-        }
-    }
-
-    pub fn to_i32(self) -> i32 {
-        match self {
-            Self::Read => 1,
-            _ => 0,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Message {
-    pub from_id: Uuid,
-    pub message: Option<String>,
-    pub arrived_at: u64,
-    #[serde(default)]
-    pub quote: Option<Box<Message>>,
-    #[serde(default)]
-    pub attachments: Vec<signal::Attachment>,
-    #[serde(default)]
-    pub reactions: Vec<(Uuid, String)>,
-    #[serde(default)]
-    pub receipt: Receipt,
-}
-
-impl Message {
-    fn new(
-        from_id: Uuid,
-        message: Option<String>,
-        arrived_at: u64,
-        attachments: Vec<Attachment>,
-    ) -> Self {
-        Self {
-            from_id,
-            message,
-            arrived_at,
-            quote: None,
-            attachments,
-            reactions: Default::default(),
-            receipt: Receipt::Sent,
-        }
-    }
-
-    pub fn from_quote(quote: Quote) -> Option<Message> {
-        Some(Message {
-            from_id: quote.author_uuid?.parse().ok()?,
-            message: quote.text,
-            arrived_at: quote.id?,
-            quote: None,
-            attachments: Default::default(),
-            reactions: Default::default(),
-            receipt: Receipt::Sent,
-        })
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.message.is_none() && self.attachments.is_empty() && self.reactions.is_empty()
-    }
-}
-
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug)]
-pub enum Event {
-    Redraw,
-    Click(MouseEvent),
-    Input(KeyEvent),
-    Message(Content),
-    Resize { cols: u16, rows: u16 },
-    Quit(Option<anyhow::Error>),
-    Tick,
 }
 
 impl App {
@@ -562,14 +74,17 @@ impl App {
             is_searching: false,
             channel_text_width: 0,
             receipt_handler: ReceiptHandler::new(),
+            input: Default::default(),
+            search_box: Default::default(),
+            is_multiline_input: false,
         })
     }
 
-    pub fn get_input(&mut self) -> &mut BoxData {
+    pub fn get_input(&mut self) -> &mut Input {
         if self.is_searching {
-            &mut self.data.search_box
+            &mut self.search_box
         } else {
-            &mut self.data.input
+            &mut self.input
         }
     }
 
@@ -641,9 +156,9 @@ impl App {
         match key.code {
             KeyCode::Char('\r') => self.get_input().put_char('\n'),
             KeyCode::Enter if key.modifiers.contains(KeyModifiers::ALT) && !self.is_searching => {
-                self.data.is_multiline_input = !self.data.is_multiline_input;
+                self.is_multiline_input = !self.is_multiline_input;
             }
-            KeyCode::Enter if self.data.is_multiline_input && !self.is_searching => {
+            KeyCode::Enter if self.is_multiline_input && !self.is_searching => {
                 self.get_input().new_line();
             }
             KeyCode::Enter if !self.get_input().data.is_empty() && !self.is_searching => {
@@ -1044,7 +559,7 @@ impl App {
                 );
                 read.into_iter().for_each(|r| {
                     self.handle_receipt(
-                        Uuid::from_str(r.sender_uuid.unwrap().as_str()).unwrap(),
+                        Uuid::parse_str(r.sender_uuid.unwrap().as_str()).unwrap(),
                         Receipt::Read,
                         vec![r.timestamp.unwrap()],
                     );
@@ -1426,7 +941,7 @@ impl App {
             .data
             .names
             .get(&uuid)
-            .filter(|name| !util::is_phone_number(name) && Uuid::from_str(name) != Ok(uuid))
+            .filter(|name| !util::is_phone_number(name) && Uuid::parse_str(name) != Ok(uuid))
             .is_some();
         if !is_known {
             if let Some(name) = self
@@ -1437,7 +952,7 @@ impl App {
                 .and_then(|c| {
                     c.address
                         .phonenumber
-                        .and_then(|p| Some(p.format().mode(Mode::E164).to_string()))
+                        .map(|p| p.format().mode(Mode::E164).to_string())
                 })
             {
                 // resolved from contact list
@@ -1711,6 +1226,7 @@ mod tests {
     use super::*;
 
     use crate::config::User;
+    use crate::data::GroupData;
     use crate::signal::test::SignalManagerMock;
     use crate::storage::test::InMemoryStorage;
 
@@ -1863,25 +1379,5 @@ mod tests {
         assert_eq!(app.get_input().data, ":thumbsup");
         let reactions = &app.data.channels.items[0].messages.items[0].reactions;
         assert!(reactions.is_empty());
-    }
-
-    #[test]
-    fn test_receipt_order() {
-        assert!(Receipt::Nothing < Receipt::Sent);
-        assert!(Receipt::Sent < Receipt::Delivered);
-        assert!(Receipt::Delivered < Receipt::Read);
-    }
-
-    #[test]
-    fn test_receipt_serde() -> anyhow::Result<()> {
-        assert_eq!(serde_json::to_string(&Receipt::Nothing)?, "\"Nothing\"");
-        assert_eq!(serde_json::to_string(&Receipt::Sent)?, "\"Sent\"");
-        assert_eq!(serde_json::to_string(&Receipt::Delivered)?, "\"Delivered\"");
-        assert_eq!(serde_json::to_string(&Receipt::Read)?, "\"Read\"");
-
-        let receipt: Receipt = serde_json::from_str("\"Unknown\"")?;
-        assert_eq!(receipt, Receipt::Nothing);
-
-        Ok(())
     }
 }

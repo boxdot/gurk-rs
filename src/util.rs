@@ -1,11 +1,10 @@
-use crate::app::Channel;
-
 use chrono::{DateTime, Local, NaiveDateTime, TimeZone as _, Utc};
 use presage::prelude::PhoneNumber;
 use regex_automata::Regex;
 use serde::{Deserialize, Serialize};
 use tui::widgets::ListState;
 
+use crate::data::Channel;
 use crate::MESSAGE_SCROLL_BACK;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -264,12 +263,11 @@ pub fn utc_now_timestamp_msec() -> u64 {
 }
 
 pub fn is_phone_number(s: impl AsRef<str>) -> bool {
-    use std::str::FromStr;
     // Note: previously we formatted phone numbers sometimes incorrectly (not always as E164). So,
     // some users might still have them stored with spaces and dashes. So, we strip them here, even
     // the formatting now is correct.
     let stripped = s.as_ref().replace(&[' ', '-'][..], "");
-    PhoneNumber::from_str(&stripped).is_ok()
+    stripped.parse::<PhoneNumber>().is_ok()
 }
 
 // Based on Alacritty, APACHE-2.0 License

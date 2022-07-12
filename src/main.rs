@@ -3,22 +3,26 @@
 mod app;
 mod config;
 mod cursor;
+mod data;
+mod input;
+mod receipt;
 mod shortcuts;
 mod signal;
 mod storage;
 mod ui;
 mod util;
 
-use app::{App, Event};
+use app::App;
 
 use crossterm::{
     event::{
-        DisableMouseCapture, EnableMouseCapture, Event as CEvent, EventStream, KeyCode,
-        KeyModifiers, MouseButton, MouseEventKind,
+        DisableMouseCapture, EnableMouseCapture, Event as CEvent, EventStream, KeyCode, KeyEvent,
+        KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
     },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use presage::prelude::Content;
 use structopt::StructOpt;
 use tokio_stream::StreamExt;
 use tracing::{error, info, metadata::LevelFilter};
@@ -28,7 +32,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::{signal::PresageManager, storage::JsonStorage};
+use crate::storage::JsonStorage;
 
 const TARGET_FPS: u64 = 144;
 const RECEIPT_TICK_PERIOD: u64 = 144;
@@ -76,15 +80,23 @@ async fn is_online() -> bool {
         .is_ok()
 }
 
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug)]
+pub enum Event {
+    Redraw,
+    Click(MouseEvent),
+    Input(KeyEvent),
+    Message(Content),
+    Resize { cols: u16, rows: u16 },
+    Quit(Option<anyhow::Error>),
+    Tick,
+}
+
 async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
     let (signal_manager, config) = signal::ensure_linked_device(relink).await?;
 
     let storage = JsonStorage::new(config.data_path.clone(), config::fallback_data_path());
-    let mut app = App::try_new(
-        config,
-        Box::new(PresageManager::new(signal_manager.clone())),
-        Box::new(storage),
-    )?;
+    let mut app = App::try_new(config, signal_manager.clone_boxed(), Box::new(storage))?;
 
     app.request_contacts_sync().await?;
 
@@ -121,7 +133,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
     let inner_tx = tx.clone();
     tokio::task::spawn_local(async move {
         loop {
-            let messages = if !is_online().await {
+            let mut messages = if !is_online().await {
                 tokio::time::sleep(std::time::Duration::from_secs(10)).await;
                 continue;
             } else {
@@ -131,7 +143,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                         messages
                     }
                     Err(e) => {
-                        let e = anyhow::Error::from(e).context(
+                        let e = e.context(
                             "failed to initialize the stream of Signal messages.\n\
                             Maybe the device was unlinked? Please try to restart with '--relink` flag.",
                         );
@@ -144,7 +156,6 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                 }
             };
 
-            tokio::pin!(messages);
             while let Some(message) = messages.next().await {
                 inner_tx
                     .send(Event::Message(message))
@@ -280,29 +291,29 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                     app.get_input().on_delete_word();
                 }
                 KeyCode::Down => {
-                    if app.data.is_multiline_input {
-                        app.data.input.move_line_down();
+                    if app.is_multiline_input {
+                        app.input.move_line_down();
                     } else {
                         app.select_next_channel();
                     }
                 }
                 KeyCode::Char('j') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                    if app.data.is_multiline_input {
-                        app.data.input.move_line_down();
+                    if app.is_multiline_input {
+                        app.input.move_line_down();
                     } else {
                         app.select_next_channel();
                     }
                 }
                 KeyCode::Up => {
-                    if app.data.is_multiline_input {
-                        app.data.input.move_line_up();
+                    if app.is_multiline_input {
+                        app.input.move_line_up();
                     } else {
                         app.select_previous_channel();
                     }
                 }
                 KeyCode::Char('k') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                    if app.data.is_multiline_input {
-                        app.data.input.move_line_up();
+                    if app.is_multiline_input {
+                        app.input.move_line_up();
                     } else {
                         app.select_previous_channel();
                     }
