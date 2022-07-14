@@ -6,7 +6,7 @@ use crate::signal::{Attachment, GroupMasterKeyBytes, ProfileKey, ResolvedGroup, 
 use crate::storage::Storage;
 use crate::util::{self, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX};
 
-use anyhow::{anyhow, Context as _};
+use anyhow::{anyhow, bail, Context as _};
 use chrono::{Duration, Utc};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use itertools::Itertools;
@@ -330,7 +330,7 @@ impl App {
     }
 
     pub async fn on_message(&mut self, content: Content) -> anyhow::Result<()> {
-        // log::debug!("incoming: {:#?}", content);
+        // tracing::debug!("incoming: {:#?}", content);
         let user_id = self.user_id;
 
         let (channel_idx, message) = match (content.metadata, content.body) {
@@ -374,7 +374,7 @@ impl App {
                 ContentBody::SynchronizeMessage(SyncMessage {
                     sent:
                         Some(Sent {
-                            destination_uuid: Some(destination_uuid),
+                            destination_uuid,
                             timestamp: Some(timestamp),
                             message:
                                 Some(DataMessage {
@@ -404,7 +404,7 @@ impl App {
                     self.ensure_group_channel_exists(master_key, revision)
                         .await
                         .context("failed to create group channel")?
-                } else {
+                } else if let Some(destination_uuid) = destination_uuid {
                     let profile_key = profile_key
                         .try_into()
                         .map_err(|_| anyhow!("invalid profile key"))?;
@@ -414,6 +414,8 @@ impl App {
                         .await;
                     self.ensure_contact_channel_exists(destination_uuid, &name)
                         .await
+                } else {
+                    bail!("message without a group context and without a destination uuid");
                 };
 
                 add_emoji_from_sticker(&mut body, sticker);
