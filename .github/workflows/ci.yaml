@@ -49,6 +49,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
+          args: --locked
 
   build-test-x86_64-unknown-linux-gnu:
     name: build and test (x86_64-unknown-linux-gnu)
