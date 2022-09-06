@@ -1041,7 +1041,7 @@ dependencies = [
 
 [[package]]
 name = "gurk"
-version = "0.2.5-dev"
+version = "0.2.5"
 dependencies = [
  "anyhow",
  "async-trait",
