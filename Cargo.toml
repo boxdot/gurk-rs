@@ -22,7 +22,7 @@ debug = 0
 lto = "thin"
 
 [dependencies]
-presage = { git = "https://github.com/boxdot/presage.git", rev = "f908e8f" }
+presage = { git = "https://github.com/whisperfish/presage", rev = "3e03d88" }
 
 anyhow = "1.0.40"
 async-trait = "0.1.51"
@@ -71,3 +71,8 @@ uuid = { version = "0.8.2", features = ["v4"] }
 
 # [patch."https://github.com/signalapp/libsignal-client"]
 # libsignal-protocol = { path = "../libsignal-client/rust/protocol" }
+
+[patch.crates-io]
+# signal-protocol uses a fork of this library via the patch mechanism of cargo.
+# Since it is not transitive, we have to add the patch here explicitly.
+"curve25519-dalek" = { git = 'https://github.com/signalapp/curve25519-dalek', branch = 'lizard2' }
