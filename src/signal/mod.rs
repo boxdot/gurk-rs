@@ -48,7 +48,7 @@ pub async fn ensure_linked_device(
         }
     }
 
-    // faulty manager, or not config, or explicit relink
+    // faulty manager, or no config, or explicit relink
     // => link device
     let at_hostname = hostname::get()
         .ok()
