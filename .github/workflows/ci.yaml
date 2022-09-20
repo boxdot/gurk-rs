@@ -82,7 +82,7 @@ jobs:
         - /usr/local/cargo/registry
     steps:
       - name: Install dependencies
-        run: apk add --no-cache musl-dev lld protoc
+        run: apk add --no-cache musl-dev lld protoc file
       - name: Checkout repository
         uses: actions/checkout@v2
         with:
@@ -131,7 +131,7 @@ jobs:
         - /usr/local/cargo/registry
     steps:
       - name: Install dependencies
-        run: apk add --no-cache musl-dev clang lld llvm protoc
+        run: apk add --no-cache musl-dev clang lld llvm protoc file
       - name: Checkout repository
         uses: actions/checkout@v2
         with:
