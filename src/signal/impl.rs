@@ -12,6 +12,7 @@ use presage::prelude::proto::{AttachmentPointer, ReceiptMessage};
 use presage::prelude::{
     AttachmentSpec, Contact, Content, ContentBody, DataMessage, GroupContextV2, GroupMasterKey,
 };
+use presage::{Registered, SledConfigStore};
 use tokio_stream::Stream;
 use tracing::{error, warn};
 use uuid::Uuid;
@@ -23,12 +24,12 @@ use crate::util::utc_now_timestamp_msec;
 use super::{Attachment, GroupMasterKeyBytes, ProfileKey, ResolvedGroup, SignalManager};
 
 pub(super) struct PresageManager {
-    manager: presage::Manager<presage::SledConfigStore>,
+    manager: presage::Manager<SledConfigStore, Registered>,
     emoji_replacer: Replacer,
 }
 
 impl PresageManager {
-    pub(super) fn new(manager: presage::Manager<presage::SledConfigStore>) -> Self {
+    pub(super) fn new(manager: presage::Manager<presage::SledConfigStore, Registered>) -> Self {
         Self {
             manager,
             emoji_replacer: Replacer::new(),
@@ -56,24 +57,15 @@ impl SignalManager for PresageManager {
         let mut members = Vec::with_capacity(decrypted_group.members.len());
         let mut profile_keys = Vec::with_capacity(decrypted_group.members.len());
         for member in decrypted_group.members {
-            let uuid = match Uuid::from_slice(&member.uuid) {
-                Ok(id) => id,
-                Err(_) => continue,
-            };
-            members.push(uuid);
-            profile_keys.push(
-                member
-                    .profile_key
-                    .try_into()
-                    .map_err(|_| anyhow!("malformed profile key"))?,
-            );
+            members.push(member.uuid);
+            profile_keys.push(member.profile_key.bytes);
         }
 
         let name = decrypted_group.title;
         let group_data = GroupData {
             master_key_bytes,
             members,
-            revision: decrypted_group.revision,
+            revision: decrypted_group.version,
         };
 
         Ok(ResolvedGroup {
@@ -303,7 +295,7 @@ impl SignalManager for PresageManager {
 }
 
 async fn upload_attachments(
-    manager: &presage::Manager<presage::SledConfigStore>,
+    manager: &presage::Manager<presage::SledConfigStore, Registered>,
     attachments: Vec<(AttachmentSpec, Vec<u8>)>,
     data_message: &mut DataMessage,
 ) {
