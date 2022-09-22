@@ -3,10 +3,9 @@ mod manager;
 #[cfg(test)]
 pub mod test;
 
-use std::path::PathBuf;
-
 use anyhow::{bail, Context as _};
 use presage::prelude::SignalServers;
+use presage::SledConfigStore;
 
 use crate::config::{self, Config};
 
@@ -38,18 +37,19 @@ pub async fn ensure_linked_device(
         .as_ref()
         .map(|c| c.signal_db_path.clone())
         .unwrap_or_else(config::default_signal_db_path);
+    let store = SledConfigStore::new(db_path)?;
 
-    let mut manager = get_signal_manager(db_path)?;
-
-    let is_registered = !relink && manager.is_registered();
-
-    if is_registered {
-        if let Some(config) = config {
-            return Ok((Box::new(PresageManager::new(manager)), config));
+    if !relink {
+        if let Some(config) = config.clone() {
+            if let Ok(manager) = presage::Manager::load_registered(store.clone()) {
+                // done loading manager from store
+                return Ok((Box::new(PresageManager::new(manager)), config));
+            }
         }
     }
 
-    // link device
+    // faulty manager, or no config, or explicit relink
+    // => link device
     let at_hostname = hostname::get()
         .ok()
         .and_then(|hostname| {
@@ -62,14 +62,31 @@ pub async fn ensure_linked_device(
         .unwrap_or_default();
     let device_name = format!("gurk{}", at_hostname);
     println!("Linking new device with device name: {}", device_name);
-    manager
-        .link_secondary_device(SignalServers::Production, device_name.clone())
-        .await?;
+
+    let (tx, rx) = futures_channel::oneshot::channel();
+    let (manager, _) = tokio::try_join!(
+        async move {
+            presage::Manager::link_secondary_device(
+                store,
+                SignalServers::Production,
+                device_name.clone(),
+                tx,
+            )
+            .await
+            .map_err(anyhow::Error::from)
+        },
+        async move {
+            match rx.await {
+                Ok(url) => qr2term::print_qr(url.to_string()).context("failed to generated qr"),
+                Err(e) => bail!("error linking device: {}", e),
+            }
+        }
+    )?;
 
     // get profile
     let phone_number = manager
-        .phone_number()
-        .expect("no phone number after device was linked")
+        .state()
+        .phone_number
         .format()
         .mode(phonenumber::Mode::E164)
         .to_string();
@@ -96,13 +113,4 @@ pub async fn ensure_linked_device(
     };
 
     Ok((Box::new(PresageManager::new(manager)), config))
-}
-
-/// If `db_path` does not exist, it will be created (including parent directories).
-fn get_signal_manager(
-    db_path: PathBuf,
-) -> anyhow::Result<presage::Manager<presage::SledConfigStore>> {
-    let store = presage::SledConfigStore::new(db_path)?;
-    let manager = presage::Manager::with_store(store)?;
-    Ok(manager)
 }

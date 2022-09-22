@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased (0.3.0-dev)
+
+### Changed
+
+- Upgrade presage (this will force relinking the device, due to incompatible changes) ([#182])
+
+[#182]: https://github.com/boxdot/gurk-rs/pull/182
+
 ## 0.2.5
 
 ### Changed
@@ -17,6 +25,7 @@
 [#158]: https://github.com/boxdot/gurk-rs/pull/158
 [#160]: https://github.com/boxdot/gurk-rs/pull/160
 [#162]: https://github.com/boxdot/gurk-rs/pull/162
+[#164]: https://github.com/boxdot/gurk-rs/pull/164
 [#167]: https://github.com/boxdot/gurk-rs/pull/167
 [#168]: https://github.com/boxdot/gurk-rs/pull/168
 [#172]: https://github.com/boxdot/gurk-rs/pull/172
