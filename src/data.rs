@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::receipt::Receipt;
 use crate::signal::{Attachment, GroupIdentifierBytes, GroupMasterKeyBytes};
-use crate::util::{FilteredStatefulList, StatefulList};
+use crate::util::{utc_now_timestamp_msec, FilteredStatefulList, StatefulList};
 
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppData {
@@ -38,6 +38,7 @@ pub struct Channel {
     pub messages: StatefulList<Message>,
     pub unread_messages: usize,
     pub typing: TypingSet,
+    pub expire_timestamp: Option<u64>,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -210,6 +211,12 @@ pub struct Message {
     pub reactions: Vec<(Uuid, String)>,
     #[serde(default)]
     pub receipt: Receipt,
+    /// Whether the message will be skipped when writing the database
+    #[serde(default)]
+    pub to_skip: bool,
+    /// The timestamp at which the message should get deleted
+    #[serde(default)]
+    pub expire_timestamp: ExpireTimer,
 }
 
 impl Message {
@@ -218,6 +225,7 @@ impl Message {
         message: Option<String>,
         arrived_at: u64,
         attachments: Vec<Attachment>,
+        expire_duration: Option<u64>,
     ) -> Self {
         Self {
             from_id,
@@ -227,10 +235,12 @@ impl Message {
             attachments,
             reactions: Default::default(),
             receipt: Receipt::Sent,
+            to_skip: false,
+            expire_timestamp: ExpireTimer::from_delay_s_opt(expire_duration),
         }
     }
 
-    pub fn from_quote(quote: Quote) -> Option<Message> {
+    pub fn from_quote(quote: Quote, expire_duration: Option<u64>) -> Option<Message> {
         Some(Message {
             from_id: quote.author_uuid?.parse().ok()?,
             message: quote.text,
@@ -239,10 +249,25 @@ impl Message {
             attachments: Default::default(),
             reactions: Default::default(),
             receipt: Receipt::Sent,
+            to_skip: false,
+            expire_timestamp: ExpireTimer::from_delay_s_opt(expire_duration),
         })
     }
 
     pub fn is_empty(&self) -> bool {
         self.message.is_none() && self.attachments.is_empty() && self.reactions.is_empty()
+    }
+}
+
+#[derive(Default, Deserialize, Serialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct ExpireTimer(Option<u64>);
+
+impl ExpireTimer {
+    pub fn from_delay_s(delay_s: u64) -> Self {
+        ExpireTimer(Some(delay_s * 1_000_000 + utc_now_timestamp_msec()))
+    }
+
+    pub fn from_delay_s_opt(delay_s: Option<u64>) -> Self {
+        ExpireTimer(delay_s.map(|d| d * 1_000_000 + utc_now_timestamp_msec()))
     }
 }

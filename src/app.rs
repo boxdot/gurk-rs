@@ -330,7 +330,7 @@ impl App {
     }
 
     pub async fn on_message(&mut self, content: Content) -> anyhow::Result<()> {
-        // tracing::debug!("incoming: {:#?}", content);
+        tracing::info!("incoming: {:#?}", content);
         let user_id = self.user_id;
 
         let (channel_idx, message) = match (content.metadata, content.body) {

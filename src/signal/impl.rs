@@ -17,7 +17,7 @@ use tokio_stream::Stream;
 use tracing::{error, warn};
 use uuid::Uuid;
 
-use crate::data::{Channel, ChannelId, GroupData, Message};
+use crate::data::{Channel, ChannelId, ExpireTimer, GroupData, Message};
 use crate::receipt::Receipt;
 use crate::util::utc_now_timestamp_msec;
 
@@ -146,7 +146,12 @@ impl SignalManager for PresageManager {
             text: message.message.clone(),
             ..Default::default()
         });
-        let quote_message = quote.clone().and_then(Message::from_quote).map(Box::new);
+
+        let expire_timer = channel.expire_timestamp.clone();
+        let quote_message = quote
+            .clone()
+            .and_then(|q| Message::from_quote(q, expire_timer))
+            .map(Box::new);
 
         let mut data_message = DataMessage {
             body: Some(message.clone()),
@@ -213,6 +218,8 @@ impl SignalManager for PresageManager {
             attachments: Default::default(),
             reactions: Default::default(),
             receipt: Receipt::Sent,
+            to_skip: false,
+            expire_timestamp: ExpireTimer::from_delay_s_opt(expire_timer),
         }
     }
 

@@ -70,7 +70,9 @@ impl SignalManager for SignalManagerMock {
             text: message.message.clone(),
             ..Default::default()
         });
-        let quote_message = quote.and_then(Message::from_quote).map(Box::new);
+        let quote_message = quote
+            .and_then(|q| Message::from_quote(q, None))
+            .map(Box::new);
         let message = Message {
             from_id: self.user_id(),
             message: Some(message),
@@ -80,6 +82,8 @@ impl SignalManager for SignalManagerMock {
             reactions: Default::default(),
             // TODO make sure the message sending procedure did not fail
             receipt: Receipt::Sent,
+            to_skip: false,
+            expire_timestamp: None,
         };
         self.sent_messages.borrow_mut().push(message.clone());
         println!("sent messages: {:?}", self.sent_messages.borrow());
