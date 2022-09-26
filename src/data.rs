@@ -153,7 +153,7 @@ impl Channel {
         let mut seq = serializer.serialize_seq(Some(to_write_amount))?;
         // Only serialize unskipped messages
         messages.items.iter().filter(|m| !m.to_skip).for_each(|m| {
-            // Poor man's error handling
+            // FIXME Poor man's error handling
             let _ = seq.serialize_element(m);
         });
         seq.end()
