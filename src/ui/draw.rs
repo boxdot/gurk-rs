@@ -301,6 +301,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         messages
             .iter()
             .rev()
+            .filter(|m| !m.to_skip)
             .skip(offset)
             .map(|msg| msg.arrived_at)
             .next()
@@ -311,6 +312,8 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let messages_from_offset = messages
         .iter()
         .rev()
+        // INFO do not display skipped (i.e. expired) messages
+        .filter(|m| !m.to_skip)
         .skip(offset)
         .flat_map(|msg| {
             let date_division = display_date_line(msg.arrived_at, &mut previous_msg_day, width);

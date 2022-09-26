@@ -922,6 +922,7 @@ impl App {
             )
             .await;
 
+            // FIXME Add message expiration for groups
             self.data.channels.items.push(Channel {
                 id,
                 name,
@@ -995,6 +996,7 @@ impl App {
         {
             channel_idx
         } else {
+            // FIXME check whether own channel has disappearing messages enabled
             self.data.channels.items.push(Channel {
                 id: user_id.into(),
                 name: self.config.user.name.clone(),

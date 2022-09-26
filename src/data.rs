@@ -151,9 +151,10 @@ impl Channel {
             .iter()
             .fold(0, |acc, m| acc + if m.to_skip { 0 } else { 1 });
         let mut seq = serializer.serialize_seq(Some(to_write_amount))?;
-        for e in messages.items {
-            seq.serialize_element(&e)?;
-        }
+        // Only serialize unskipped messages
+        messages.items.iter().filter(|m| !m.to_skip).for_each(|m| {
+            seq.serialize_element(m);
+        });
         seq.end()
     }
 
