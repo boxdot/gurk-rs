@@ -8,7 +8,7 @@ use crate::data::Channel;
 use crate::MESSAGE_SCROLL_BACK;
 
 /// Trait for selectable element
-/// Used in [`StatefulList`] in ordre to be able to 
+/// Used in [`StatefulList`] in ordre to be able to
 /// skip some elements at serialization
 pub trait SerSkip {
     fn skip(&self) -> bool;
@@ -55,7 +55,7 @@ pub struct Rendered {
     pub offset: usize,
 }
 
-impl<T : SerSkip> Default for StatefulList<T> {
+impl<T: SerSkip> Default for StatefulList<T> {
     fn default() -> Self {
         Self {
             state: Default::default(),

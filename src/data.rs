@@ -239,6 +239,10 @@ pub struct Message {
 }
 
 impl Message {
+    // sdsd
+    // FIXME Expiration start timestamp is not always [`now()`]
+    // On the case of a sync'ed message, the start timestamp is sooner in the past.
+    // See https://github.com/signalapp/Signal-Desktop/blob/190cd9408b67de68a74096f37bff5b2dc9dd3674/protos/SignalService.proto#L404
     pub fn new(
         from_id: Uuid,
         message: Option<String>,

@@ -54,7 +54,9 @@ impl SignalManager for PresageManager {
         let master_key = GroupMasterKey::new(master_key_bytes);
         let decrypted_group = self.manager.get_group_v2(master_key).await?;
 
-        let expire_timer = decrypted_group.disappearing_messages_timer.map(|t| t.duration);
+        let expire_timer = decrypted_group
+            .disappearing_messages_timer
+            .map(|t| t.duration);
 
         let mut members = Vec::with_capacity(decrypted_group.members.len());
         let mut profile_keys = Vec::with_capacity(decrypted_group.members.len());
@@ -150,7 +152,7 @@ impl SignalManager for PresageManager {
             ..Default::default()
         });
 
-        let expire_timer = channel.expire_timer.clone();
+        let expire_timer = channel.expire_timer;
         let quote_message = quote
             .clone()
             .and_then(|q| Message::from_quote(q, expire_timer))
@@ -160,6 +162,7 @@ impl SignalManager for PresageManager {
             body: Some(message.clone()),
             timestamp: Some(timestamp),
             quote,
+            expire_timer,
             ..Default::default()
         };
 

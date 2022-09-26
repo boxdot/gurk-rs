@@ -330,7 +330,7 @@ impl App {
     }
 
     pub async fn on_message(&mut self, content: Content) -> anyhow::Result<()> {
-        tracing::info!("incoming: {:#?}", content);
+        tracing::info!("incoming: {:#?}", content.body);
         let user_id = self.user_id;
 
         let (channel_idx, message) = match (content.metadata, content.body) {
@@ -358,7 +358,8 @@ impl App {
                 let attachments = self.save_attachments(attachment_pointers).await;
                 add_emoji_from_sticker(&mut body, sticker);
 
-                let message = Message::new(user_id, body, timestamp, attachments);
+                // TODO retrieve expire_timer from channel
+                let message = Message::new(user_id, body, timestamp, attachments, None);
                 (channel_idx, message)
             }
             // Direct/group message by us from a different device
@@ -418,12 +419,15 @@ impl App {
                     bail!("message without a group context and without a destination uuid");
                 };
 
+                // TODO Retrieve expire_timer from channel
                 add_emoji_from_sticker(&mut body, sticker);
-                let quote = quote.and_then(Message::from_quote).map(Box::new);
+                let quote = quote
+                    .and_then(|q| Message::from_quote(q, None))
+                    .map(Box::new);
                 let attachments = self.save_attachments(attachment_pointers).await;
                 let message = Message {
                     quote,
-                    ..Message::new(user_id, body, timestamp, attachments)
+                    ..Message::new(user_id, body, timestamp, attachments, None)
                 };
 
                 (channel_idx, message)
@@ -445,6 +449,7 @@ impl App {
                     quote,
                     attachments: attachment_pointers,
                     sticker,
+                    expire_timer,
                     ..
                 }),
             ) => {
@@ -493,10 +498,12 @@ impl App {
                 // Send "Delivered" receipt
                 self.add_receipt_event(ReceiptEvent::new(uuid, timestamp, Receipt::Delivered));
 
-                let quote = quote.and_then(Message::from_quote).map(Box::new);
+                let quote = quote
+                    .and_then(|q| Message::from_quote(q, expire_timer))
+                    .map(Box::new);
                 let message = Message {
                     quote,
-                    ..Message::new(uuid, body, timestamp, attachments)
+                    ..Message::new(uuid, body, timestamp, attachments, expire_timer)
                 };
 
                 if message.is_empty() {
@@ -890,6 +897,7 @@ impl App {
                     name,
                     group_data,
                     profile_keys,
+                    expire_timer,
                 } = self.signal_manager.resolve_group(master_key).await?;
 
                 self.ensure_users_are_known(
@@ -911,7 +919,7 @@ impl App {
                 name,
                 group_data,
                 profile_keys,
-                expire_timer
+                expire_timer,
             } = self.signal_manager.resolve_group(master_key).await?;
 
             self.ensure_users_are_known(
