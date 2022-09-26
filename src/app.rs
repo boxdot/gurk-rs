@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::data::{AppData, Channel, ChannelId, Message, TypingAction, TypingSet};
+use crate::data::{AppData, Channel, ChannelId, ExpireTimer, Message, TypingAction, TypingSet};
 use crate::input::Input;
 use crate::receipt::{Receipt, ReceiptEvent, ReceiptHandler};
 use crate::signal::{Attachment, GroupMasterKeyBytes, ProfileKey, ResolvedGroup, SignalManager};
@@ -329,8 +329,12 @@ impl App {
         false
     }
 
+    pub fn get_channel(&mut self, id: usize) -> &mut Channel {
+        &mut self.data.channels.items[id]
+    }
+
     pub async fn on_message(&mut self, content: Content) -> anyhow::Result<()> {
-        tracing::info!("incoming: {:#?}", content.body);
+        // tracing::info!("incoming: {:#?}", content.body);
         let user_id = self.user_id;
 
         let (channel_idx, message) = match (content.metadata, content.body) {
@@ -358,8 +362,10 @@ impl App {
                 let attachments = self.save_attachments(attachment_pointers).await;
                 add_emoji_from_sticker(&mut body, sticker);
 
-                // TODO retrieve expire_timer from channel
-                let message = Message::new(user_id, body, timestamp, attachments, None);
+                let expiration =
+                    ExpireTimer::from_delay_s_opt(self.get_channel(channel_idx).expire_timer);
+
+                let message = Message::new(user_id, body, timestamp, attachments, expiration);
                 (channel_idx, message)
             }
             // Direct/group message by us from a different device
@@ -385,6 +391,7 @@ impl App {
                                     quote,
                                     attachments: attachment_pointers,
                                     sticker,
+                                    expire_timer,
                                     ..
                                 }),
                             ..
@@ -419,18 +426,117 @@ impl App {
                     bail!("message without a group context and without a destination uuid");
                 };
 
-                // TODO Retrieve expire_timer from channel
+                let expire_timestamp = ExpireTimer::from_delay_s_opt(expire_timer);
+
                 add_emoji_from_sticker(&mut body, sticker);
                 let quote = quote
-                    .and_then(|q| Message::from_quote(q, None))
+                    .and_then(|q| Message::from_quote(q, expire_timestamp))
                     .map(Box::new);
                 let attachments = self.save_attachments(attachment_pointers).await;
                 let message = Message {
                     quote,
-                    ..Message::new(user_id, body, timestamp, attachments, None)
+                    ..Message::new(user_id, body, timestamp, attachments, expire_timestamp)
                 };
 
                 (channel_idx, message)
+            }
+            (
+                Metadata {
+                    sender:
+                        ServiceAddress {
+                            uuid: Some(sender_uuid),
+                            ..
+                        },
+                    ..
+                },
+                ContentBody::DataMessage(DataMessage {
+                    body: None,
+                    group_v2,
+                    reaction:
+                        Some(Reaction {
+                            emoji: Some(emoji),
+                            remove,
+                            target_sent_timestamp: Some(target_sent_timestamp),
+                            target_author_uuid: Some(target_author_uuid),
+                            ..
+                        }),
+                    ..
+                }),
+            ) => {
+                let channel_id = if let Some(GroupContextV2 {
+                    master_key: Some(master_key),
+                    ..
+                }) = group_v2
+                {
+                    ChannelId::from_master_key_bytes(master_key)?
+                } else if sender_uuid == self.user_id {
+                    // reaction from us => target author is the user channel
+                    ChannelId::User(target_author_uuid.parse()?)
+                } else {
+                    // reaction is from somebody else => they are the user channel
+                    ChannelId::User(sender_uuid)
+                };
+
+                self.handle_reaction(
+                    channel_id,
+                    target_sent_timestamp,
+                    sender_uuid,
+                    emoji,
+                    remove.unwrap_or(false),
+                    true,
+                );
+                return Ok(());
+            }
+            // Message expiration timer change
+            (
+                Metadata {
+                    sender:
+                        ServiceAddress {
+                            uuid: Some(uuid), ..
+                        },
+                    ..
+                },
+                ContentBody::DataMessage(DataMessage {
+                    body: None,
+                    group_v2,
+                    expire_timer,
+                    ..
+                }),
+            ) => {
+                let channel_idx = if let Some(GroupContextV2 {
+                    master_key: Some(master_key),
+                    revision: Some(revision),
+                    ..
+                }) = group_v2
+                {
+                    // In a group
+                    let master_key = master_key
+                        .try_into()
+                        .map_err(|_| anyhow!("invalid group master key"))?;
+                    
+
+                    self
+                        .ensure_group_channel_exists(master_key, revision)
+                        .await
+                        .context("failed to create group channel")?
+                } else {
+                    // In a direct message channel
+                    let name = self.name_by_id(uuid);
+                    
+
+                    self.ensure_contact_channel_exists(uuid, &name).await
+                };
+                // Save (possibly new) expire timer
+                let channel = self.get_channel(channel_idx);
+                if channel.expire_timer != expire_timer {
+                    tracing::info!(
+                        "Expire timer changed in channel {}: {:?}",
+                        channel.name,
+                        expire_timer
+                    );
+                    channel.expire_timer = expire_timer;
+                }
+                return Ok(());
             }
             // Incoming direct/group message
             (
@@ -498,12 +604,24 @@ impl App {
                 // Send "Delivered" receipt
                 self.add_receipt_event(ReceiptEvent::new(uuid, timestamp, Receipt::Delivered));
 
+                // Save (possibly new) expire timer
+                let channel = self.get_channel(channel_idx);
+                if channel.expire_timer != expire_timer {
+                    tracing::info!(
+                        "Expire timer changed in channel {}: {:?}",
+                        channel.name,
+                        expire_timer
+                    );
+                    channel.expire_timer = expire_timer;
+                }
+                let expire_timestamp = ExpireTimer::from_delay_s_opt(expire_timer);
+
                 let quote = quote
-                    .and_then(|q| Message::from_quote(q, expire_timer))
+                    .and_then(|q| Message::from_quote(q, expire_timestamp))
                     .map(Box::new);
                 let message = Message {
                     quote,
-                    ..Message::new(uuid, body, timestamp, attachments, expire_timer)
+                    ..Message::new(uuid, body, timestamp, attachments, expire_timestamp)
                 };
 
                 if message.is_empty() {
@@ -573,53 +691,6 @@ impl App {
                         vec![r.timestamp.unwrap()],
                     );
                 });
-                return Ok(());
-            }
-            (
-                Metadata {
-                    sender:
-                        ServiceAddress {
-                            uuid: Some(sender_uuid),
-                            ..
-                        },
-                    ..
-                },
-                ContentBody::DataMessage(DataMessage {
-                    body: None,
-                    group_v2,
-                    reaction:
-                        Some(Reaction {
-                            emoji: Some(emoji),
-                            remove,
-                            target_sent_timestamp: Some(target_sent_timestamp),
-                            target_author_uuid: Some(target_author_uuid),
-                            ..
-                        }),
-                    ..
-                }),
-            ) => {
-                let channel_id = if let Some(GroupContextV2 {
-                    master_key: Some(master_key),
-                    ..
-                }) = group_v2
-                {
-                    ChannelId::from_master_key_bytes(master_key)?
-                } else if sender_uuid == self.user_id {
-                    // reaction from us => target author is the user channel
-                    ChannelId::User(target_author_uuid.parse()?)
-                } else {
-                    // reaction is from somebody else => they are the user channel
-                    ChannelId::User(sender_uuid)
-                };
-
-                self.handle_reaction(
-                    channel_id,
-                    target_sent_timestamp,
-                    sender_uuid,
-                    emoji,
-                    remove.unwrap_or(false),
-                    true,
-                );
                 return Ok(());
             }
             (
@@ -909,9 +980,10 @@ impl App {
                 )
                 .await;
 
-                let channel = &mut self.data.channels.items[channel_idx];
+                let channel = self.get_channel(channel_idx);
                 channel.name = name;
                 channel.group_data = Some(group_data);
+                channel.expire_timer = expire_timer;
             }
             Ok(channel_idx)
         } else {
@@ -1036,7 +1108,7 @@ impl App {
                 .signal_manager
                 .contact_by_id(uuid)
                 .unwrap_or(None)
-                .map(|c| c.expire_timer.clone());
+                .map(|c| c.expire_timer);
             self.data.channels.items.push(Channel {
                 id: uuid.into(),
                 name: name.to_string(),

@@ -153,7 +153,8 @@ impl Channel {
         let mut seq = serializer.serialize_seq(Some(to_write_amount))?;
         // Only serialize unskipped messages
         messages.items.iter().filter(|m| !m.to_skip).for_each(|m| {
-            seq.serialize_element(m);
+            // Poor man's error handling
+            let _ = seq.serialize_element(m);
         });
         seq.end()
     }
@@ -248,7 +249,7 @@ impl Message {
         message: Option<String>,
         arrived_at: u64,
         attachments: Vec<Attachment>,
-        expire_duration: Option<u32>,
+        expire_timestamp: ExpireTimer,
     ) -> Self {
         Self {
             from_id,
@@ -259,11 +260,11 @@ impl Message {
             reactions: Default::default(),
             receipt: Receipt::Sent,
             to_skip: false,
-            expire_timestamp: ExpireTimer::from_delay_s_opt(expire_duration),
+            expire_timestamp,
         }
     }
 
-    pub fn from_quote(quote: Quote, expire_duration: Option<u32>) -> Option<Message> {
+    pub fn from_quote(quote: Quote, expire_timestamp: ExpireTimer) -> Option<Message> {
         Some(Message {
             from_id: quote.author_uuid?.parse().ok()?,
             message: quote.text,
@@ -273,7 +274,7 @@ impl Message {
             reactions: Default::default(),
             receipt: Receipt::Sent,
             to_skip: false,
-            expire_timestamp: ExpireTimer::from_delay_s_opt(expire_duration),
+            expire_timestamp,
         })
     }
 
@@ -293,10 +294,6 @@ impl SerSkip for Message {
 pub struct ExpireTimer(Option<u64>);
 
 impl ExpireTimer {
-    pub fn from_delay_s(delay_s: u32) -> Self {
-        ExpireTimer(Some(delay_s as u64 * 1_000_000 + utc_now_timestamp_msec()))
-    }
-
     pub fn from_delay_s_opt(delay_s: Option<u32>) -> Self {
         ExpireTimer(delay_s.map(|d| d as u64 * 1_000_000 + utc_now_timestamp_msec()))
     }
