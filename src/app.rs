@@ -513,16 +513,13 @@ impl App {
                     let master_key = master_key
                         .try_into()
                         .map_err(|_| anyhow!("invalid group master key"))?;
-                    
 
-                    self
-                        .ensure_group_channel_exists(master_key, revision)
+                    self.ensure_group_channel_exists(master_key, revision)
                         .await
                         .context("failed to create group channel")?
                 } else {
                     // In a direct message channel
                     let name = self.name_by_id(uuid);
-                    
 
                     self.ensure_contact_channel_exists(uuid, &name).await
                 };
