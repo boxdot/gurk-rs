@@ -147,7 +147,7 @@ impl SignalManager for PresageManager {
             ..Default::default()
         });
 
-        let expire_timer = channel.expire_timestamp.clone();
+        let expire_timer = channel.expire_timer.clone();
         let quote_message = quote
             .clone()
             .and_then(|q| Message::from_quote(q, expire_timer))

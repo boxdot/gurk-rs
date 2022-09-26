@@ -6,13 +6,13 @@ use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use presage::prelude::proto::data_message::Quote;
 use presage::prelude::{GroupMasterKey, GroupSecretParams};
-use serde::{Deserialize, Serialize};
+use serde::{ser::SerializeSeq, Deserialize, Serialize};
 use tracing::error;
 use uuid::Uuid;
 
 use crate::receipt::Receipt;
 use crate::signal::{Attachment, GroupIdentifierBytes, GroupMasterKeyBytes};
-use crate::util::{utc_now_timestamp_msec, FilteredStatefulList, StatefulList};
+use crate::util::{utc_now_timestamp_msec, FilteredStatefulList, SerSkip, StatefulList};
 
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppData {
@@ -38,7 +38,7 @@ pub struct Channel {
     pub messages: StatefulList<Message>,
     pub unread_messages: usize,
     pub typing: TypingSet,
-    pub expire_timestamp: Option<u64>,
+    pub expire_timer: Option<u32>,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -60,6 +60,9 @@ pub struct JsonChannel {
     pub messages: StatefulList<Message>,
     #[serde(default)]
     pub unread_messages: usize,
+    // Default to `None`
+    #[serde(default)]
+    pub expire_timestamp: Option<u32>,
 }
 
 impl TryFrom<JsonChannel> for Channel {
@@ -79,6 +82,7 @@ impl TryFrom<JsonChannel> for Channel {
                     TypingSet::SingleTyping(false)
                 }
             },
+            expire_timer: channel.expire_timestamp,
         };
 
         // 1. The master key in ChannelId::Group was replaced by group identifier,
@@ -137,12 +141,20 @@ impl Channel {
             .and_then(|idx| self.messages.items.get(idx))
     }
 
-    fn serialize_msgs<S>(messages: &StatefulList<Message>, ser: S) -> Result<S::Ok, S::Error>
+    fn serialize_msgs<S>(messages: &StatefulList<Message>, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::ser::Serializer,
     {
         // the messages StatefulList becomes the vec that was messages.items
-        messages.items.serialize(ser)
+        let to_write_amount = messages
+            .items
+            .iter()
+            .fold(0, |acc, m| acc + if m.to_skip { 0 } else { 1 });
+        let mut seq = serializer.serialize_seq(Some(to_write_amount))?;
+        for e in messages.items {
+            seq.serialize_element(&e)?;
+        }
+        seq.end()
     }
 
     fn deserialize_msgs<'de, D>(deserializer: D) -> Result<StatefulList<Message>, D::Error>
@@ -212,6 +224,12 @@ pub struct Message {
     #[serde(default)]
     pub receipt: Receipt,
     /// Whether the message will be skipped when writing the database
+    /// and rdrawing the UI
+    /// This makes it possible to not remove messages from memory
+    /// when they get deleted (e.g. time expiration) but skip them
+    /// upon saving the database. This alleviated the need for
+    /// numerous useless copy of [`Vec`] because of in-the-middle
+    /// deletions.
     #[serde(default)]
     pub to_skip: bool,
     /// The timestamp at which the message should get deleted
@@ -225,7 +243,7 @@ impl Message {
         message: Option<String>,
         arrived_at: u64,
         attachments: Vec<Attachment>,
-        expire_duration: Option<u64>,
+        expire_duration: Option<u32>,
     ) -> Self {
         Self {
             from_id,
@@ -240,7 +258,7 @@ impl Message {
         }
     }
 
-    pub fn from_quote(quote: Quote, expire_duration: Option<u64>) -> Option<Message> {
+    pub fn from_quote(quote: Quote, expire_duration: Option<u32>) -> Option<Message> {
         Some(Message {
             from_id: quote.author_uuid?.parse().ok()?,
             message: quote.text,
@@ -259,15 +277,22 @@ impl Message {
     }
 }
 
+impl SerSkip for Message {
+    fn skip(&self) -> bool {
+        self.to_skip
+    }
+}
+
+/// A timestamp representing a message expiration
 #[derive(Default, Deserialize, Serialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct ExpireTimer(Option<u64>);
 
 impl ExpireTimer {
-    pub fn from_delay_s(delay_s: u64) -> Self {
-        ExpireTimer(Some(delay_s * 1_000_000 + utc_now_timestamp_msec()))
+    pub fn from_delay_s(delay_s: u32) -> Self {
+        ExpireTimer(Some(delay_s as u64 * 1_000_000 + utc_now_timestamp_msec()))
     }
 
-    pub fn from_delay_s_opt(delay_s: Option<u64>) -> Self {
-        ExpireTimer(delay_s.map(|d| d * 1_000_000 + utc_now_timestamp_msec()))
+    pub fn from_delay_s_opt(delay_s: Option<u32>) -> Self {
+        ExpireTimer(delay_s.map(|d| d as u64 * 1_000_000 + utc_now_timestamp_msec()))
     }
 }

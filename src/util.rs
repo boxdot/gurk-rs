@@ -7,8 +7,15 @@ use tui::widgets::ListState;
 use crate::data::Channel;
 use crate::MESSAGE_SCROLL_BACK;
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct StatefulList<T> {
+/// Trait for selectable element
+/// Used in [`StatefulList`] in ordre to be able to 
+/// skip some elements at serialization
+pub trait SerSkip {
+    fn skip(&self) -> bool;
+}
+
+#[derive(Debug, Deserialize)]
+pub struct StatefulList<T: SerSkip> {
     #[serde(skip)]
     pub state: ListState,
     pub items: Vec<T>,
@@ -27,13 +34,13 @@ pub struct FilteredStatefulList<T> {
     pub rendered: Rendered,
 }
 
-impl<T: PartialEq> PartialEq for StatefulList<T> {
+impl<T: PartialEq + SerSkip> PartialEq for StatefulList<T> {
     fn eq(&self, other: &Self) -> bool {
         self.items == other.items
     }
 }
 
-impl<T: Eq> Eq for StatefulList<T> {}
+impl<T: Eq + SerSkip> Eq for StatefulList<T> {}
 
 impl<T: PartialEq> PartialEq for FilteredStatefulList<T> {
     fn eq(&self, other: &Self) -> bool {
@@ -48,7 +55,7 @@ pub struct Rendered {
     pub offset: usize,
 }
 
-impl<T> Default for StatefulList<T> {
+impl<T : SerSkip> Default for StatefulList<T> {
     fn default() -> Self {
         Self {
             state: Default::default(),
@@ -100,7 +107,7 @@ impl<'a, T> Iterator for StatefulIterator<'a, T> {
     }
 }
 
-impl<T> StatefulList<T> {
+impl<T: SerSkip> StatefulList<T> {
     pub fn with_items(items: Vec<T>) -> StatefulList<T> {
         StatefulList {
             state: ListState::default(),

@@ -359,10 +359,11 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         items.insert(unread_messages, ListItem::new(Span::from(new_message_line)));
     }
 
+    // TEMP show the expire timer of the current channel
     let title: String = if let Some(writing_people) = writing_people {
-        format!("Messages {}", writing_people)
+        format!("Messages {}{:?}", writing_people, channel.expire_timer)
     } else {
-        "Messages".to_string()
+        format!("Messages {:?}", channel.expire_timer)
     };
 
     let list = List::new(items)

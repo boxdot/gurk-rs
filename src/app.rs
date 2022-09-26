@@ -929,6 +929,7 @@ impl App {
                 messages: StatefulList::with_items(Vec::new()),
                 unread_messages: 0,
                 typing: TypingSet::GroupTyping(HashSet::new()),
+                expire_timer: None,
             });
             Ok(self.data.channels.items.len() - 1)
         }
@@ -1001,6 +1002,7 @@ impl App {
                 messages: StatefulList::with_items(Vec::new()),
                 unread_messages: 0,
                 typing: TypingSet::SingleTyping(false),
+                expire_timer: None,
             });
             self.data.channels.items.len() - 1
         }
@@ -1020,6 +1022,11 @@ impl App {
             }
             channel_idx
         } else {
+            let expire_timer = self
+                .signal_manager
+                .contact_by_id(uuid)
+                .unwrap_or(None)
+                .map(|c| c.expire_timer.clone());
             self.data.channels.items.push(Channel {
                 id: uuid.into(),
                 name: name.to_string(),
@@ -1027,6 +1034,7 @@ impl App {
                 messages: StatefulList::with_items(Vec::new()),
                 unread_messages: 0,
                 typing: TypingSet::SingleTyping(false),
+                expire_timer,
             });
             self.data.channels.items.len() - 1
         }
