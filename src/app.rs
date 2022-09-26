@@ -911,6 +911,7 @@ impl App {
                 name,
                 group_data,
                 profile_keys,
+                expire_timer
             } = self.signal_manager.resolve_group(master_key).await?;
 
             self.ensure_users_are_known(
@@ -922,7 +923,6 @@ impl App {
             )
             .await;
 
-            // FIXME Add message expiration for groups
             self.data.channels.items.push(Channel {
                 id,
                 name,
@@ -930,7 +930,7 @@ impl App {
                 messages: StatefulList::with_items(Vec::new()),
                 unread_messages: 0,
                 typing: TypingSet::GroupTyping(HashSet::new()),
-                expire_timer: None,
+                expire_timer,
             });
             Ok(self.data.channels.items.len() - 1)
         }

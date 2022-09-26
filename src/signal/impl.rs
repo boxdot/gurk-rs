@@ -54,6 +54,8 @@ impl SignalManager for PresageManager {
         let master_key = GroupMasterKey::new(master_key_bytes);
         let decrypted_group = self.manager.get_group_v2(master_key).await?;
 
+        let expire_timer = decrypted_group.disappearing_messages_timer.map(|t| t.duration);
+
         let mut members = Vec::with_capacity(decrypted_group.members.len());
         let mut profile_keys = Vec::with_capacity(decrypted_group.members.len());
         for member in decrypted_group.members {
@@ -72,6 +74,7 @@ impl SignalManager for PresageManager {
             name,
             group_data,
             profile_keys,
+            expire_timer,
         })
     }
 
