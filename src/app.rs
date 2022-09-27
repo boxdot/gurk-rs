@@ -363,7 +363,7 @@ impl App {
                 add_emoji_from_sticker(&mut body, sticker);
 
                 let expiration =
-                    ExpireTimer::from_delay_s_opt(self.get_channel(channel_idx).expire_timer);
+                    ExpireTimer::from_delay_now(self.get_channel(channel_idx).expire_timer);
 
                 let message = Message::new(user_id, body, timestamp, attachments, expiration);
                 (channel_idx, message)
@@ -394,6 +394,7 @@ impl App {
                                     expire_timer,
                                     ..
                                 }),
+                            expiration_start_timestamp,
                             ..
                         }),
                     ..
@@ -426,7 +427,8 @@ impl App {
                     bail!("message without a group context and without a destination uuid");
                 };
 
-                let expire_timestamp = ExpireTimer::from_delay_s_opt(expire_timer);
+                let expire_timestamp =
+                    ExpireTimer::from_delay_and_start(expire_timer, expiration_start_timestamp);
 
                 add_emoji_from_sticker(&mut body, sticker);
                 let quote = quote
@@ -611,7 +613,7 @@ impl App {
                     );
                     channel.expire_timer = expire_timer;
                 }
-                let expire_timestamp = ExpireTimer::from_delay_s_opt(expire_timer);
+                let expire_timestamp = ExpireTimer::from_delay_now(expire_timer);
 
                 let quote = quote
                     .and_then(|q| Message::from_quote(q, expire_timestamp))

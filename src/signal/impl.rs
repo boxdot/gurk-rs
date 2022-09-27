@@ -155,7 +155,7 @@ impl SignalManager for PresageManager {
         let expire_timer = channel.expire_timer;
         let quote_message = quote
             .clone()
-            .and_then(|q| Message::from_quote(q, ExpireTimer::from_delay_s_opt(expire_timer)))
+            .and_then(|q| Message::from_quote(q, ExpireTimer::from_delay_now(expire_timer)))
             .map(Box::new);
 
         let mut data_message = DataMessage {
@@ -225,7 +225,7 @@ impl SignalManager for PresageManager {
             reactions: Default::default(),
             receipt: Receipt::Sent,
             to_skip: false,
-            expire_timestamp: ExpireTimer::from_delay_s_opt(expire_timer),
+            expire_timestamp: ExpireTimer::from_delay_now(expire_timer),
         }
     }
 

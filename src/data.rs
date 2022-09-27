@@ -294,7 +294,12 @@ impl SerSkip for Message {
 pub struct ExpireTimer(Option<u64>);
 
 impl ExpireTimer {
-    pub fn from_delay_s_opt(delay_s: Option<u32>) -> Self {
-        ExpireTimer(delay_s.map(|d| d as u64 * 1_000_000 + utc_now_timestamp_msec()))
+    pub fn from_delay_now(delay_s: Option<u32>) -> Self {
+        ExpireTimer(delay_s.map(|d| d as u64 * 1_000 + utc_now_timestamp_msec()))
+    }
+    pub fn from_delay_and_start(delay_s: Option<u32>, start: Option<u64>) -> Self {
+        ExpireTimer(
+            delay_s.map(|d| d as u64 * 1_000 + start.unwrap_or_else(utc_now_timestamp_msec)),
+        )
     }
 }
