@@ -189,6 +189,7 @@ mod tests {
                 messages: Default::default(),
                 unread_messages: 0,
                 typing: TypingSet::SingleTyping(false),
+                expire_timer: Some(42),
             }]),
             contacts_sync_request_at: None,
         };

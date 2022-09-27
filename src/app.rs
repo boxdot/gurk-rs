@@ -1354,9 +1354,12 @@ mod tests {
                 attachments: Default::default(),
                 reactions: Default::default(),
                 receipt: Default::default(),
+                to_skip: false,
+                expire_timestamp: ExpireTimer::from_delay_now(None),
             }]),
             unread_messages: 1,
             typing: TypingSet::GroupTyping(HashSet::new()),
+            expire_timer: Some(42),
         });
         app.data.channels.state.select(Some(0));
 

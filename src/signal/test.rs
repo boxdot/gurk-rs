@@ -10,7 +10,7 @@ use presage::prelude::{AttachmentSpec, Contact, Content};
 use tokio_stream::Stream;
 use uuid::Uuid;
 
-use crate::data::{Channel, Message};
+use crate::data::{Channel, ExpireTimer, Message};
 use crate::receipt::Receipt;
 use crate::util::utc_now_timestamp_msec;
 
@@ -71,7 +71,7 @@ impl SignalManager for SignalManagerMock {
             ..Default::default()
         });
         let quote_message = quote
-            .and_then(|q| Message::from_quote(q, None))
+            .and_then(|q| Message::from_quote(q, ExpireTimer::from_delay_now(None)))
             .map(Box::new);
         let message = Message {
             from_id: self.user_id(),
@@ -83,7 +83,7 @@ impl SignalManager for SignalManagerMock {
             // TODO make sure the message sending procedure did not fail
             receipt: Receipt::Sent,
             to_skip: false,
-            expire_timestamp: None,
+            expire_timestamp: ExpireTimer::from_delay_now(None),
         };
         self.sent_messages.borrow_mut().push(message.clone());
         println!("sent messages: {:?}", self.sent_messages.borrow());

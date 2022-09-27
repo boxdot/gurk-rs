@@ -675,7 +675,7 @@ fn displayed_quote(names: &NameResolver, quote: &Message) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use crate::signal::Attachment;
+    use crate::{data::ExpireTimer, signal::Attachment};
 
     use super::*;
 
@@ -708,6 +708,8 @@ mod tests {
             attachments: vec![],
             reactions: vec![],
             receipt: Receipt::Sent,
+            expire_timestamp: ExpireTimer::from_delay_now(Some(42)),
+            to_skip: true,
         }
     }
 
