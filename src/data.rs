@@ -28,7 +28,7 @@ pub struct AppData {
     pub contacts_sync_request_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "JsonChannel")]
 pub struct Channel {
     pub id: ChannelId,
@@ -40,7 +40,7 @@ pub struct Channel {
     pub typing: TypingSet,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TypingSet {
     SingleTyping(bool),
     GroupTyping(HashSet<Uuid>),
@@ -49,13 +49,16 @@ pub enum TypingSet {
 /// Proxy type which allows us to apply post-deserialization conversion.
 ///
 /// Used to migrate the schema. Change this type only in backwards-compatible way.
-#[derive(Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct JsonChannel {
     pub id: ChannelId,
     pub name: String,
     #[serde(default)]
     pub group_data: Option<GroupData>,
-    #[serde(deserialize_with = "Channel::deserialize_msgs")]
+    #[serde(
+        serialize_with = "Channel::serialize_msgs",
+        deserialize_with = "Channel::deserialize_msgs"
+    )]
     pub messages: StatefulList<Message>,
     #[serde(default)]
     pub unread_messages: usize,
@@ -93,7 +96,7 @@ impl TryFrom<JsonChannel> for Channel {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GroupData {
     #[serde(default)]
     pub master_key_bytes: GroupMasterKeyBytes,

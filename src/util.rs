@@ -7,7 +7,7 @@ use tui::widgets::ListState;
 use crate::data::Channel;
 use crate::MESSAGE_SCROLL_BACK;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StatefulList<T> {
     #[serde(skip)]
     pub state: ListState,
