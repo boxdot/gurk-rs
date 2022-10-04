@@ -1,5 +1,5 @@
 ---
-source: src/storage2.rs
+source: src/storage2/json.rs
 expression: data
 ---
 {

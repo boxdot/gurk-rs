@@ -11,31 +11,7 @@ use tracing::info;
 
 use crate::data::{Channel, ChannelId, JsonChannel, Message};
 
-pub trait Storage {
-    fn channels<'s>(&'s self) -> Box<dyn Iterator<Item = Cow<Channel>> + 's>;
-    fn channel(&self, channel_id: ChannelId) -> Option<Cow<Channel>>;
-    fn store_channel(&mut self, channel: Channel) -> Cow<Channel>;
-
-    fn messages<'s>(&'s self, channel_id: ChannelId)
-        -> Box<dyn Iterator<Item = Cow<Message>> + 's>;
-    fn message(&self, message_id: MessageId) -> Option<Cow<Message>>;
-    fn store_message(&mut self, channel_id: ChannelId, message: Message) -> Cow<Message>;
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct MessageId {
-    pub channel_id: ChannelId,
-    pub arrived_at: u64,
-}
-
-impl MessageId {
-    fn new(channel_id: ChannelId, arrived_at: u64) -> Self {
-        Self {
-            channel_id,
-            arrived_at,
-        }
-    }
-}
+use super::{MessageId, Storage};
 
 // TODO: In memory only, does not save!
 pub struct JsonStorage {
@@ -236,10 +212,11 @@ mod tests {
     }
 
     fn json_storage_from_snapshot() -> JsonStorage {
-        let json = include_str!("snapshots/gurk__storage2__tests__json_storage_data_model.snap")
-            .rsplit("---")
-            .next()
-            .unwrap();
+        let json =
+            include_str!("snapshots/gurk__storage2__json__tests__json_storage_data_model.snap")
+                .rsplit("---")
+                .next()
+                .unwrap();
         let f = NamedTempFile::new().unwrap();
         std::fs::write(&f, json.as_bytes()).unwrap();
 
