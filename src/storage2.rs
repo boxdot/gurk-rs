@@ -105,7 +105,6 @@ impl JsonStorage {
     fn load_data_from(data_path: &Path) -> anyhow::Result<JsonStorageData> {
         info!("loading app data from: {}", data_path.display());
         let f = BufReader::new(File::open(data_path)?);
-        dbg!(&f);
         Ok(serde_json::from_reader(f)?)
     }
 }
@@ -139,7 +138,9 @@ impl Storage for JsonStorage {
             }
             Entry::Occupied(entry) => {
                 let idx = *entry.get();
-                &self.channels[idx]
+                let stored_channel = &mut self.channels[idx];
+                *stored_channel = channel;
+                stored_channel
             }
         })
     }
@@ -173,7 +174,9 @@ impl Storage for JsonStorage {
             Entry::Occupied(entry) => {
                 let idx = *entry.get();
                 let messages = self.messages.entry(channel_id).or_default();
-                &messages[idx]
+                let stored_message = &mut messages[idx];
+                *stored_message = message;
+                stored_message
             }
         })
     }
@@ -184,6 +187,7 @@ mod tests {
     use tempfile::NamedTempFile;
     use uuid::Uuid;
 
+    use crate::data::TypingSet;
     use crate::util::StatefulList;
 
     use super::*;
@@ -231,8 +235,7 @@ mod tests {
         insta::assert_json_snapshot!(data);
     }
 
-    #[test]
-    fn test_json_storage_new() {
+    fn json_storage_from_snapshot() -> JsonStorage {
         let json = include_str!("snapshots/gurk__storage2__tests__json_storage_data_model.snap")
             .rsplit("---")
             .next()
@@ -240,9 +243,137 @@ mod tests {
         let f = NamedTempFile::new().unwrap();
         std::fs::write(&f, json.as_bytes()).unwrap();
 
-        let storage = JsonStorage::new(f.path(), None).unwrap();
+        JsonStorage::new(f.path(), None).unwrap()
+    }
+
+    #[test]
+    fn test_json_storage_new() {
+        let storage = json_storage_from_snapshot();
         assert_eq!(storage.channels.len(), 2);
         assert_eq!(storage.channels.len(), storage.channels_index.len());
         assert_eq!(storage.channels.len(), storage.messages.len());
+    }
+
+    #[test]
+    fn test_json_storage_channels() {
+        let storage = json_storage_from_snapshot();
+        let channels: Vec<_> = storage.channels().collect();
+        assert_eq!(channels.len(), 2);
+        assert_eq!(storage.channel(channels[0].id).unwrap().id, channels[0].id);
+        assert_eq!(storage.channel(channels[1].id).unwrap().id, channels[1].id);
+    }
+
+    #[test]
+    fn test_json_storage_store_existing_channel() {
+        let mut storage = json_storage_from_snapshot();
+        let id: Uuid = "966960e0-a8cd-43f1-ac7a-2c986dd470cd".parse().unwrap();
+        let mut channel = storage.channel(id.into()).unwrap().into_owned();
+        channel.name = "new name".to_string();
+        channel.unread_messages = 23;
+
+        let stored_channel = storage.store_channel(channel);
+        assert_eq!(stored_channel.id, id.into());
+        assert_eq!(stored_channel.name, "new name");
+        assert_eq!(stored_channel.unread_messages, 23);
+
+        let channels: Vec<_> = storage.channels().collect();
+        assert_eq!(channels.len(), 2);
+        assert_eq!(storage.channel(channels[0].id).unwrap().id, channels[0].id);
+        assert_eq!(storage.channel(channels[1].id).unwrap().id, channels[1].id);
+
+        let channel = storage.channel(channels[0].id).unwrap();
+        assert_eq!(channel.id, id.into());
+        assert_eq!(channel.name, "new name");
+        assert_eq!(channel.unread_messages, 23);
+    }
+
+    #[test]
+    fn test_json_storage_store_new_channel() {
+        let mut storage = json_storage_from_snapshot();
+        let id: Uuid = "e3690a5f-70a4-4a49-8125-ca689adb2d9e".parse().unwrap();
+        storage.store_channel(Channel {
+            id: id.into(),
+            name: "test".to_string(),
+            group_data: None,
+            messages: Default::default(),
+            unread_messages: 42,
+            typing: TypingSet::SingleTyping(false),
+        });
+        let channels: Vec<_> = storage.channels().collect();
+        assert_eq!(channels.len(), 3);
+        assert_eq!(storage.channel(channels[0].id).unwrap().id, channels[0].id);
+        assert_eq!(storage.channel(channels[1].id).unwrap().id, channels[1].id);
+        let channel = storage.channel(channels[2].id).unwrap();
+        assert_eq!(channel.id, id.into());
+        assert_eq!(channel.name, "test");
+        assert_eq!(channel.unread_messages, 42);
+    }
+
+    #[test]
+    fn test_json_storage_messages() {
+        let storage = json_storage_from_snapshot();
+        let id: Uuid = "966960e0-a8cd-43f1-ac7a-2c986dd470cd".parse().unwrap();
+
+        let messages: Vec<_> = storage.messages(id.into()).collect();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].message.as_deref(), Some("hello"));
+
+        let arrived_at = messages[0].arrived_at;
+        let message = storage
+            .message(MessageId::new(id.into(), arrived_at))
+            .unwrap();
+        assert_eq!(message.arrived_at, arrived_at);
+        assert_eq!(message.message.as_deref(), Some("hello"));
+    }
+
+    #[test]
+    fn test_json_storage_store_existing_message() {
+        let mut storage = json_storage_from_snapshot();
+        let id: Uuid = "966960e0-a8cd-43f1-ac7a-2c986dd470cd".parse().unwrap();
+        let arrived_at = 1664832050000;
+        let mut message = storage
+            .message(MessageId::new(id.into(), arrived_at))
+            .unwrap()
+            .into_owned();
+        message.message = Some("changed".to_string());
+
+        let arrived_at = message.arrived_at;
+        let stored_message = storage.store_message(id.into(), message);
+        assert_eq!(stored_message.arrived_at, arrived_at);
+        assert_eq!(stored_message.message.as_deref(), Some("changed"));
+
+        let messages: Vec<_> = storage.messages(id.into()).collect();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].arrived_at, arrived_at);
+        assert_eq!(messages[0].message.as_deref(), Some("changed"));
+    }
+
+    #[test]
+    fn test_json_storage_store_new_message() {
+        let mut storage = json_storage_from_snapshot();
+        let id: Uuid = "966960e0-a8cd-43f1-ac7a-2c986dd470cd".parse().unwrap();
+        let arrived_at = 1664832050001;
+        assert_eq!(storage.message(MessageId::new(id.into(), arrived_at)), None);
+
+        let stored_message = storage.store_message(
+            id.into(),
+            Message {
+                from_id: id,
+                message: Some("new msg".to_string()),
+                arrived_at,
+                quote: Default::default(),
+                attachments: Default::default(),
+                reactions: Default::default(),
+                receipt: Default::default(),
+            },
+        );
+
+        assert_eq!(stored_message.arrived_at, arrived_at);
+        assert_eq!(stored_message.message.as_deref(), Some("new msg"));
+
+        let messages: Vec<_> = storage.messages(id.into()).collect();
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[1].arrived_at, arrived_at);
+        assert_eq!(messages[1].message.as_deref(), Some("new msg"));
     }
 }
