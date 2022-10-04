@@ -49,7 +49,7 @@ pub enum TypingSet {
 /// Proxy type which allows us to apply post-deserialization conversion.
 ///
 /// Used to migrate the schema. Change this type only in backwards-compatible way.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JsonChannel {
     pub id: ChannelId,
     pub name: String,

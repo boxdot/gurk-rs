@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::BufReader;
@@ -11,19 +12,20 @@ use tracing::info;
 use crate::data::{Channel, ChannelId, JsonChannel, Message};
 
 pub trait Storage {
-    fn channels(&self) -> Box<dyn Iterator<Item = Cow<Channel>>>;
+    fn channels<'s>(&'s self) -> Box<dyn Iterator<Item = Cow<Channel>> + 's>;
     fn channel(&self, channel_id: ChannelId) -> Option<Cow<Channel>>;
-    fn store_channel(&mut self, channel: Channel) -> Option<Cow<Channel>>;
+    fn store_channel(&mut self, channel: Channel) -> Cow<Channel>;
 
-    fn messages(&self) -> Box<dyn Iterator<Item = Cow<Message>>>;
-    fn message(&self) -> Option<Cow<Message>>;
-    fn store_message(&mut self, channel_id: ChannelId, message: Message) -> Option<Cow<Message>>;
+    fn messages<'s>(&'s self, channel_id: ChannelId)
+        -> Box<dyn Iterator<Item = Cow<Message>> + 's>;
+    fn message(&self, message_id: MessageId) -> Option<Cow<Message>>;
+    fn store_message(&mut self, channel_id: ChannelId, message: Message) -> Cow<Message>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-struct MessageId {
-    channel_id: ChannelId,
-    arrived_at: u64,
+pub struct MessageId {
+    pub channel_id: ChannelId,
+    pub arrived_at: u64,
 }
 
 impl MessageId {
@@ -35,6 +37,7 @@ impl MessageId {
     }
 }
 
+// TODO: In memory only, does not save!
 pub struct JsonStorage {
     channels: Vec<Channel>,
     channels_index: BTreeMap<ChannelId, usize>,
@@ -67,8 +70,6 @@ impl JsonStorage {
             Self::load_data_from(data_path).unwrap_or_default()
         };
 
-        dbg!(&data);
-
         let mut channels: Vec<Channel> = Vec::with_capacity(data.channels.items.len());
         let mut channels_index = BTreeMap::new();
         let mut messages: BTreeMap<ChannelId, Vec<Message>> = BTreeMap::new();
@@ -77,7 +78,8 @@ impl JsonStorage {
         for mut channel in data
             .channels
             .items
-            .into_iter()
+            .iter()
+            .cloned()
             .map(Channel::try_from)
             .filter_map(Result::ok)
         {
@@ -113,9 +115,68 @@ struct JsonStorageData {
     channels: JsonChannels,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 struct JsonChannels {
     items: Vec<JsonChannel>,
+}
+
+impl Storage for JsonStorage {
+    fn channels<'s>(&'s self) -> Box<dyn Iterator<Item = Cow<Channel>> + 's> {
+        Box::new(self.channels.iter().map(Cow::Borrowed))
+    }
+
+    fn channel(&self, channel_id: ChannelId) -> Option<Cow<Channel>> {
+        let idx = *self.channels_index.get(&channel_id)?;
+        self.channels.get(idx).map(Cow::Borrowed)
+    }
+
+    fn store_channel(&mut self, channel: Channel) -> Cow<Channel> {
+        Cow::Borrowed(match self.channels_index.entry(channel.id) {
+            Entry::Vacant(entry) => {
+                entry.insert(self.channels.len());
+                self.channels.push(channel);
+                self.channels.last().unwrap()
+            }
+            Entry::Occupied(entry) => {
+                let idx = *entry.get();
+                &self.channels[idx]
+            }
+        })
+    }
+
+    fn messages<'s>(
+        &'s self,
+        channel_id: ChannelId,
+    ) -> Box<dyn Iterator<Item = Cow<Message>> + 's> {
+        if let Some(messages) = self.messages.get(&channel_id) {
+            Box::new(messages.iter().map(Cow::Borrowed))
+        } else {
+            Box::new(std::iter::empty())
+        }
+    }
+
+    fn message(&self, message_id: MessageId) -> Option<Cow<Message>> {
+        let messages = self.messages.get(&message_id.channel_id)?;
+        let idx = *self.messages_index.get(&message_id)?;
+        messages.get(idx).map(Cow::Borrowed)
+    }
+
+    fn store_message(&mut self, channel_id: ChannelId, message: Message) -> Cow<Message> {
+        let message_id = MessageId::new(channel_id, message.arrived_at);
+        Cow::Borrowed(match self.messages_index.entry(message_id) {
+            Entry::Vacant(entry) => {
+                let messages = self.messages.entry(channel_id).or_default();
+                entry.insert(messages.len());
+                messages.push(message);
+                messages.last().unwrap()
+            }
+            Entry::Occupied(entry) => {
+                let idx = *entry.get();
+                let messages = self.messages.entry(channel_id).or_default();
+                &messages[idx]
+            }
+        })
+    }
 }
 
 #[cfg(test)]
@@ -176,7 +237,6 @@ mod tests {
             .rsplit("---")
             .next()
             .unwrap();
-        print!("{json}");
         let f = NamedTempFile::new().unwrap();
         std::fs::write(&f, json.as_bytes()).unwrap();
 
