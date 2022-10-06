@@ -147,11 +147,6 @@ impl<T> StatefulList<T> {
         };
         self.state.select(Some(i));
     }
-
-    pub fn selected_item(&self) -> Option<&T> {
-        let idx = self.state.selected()?;
-        Some(&self.items[idx])
-    }
 }
 
 impl<T> FilteredStatefulList<T> {

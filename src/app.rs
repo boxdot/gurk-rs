@@ -230,11 +230,14 @@ impl App {
     fn try_open_url(&mut self) -> Option<()> {
         // Note: to make the borrow checker happy, we have to use distinct fields here, and no
         // methods that borrow self mutably.
-        let channel_id = *self.channels.selected_item()?;
-        let arrived_at = *self.messages[&channel_id].selected_item()?;
+        let channel_id = self.channels.selected_item()?;
+        let messages = self.messages.get(channel_id)?;
+        let idx = messages.state.selected()?;
+        let idx = messages.items.len().checked_sub(idx + 1)?;
+        let arrived_at = messages.items.get(idx)?;
         let message = self
             .storage
-            .message(MessageId::new(channel_id, arrived_at))?;
+            .message(MessageId::new(*channel_id, *arrived_at))?;
         let re = self.url_regex.compiled();
         open_url(&message, re)?;
         self.reset_message_selection();
@@ -242,8 +245,12 @@ impl App {
     }
 
     fn selected_message(&self) -> Option<Cow<Message>> {
+        // Messages are shown in reversed order => selected is reversed
         let channel_id = self.channels.selected_item()?;
-        let arrived_at = self.messages.get(channel_id)?.selected_item()?;
+        let messages = self.messages.get(&channel_id)?;
+        let idx = messages.state.selected()?;
+        let idx = messages.items.len().checked_sub(idx + 1)?;
+        let arrived_at = messages.items.get(idx)?;
         let message_id = MessageId::new(*channel_id, *arrived_at);
         self.storage.message(message_id)
     }
