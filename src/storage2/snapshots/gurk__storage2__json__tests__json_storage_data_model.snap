@@ -88,5 +88,5 @@ expression: data
     "966960e0-a8cd-43f1-ac7a-2c986dd470cd": "ellie",
     "a955d20f-6b83-4e69-846e-a99b1779ff7a": "joel"
   },
-  "contacts_sync_request_at": null
+  "contacts_sync_request_at": "2000-01-01T00:00:00Z"
 }

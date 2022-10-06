@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 
+use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::data::{Channel, ChannelId, Message};
@@ -17,6 +18,9 @@ pub trait Storage {
     fn names<'s>(&'s self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + 's>;
     fn name(&self, id: Uuid) -> Option<Cow<str>>;
     fn store_name(&mut self, id: Uuid, name: String) -> Cow<str>;
+
+    fn metadata(&self) -> Cow<Metadata>;
+    fn store_metadata(&mut self, metadata: Metadata) -> Cow<Metadata>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -32,4 +36,9 @@ impl MessageId {
             arrived_at,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct Metadata {
+    pub contacts_sync_request_at: Option<DateTime<Utc>>,
 }

@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use crate::data::{Channel, ChannelId, Message};
 
+use super::storage::Metadata;
 use super::{MessageId, Storage};
 
 pub struct MemCache<S: Storage> {
@@ -16,6 +17,7 @@ pub struct MemCache<S: Storage> {
     messages: BTreeMap<ChannelId, Vec<Message>>,
     messages_index: BTreeMap<MessageId, usize>,
     names: BTreeMap<Uuid, String>,
+    metadata: Metadata,
     storage: S,
 }
 
@@ -43,12 +45,15 @@ impl<S: Storage> MemCache<S> {
             .map(|(id, name)| (id, name.into_owned()))
             .collect();
 
+        let metadata = storage.metadata().into_owned();
+
         Self {
             channels,
             channels_index,
             messages,
             messages_index,
             names,
+            metadata,
             storage,
         }
     }
@@ -127,14 +132,23 @@ impl<S: Storage> Storage for MemCache<S> {
     }
 
     fn store_name(&mut self, id: Uuid, name: String) -> Cow<str> {
-        let name = match self.names.entry(id) {
-            Entry::Vacant(entry) => entry.insert(name),
-            Entry::Occupied(mut entry) => {
-                entry.insert(name);
-                entry.into_mut()
+        match self.names.entry(id) {
+            Entry::Vacant(entry) => {
+                entry.insert(name.clone());
             }
-        };
+            Entry::Occupied(mut entry) => {
+                entry.insert(name.clone());
+            }
+        }
+        self.storage.store_name(id, name)
+    }
 
-        Cow::Borrowed(name)
+    fn metadata(&self) -> Cow<Metadata> {
+        Cow::Borrowed(&self.metadata)
+    }
+
+    fn store_metadata(&mut self, metadata: Metadata) -> Cow<Metadata> {
+        self.metadata = metadata.clone();
+        self.storage.store_metadata(metadata)
     }
 }

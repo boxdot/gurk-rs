@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use crate::data::{AppData, Channel, ChannelId, Message};
 
+use super::storage::Metadata;
 use super::{MessageId, Storage};
 
 // TODO: In memory only, does not save!
@@ -198,10 +199,25 @@ impl Storage for JsonStorage {
         }
         Cow::Borrowed(&self.data.names[&id])
     }
+
+    fn metadata(&self) -> Cow<Metadata> {
+        Cow::Owned(Metadata {
+            contacts_sync_request_at: self.data.contacts_sync_request_at,
+        })
+    }
+
+    fn store_metadata(&mut self, metadata: Metadata) -> Cow<Metadata> {
+        self.data.contacts_sync_request_at = metadata.contacts_sync_request_at;
+        if let Err(e) = self.save() {
+            error!(error =% e, "failed to save storage");
+        }
+        Cow::Owned(metadata)
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use chrono::{DateTime, Utc};
     use tempfile::NamedTempFile;
     use uuid::Uuid;
 
@@ -254,7 +270,9 @@ mod tests {
         let data = AppData {
             channels: FilteredStatefulList::_with_items(vec![channel1, channel2]),
             names: names.into_iter().collect(),
-            contacts_sync_request_at: Default::default(),
+            contacts_sync_request_at: DateTime::parse_from_rfc3339("2000-01-01T00:00:00Z")
+                .ok()
+                .map(|dt| dt.with_timezone(&Utc)),
         };
 
         let mut settings = insta::Settings::clone_current();
@@ -415,5 +433,25 @@ mod tests {
         assert_eq!(storage.name(id1).unwrap(), "ellie");
         assert_eq!(storage.name(id2).unwrap(), "joel");
         assert_eq!(storage.name(id3).unwrap(), "abby");
+    }
+
+    #[test]
+    fn test_json_storage_metadata() {
+        let mut storage = json_storage_from_snapshot();
+        let dt = DateTime::parse_from_rfc3339("2000-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        assert_eq!(storage.metadata().contacts_sync_request_at, Some(dt));
+        let dt = Utc::now();
+        assert_eq!(
+            storage
+                .store_metadata(Metadata {
+                    contacts_sync_request_at: Some(dt)
+                })
+                .contacts_sync_request_at,
+            Some(dt)
+        );
+        assert_eq!(storage.metadata().contacts_sync_request_at, Some(dt));
     }
 }
