@@ -5,7 +5,7 @@ use crate::receipt::{Receipt, ReceiptEvent, ReceiptHandler};
 use crate::signal::{
     Attachment, GroupIdentifierBytes, GroupMasterKeyBytes, ProfileKey, ResolvedGroup, SignalManager,
 };
-use crate::storage2::{JsonStorage, MessageId, Storage};
+use crate::storage2::{MessageId, Storage};
 use crate::util::{
     self, FilteredStatefulList, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX,
 };
@@ -42,7 +42,7 @@ const CONTACTS_SYNC_DEADLINE_SEC: i64 = 60 * 60; // 1h
 pub struct App {
     pub config: Config,
     signal_manager: Box<dyn SignalManager>,
-    pub storage: JsonStorage,
+    pub storage: Box<dyn Storage>,
     pub channels: FilteredStatefulList<ChannelId>,
     pub messages: BTreeMap<ChannelId, StatefulList<u64 /* arrived at*/>>,
     pub user_id: Uuid,
@@ -62,7 +62,7 @@ impl App {
     pub fn try_new(
         config: Config,
         signal_manager: Box<dyn SignalManager>,
-        storage: JsonStorage,
+        storage: Box<dyn Storage>,
     ) -> anyhow::Result<Self> {
         let user_id = signal_manager.user_id();
 
@@ -1320,162 +1320,219 @@ fn add_emoji_from_sticker(body: &mut Option<String>, sticker: Option<Sticker>) {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//
-//     use crate::config::User;
-//     use crate::data::GroupData;
-//     use crate::signal::test::SignalManagerMock;
-//
-//     use std::cell::RefCell;
-//     use std::rc::Rc;
-//
-//     fn test_app() -> (App, Rc<RefCell<Vec<Message>>>) {
-//         let signal_manager = SignalManagerMock::new();
-//         let sent_messages = signal_manager.sent_messages.clone();
-//
-//         let mut app = App::try_new(
-//             Config::with_user(User {
-//                 name: "Tyler Durden".to_string(),
-//                 phone_number: "+0000000000".to_string(),
-//             }),
-//             Box::new(signal_manager),
-//             Box::new(InMemoryStorage::new()),
-//         )
-//         .unwrap();
-//
-//         app.data.channels.items.push(Channel {
-//             id: ChannelId::User(Uuid::new_v4()),
-//             name: "test".to_string(),
-//             group_data: Some(GroupData {
-//                 master_key_bytes: GroupMasterKeyBytes::default(),
-//                 members: vec![app.user_id],
-//                 revision: 1,
-//             }),
-//             messages: StatefulList::with_items(vec![Message {
-//                 from_id: app.user_id,
-//                 message: Some("First message".to_string()),
-//                 arrived_at: 0,
-//                 quote: Default::default(),
-//                 attachments: Default::default(),
-//                 reactions: Default::default(),
-//                 receipt: Default::default(),
-//             }]),
-//             unread_messages: 1,
-//             typing: TypingSet::GroupTyping(HashSet::new()),
-//         });
-//         app.data.channels.state.select(Some(0));
-//
-//         (app, sent_messages)
-//     }
-//
-//     #[test]
-//     fn test_send_input() {
-//         let (mut app, sent_messages) = test_app();
-//         let input = "Hello, World!";
-//         for c in input.chars() {
-//             app.get_input().put_char(c);
-//         }
-//         app.send_input(0).unwrap();
-//
-//         let sent = sent_messages.borrow();
-//         assert_eq!(sent.len(), 1);
-//         assert_eq!(sent[0].message.as_ref().unwrap(), input);
-//
-//         assert_eq!(app.data.channels.items[0].unread_messages, 0);
-//
-//         assert_eq!(app.get_input().data, "");
-//     }
-//
-//     #[test]
-//     fn test_send_input_with_emoji() {
-//         let (mut app, sent_messages) = test_app();
-//         let input = "👻";
-//         for c in input.chars() {
-//             app.get_input().put_char(c);
-//         }
-//
-//         app.send_input(0).unwrap();
-//
-//         let sent = sent_messages.borrow();
-//         assert_eq!(sent.len(), 1);
-//         assert_eq!(sent[0].message.as_ref().unwrap(), input);
-//
-//         assert_eq!(app.get_input().data, "");
-//     }
-//
-//     #[test]
-//     fn test_send_input_with_emoji_codepoint() {
-//         let (mut app, sent_messages) = test_app();
-//         let input = ":thumbsup:";
-//         for c in input.chars() {
-//             app.get_input().put_char(c);
-//         }
-//
-//         app.send_input(0).unwrap();
-//
-//         let sent = sent_messages.borrow();
-//         assert_eq!(sent.len(), 1);
-//         assert_eq!(sent[0].message.as_ref().unwrap(), "👍");
-//     }
-//
-//     #[test]
-//     fn test_add_reaction_with_emoji() {
-//         let (mut app, _sent_messages) = test_app();
-//
-//         app.data.channels.items[0].messages.state.select(Some(0));
-//
-//         app.get_input().put_char('👍');
-//         app.add_reaction(0);
-//
-//         let reactions = &app.data.channels.items[0].messages.items[0].reactions;
-//         assert_eq!(reactions.len(), 1);
-//         assert_eq!(reactions[0], (app.user_id, "👍".to_string()));
-//     }
-//
-//     #[test]
-//     fn test_add_reaction_with_emoji_codepoint() {
-//         let (mut app, _sent_messages) = test_app();
-//
-//         app.data.channels.items[0].messages.state.select(Some(0));
-//
-//         for c in ":thumbsup:".chars() {
-//             app.get_input().put_char(c);
-//         }
-//         app.add_reaction(0);
-//
-//         let reactions = &app.data.channels.items[0].messages.items[0].reactions;
-//         assert_eq!(reactions.len(), 1);
-//         assert_eq!(reactions[0], (app.user_id, "👍".to_string()));
-//     }
-//
-//     #[test]
-//     fn test_remove_reaction() {
-//         let (mut app, _sent_messages) = test_app();
-//
-//         app.data.channels.items[0].messages.state.select(Some(0));
-//         let reactions = &mut app.data.channels.items[0].messages.items[0].reactions;
-//         reactions.push((app.user_id, "👍".to_string()));
-//
-//         app.add_reaction(0);
-//
-//         let reactions = &app.data.channels.items[0].messages.items[0].reactions;
-//         assert!(reactions.is_empty());
-//     }
-//
-//     #[test]
-//     fn test_add_invalid_reaction() {
-//         let (mut app, _sent_messages) = test_app();
-//         app.data.channels.items[0].messages.state.select(Some(0));
-//
-//         for c in ":thumbsup".chars() {
-//             app.get_input().put_char(c);
-//         }
-//         app.add_reaction(0);
-//
-//         assert_eq!(app.get_input().data, ":thumbsup");
-//         let reactions = &app.data.channels.items[0].messages.items[0].reactions;
-//         assert!(reactions.is_empty());
-//     }
-// }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::config::User;
+    use crate::data::GroupData;
+    use crate::signal::test::SignalManagerMock;
+    use crate::storage2::{ForgetfulStorage, MemCache};
+
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    fn test_app() -> (App, Rc<RefCell<Vec<Message>>>) {
+        let signal_manager = SignalManagerMock::new();
+        let sent_messages = signal_manager.sent_messages.clone();
+
+        let mut storage = MemCache::new(ForgetfulStorage);
+
+        let channel_id = ChannelId::User(Uuid::new_v4());
+        let channel = Channel {
+            id: channel_id,
+            name: "test".to_string(),
+            group_data: Some(GroupData {
+                master_key_bytes: GroupMasterKeyBytes::default(),
+                members: vec![signal_manager.user_id()],
+                revision: 1,
+            }),
+            messages: Default::default(),
+            unread_messages: 1,
+            typing: TypingSet::GroupTyping(Default::default()),
+        };
+        storage.store_channel(channel);
+        storage.store_message(
+            channel_id,
+            Message {
+                from_id: signal_manager.user_id(),
+                message: Some("First message".to_string()),
+                arrived_at: 0,
+                quote: Default::default(),
+                attachments: Default::default(),
+                reactions: Default::default(),
+                receipt: Default::default(),
+            },
+        );
+
+        let user = User {
+            name: "Tyler Durden".to_string(),
+            phone_number: "+0000000000".to_string(),
+        };
+        let mut app = App::try_new(
+            Config::with_user(user),
+            Box::new(signal_manager),
+            Box::new(storage),
+        )
+        .unwrap();
+        app.channels.state.select(Some(0));
+
+        (app, sent_messages)
+    }
+
+    #[test]
+    fn test_send_input() {
+        let (mut app, sent_messages) = test_app();
+        let input = "Hello, World!";
+        for c in input.chars() {
+            app.get_input().put_char(c);
+        }
+        app.send_input(0).unwrap();
+
+        let sent = sent_messages.borrow();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].message.as_ref().unwrap(), input);
+
+        let channel_id = app.channels.items[0];
+        let channel = app.storage.channel(channel_id).unwrap();
+        assert_eq!(channel.unread_messages, 0);
+
+        assert_eq!(app.get_input().data, "");
+    }
+
+    #[test]
+    fn test_send_input_with_emoji() {
+        let (mut app, sent_messages) = test_app();
+        let input = "👻";
+        for c in input.chars() {
+            app.get_input().put_char(c);
+        }
+
+        app.send_input(0).unwrap();
+
+        let sent = sent_messages.borrow();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].message.as_ref().unwrap(), input);
+
+        assert_eq!(app.get_input().data, "");
+    }
+
+    #[test]
+    fn test_send_input_with_emoji_codepoint() {
+        let (mut app, sent_messages) = test_app();
+        let input = ":thumbsup:";
+        for c in input.chars() {
+            app.get_input().put_char(c);
+        }
+
+        app.send_input(0).unwrap();
+
+        let sent = sent_messages.borrow();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].message.as_ref().unwrap(), "👍");
+    }
+
+    #[test]
+    fn test_add_reaction_with_emoji() {
+        let (mut app, _sent_messages) = test_app();
+
+        let channel_id = app.channels.items[0];
+        app.messages
+            .get_mut(&channel_id)
+            .unwrap()
+            .state
+            .select(Some(0));
+
+        app.get_input().put_char('👍');
+        app.add_reaction(0);
+
+        let arrived_at = app.messages[&channel_id].items[0];
+        let reactions = &app
+            .storage
+            .message(MessageId::new(channel_id, arrived_at))
+            .unwrap()
+            .reactions;
+        assert_eq!(reactions.len(), 1);
+        assert_eq!(reactions[0], (app.user_id, "👍".to_string()));
+    }
+
+    #[test]
+    fn test_add_reaction_with_emoji_codepoint() {
+        let (mut app, _sent_messages) = test_app();
+
+        let channel_id = app.channels.items[0];
+        app.messages
+            .get_mut(&channel_id)
+            .unwrap()
+            .state
+            .select(Some(0));
+
+        for c in ":thumbsup:".chars() {
+            app.get_input().put_char(c);
+        }
+        app.add_reaction(0);
+
+        let arrived_at = app.messages[&channel_id].items[0];
+        let reactions = &app
+            .storage
+            .message(MessageId::new(channel_id, arrived_at))
+            .unwrap()
+            .reactions;
+        assert_eq!(reactions.len(), 1);
+        assert_eq!(reactions[0], (app.user_id, "👍".to_string()));
+    }
+
+    #[test]
+    fn test_remove_reaction() {
+        let (mut app, _sent_messages) = test_app();
+
+        let channel_id = app.channels.items[0];
+        app.messages
+            .get_mut(&channel_id)
+            .unwrap()
+            .state
+            .select(Some(0));
+
+        let arrived_at = app.messages[&channel_id].items[0];
+        let mut message = app
+            .storage
+            .message(MessageId::new(channel_id, arrived_at))
+            .unwrap()
+            .into_owned();
+        message.reactions.push((app.user_id, "👍".to_string()));
+        app.storage.store_message(channel_id, message);
+        app.add_reaction(0);
+
+        let reactions = &app
+            .storage
+            .message(MessageId::new(channel_id, arrived_at))
+            .unwrap()
+            .reactions;
+        assert!(reactions.is_empty());
+    }
+
+    #[test]
+    fn test_add_invalid_reaction() {
+        let (mut app, _sent_messages) = test_app();
+        let channel_id = app.channels.items[0];
+        app.messages
+            .get_mut(&channel_id)
+            .unwrap()
+            .state
+            .select(Some(0));
+
+        for c in ":thumbsup".chars() {
+            app.get_input().put_char(c);
+        }
+        app.add_reaction(0);
+
+        assert_eq!(app.get_input().data, ":thumbsup");
+        let arrived_at = app.messages[&channel_id].items[0];
+        let reactions = &app
+            .storage
+            .message(MessageId::new(channel_id, arrived_at))
+            .unwrap()
+            .reactions;
+        assert!(reactions.is_empty());
+    }
+}

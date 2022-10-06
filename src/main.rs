@@ -98,7 +98,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
     let (signal_manager, config) = signal::ensure_linked_device(relink).await?;
 
     let storage = JsonStorage::new(&config.data_path, config::fallback_data_path().as_deref())?;
-    let mut app = App::try_new(config, signal_manager.clone_boxed(), storage)?;
+    let mut app = App::try_new(config, signal_manager.clone_boxed(), Box::new(storage))?;
 
     app.request_contacts_sync().await?;
 
@@ -351,9 +351,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
         }
 
         if last_save_at.elapsed() > SAVE_BUDGET || app.should_quit {
-            if let Err(e) = app.storage.save() {
-                error!(error =% e, "failed to save storage");
-            }
+            app.storage.save();
             last_save_at = Instant::now();
         }
 

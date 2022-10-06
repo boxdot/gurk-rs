@@ -5,7 +5,7 @@ use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
-use tracing::info;
+use tracing::{error, info};
 use uuid::Uuid;
 
 use crate::data::{AppData, Channel, ChannelId, Message};
@@ -64,7 +64,7 @@ impl JsonStorage {
         Ok(serde_json::from_reader(f)?)
     }
 
-    pub fn save(&mut self) -> anyhow::Result<()> {
+    fn try_save(&mut self) -> anyhow::Result<()> {
         if self.is_dirty {
             info!("saving app data to: {}", self.data_path.display());
             let f = BufWriter::new(File::create(&self.data_path)?);
@@ -210,6 +210,12 @@ impl Storage for JsonStorage {
         self.data.contacts_sync_request_at = metadata.contacts_sync_request_at;
         self.is_dirty = true;
         Cow::Owned(metadata)
+    }
+
+    fn save(&mut self) {
+        if let Err(e) = self.try_save() {
+            error!(error =% e, "failed to save json storage");
+        }
     }
 }
 

@@ -151,4 +151,8 @@ impl<S: Storage> Storage for MemCache<S> {
         self.metadata = metadata.clone();
         self.storage.store_metadata(metadata)
     }
+
+    fn save(&mut self) {
+        self.storage.save();
+    }
 }

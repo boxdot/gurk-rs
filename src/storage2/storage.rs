@@ -24,6 +24,8 @@ pub trait Storage {
 
     fn metadata(&self) -> Cow<Metadata>;
     fn store_metadata(&mut self, metadata: Metadata) -> Cow<Metadata>;
+
+    fn save(&mut self);
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -41,7 +43,7 @@ impl MessageId {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct Metadata {
     pub contacts_sync_request_at: Option<DateTime<Utc>>,
 }
