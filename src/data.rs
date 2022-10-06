@@ -105,14 +105,14 @@ pub struct GroupData {
 }
 
 impl Channel {
-    pub fn reset_writing(&mut self, user: Uuid) {
+    pub fn reset_writing(&mut self, user: Uuid) -> bool {
         match &mut self.typing {
-            TypingSet::GroupTyping(ref mut hash_set) => {
-                hash_set.remove(&user);
-            }
-            TypingSet::SingleTyping(_) => {
+            TypingSet::GroupTyping(ref mut hash_set) => hash_set.remove(&user),
+            TypingSet::SingleTyping(true) => {
                 self.typing = TypingSet::SingleTyping(false);
+                true
             }
+            TypingSet::SingleTyping(false) => false,
         }
     }
 
@@ -165,6 +165,15 @@ pub enum ChannelId {
 impl From<Uuid> for ChannelId {
     fn from(id: Uuid) -> Self {
         ChannelId::User(id)
+    }
+}
+
+impl PartialEq<Uuid> for ChannelId {
+    fn eq(&self, other: &Uuid) -> bool {
+        match self {
+            ChannelId::User(id) => id == other,
+            ChannelId::Group(_) => false,
+        }
     }
 }
 

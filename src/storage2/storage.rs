@@ -10,8 +10,11 @@ pub trait Storage {
     fn channel(&self, channel_id: ChannelId) -> Option<Cow<Channel>>;
     fn store_channel(&mut self, channel: Channel) -> Cow<Channel>;
 
-    fn messages<'s>(&'s self, channel_id: ChannelId)
-        -> Box<dyn Iterator<Item = Cow<Message>> + 's>;
+    /// Messages sorted by arrived_at in ascending order
+    fn messages<'s>(
+        &'s self,
+        channel_id: ChannelId,
+    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + 's>;
     fn message(&self, message_id: MessageId) -> Option<Cow<Message>>;
     fn store_message(&mut self, channel_id: ChannelId, message: Message) -> Cow<Message>;
 

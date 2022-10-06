@@ -5,7 +5,7 @@ use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
-use tracing::{error, info};
+use tracing::info;
 use uuid::Uuid;
 
 use crate::data::{AppData, Channel, ChannelId, Message};
@@ -13,10 +13,10 @@ use crate::data::{AppData, Channel, ChannelId, Message};
 use super::storage::Metadata;
 use super::{MessageId, Storage};
 
-// TODO: In memory only, does not save!
 pub struct JsonStorage {
     data_path: PathBuf,
     data: AppData,
+    is_dirty: bool,
 }
 
 impl JsonStorage {
@@ -31,7 +31,7 @@ impl JsonStorage {
 
         // if data file exists, be conservative and fail rather than overriding and losing the messages
         let mut data = if data_path.exists() {
-            Self::load_data_from(&data_path).with_context(|| {
+            Self::load_data_from(data_path).with_context(|| {
                 format!(
                     "failed to load stored data from '{}':\n\
             This might happen due to incompatible data model when Gurk is upgraded.\n\
@@ -54,6 +54,7 @@ impl JsonStorage {
         Ok(Self {
             data_path: data_path.into(),
             data,
+            is_dirty: false,
         })
     }
 
@@ -63,9 +64,14 @@ impl JsonStorage {
         Ok(serde_json::from_reader(f)?)
     }
 
-    fn save(&self) -> anyhow::Result<()> {
-        let f = BufWriter::new(File::create(&self.data_path)?);
-        Ok(serde_json::to_writer(f, &self.data)?)
+    pub fn save(&mut self) -> anyhow::Result<()> {
+        if self.is_dirty {
+            info!("saving app data to: {}", self.data_path.display());
+            let f = BufWriter::new(File::create(&self.data_path)?);
+            serde_json::to_writer(f, &self.data)?;
+            self.is_dirty = false;
+        }
+        Ok(())
     }
 }
 
@@ -98,16 +104,14 @@ impl Storage for JsonStorage {
             self.data.channels.items.push(channel);
             self.data.channels.items.len() - 1
         };
-        if let Err(e) = self.save() {
-            error!(error =% e, "failed to save storage");
-        }
+        self.is_dirty = true;
         Cow::Borrowed(&self.data.channels.items[channel_idx])
     }
 
     fn messages<'s>(
         &'s self,
         channel_id: ChannelId,
-    ) -> Box<dyn Iterator<Item = Cow<Message>> + 's> {
+    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + 's> {
         if let Some(channel) = self
             .data
             .channels
@@ -162,9 +166,7 @@ impl Storage for JsonStorage {
                 }
             }
         };
-        if let Err(e) = self.save() {
-            error!(error = %e, "failed to save storage");
-        }
+        self.is_dirty = true;
         Cow::Borrowed(&self.data.channels.items[channel_idx].messages.items[idx])
     }
 
@@ -194,9 +196,7 @@ impl Storage for JsonStorage {
                 entry.insert(name);
             }
         }
-        if let Err(e) = self.save() {
-            error!(error =% e, "failed to save storage");
-        }
+        self.is_dirty = true;
         Cow::Borrowed(&self.data.names[&id])
     }
 
@@ -208,9 +208,7 @@ impl Storage for JsonStorage {
 
     fn store_metadata(&mut self, metadata: Metadata) -> Cow<Metadata> {
         self.data.contacts_sync_request_at = metadata.contacts_sync_request_at;
-        if let Err(e) = self.save() {
-            error!(error =% e, "failed to save storage");
-        }
+        self.is_dirty = true;
         Cow::Owned(metadata)
     }
 }
@@ -312,7 +310,7 @@ mod tests {
         channel.unread_messages = 23;
 
         let stored_channel = storage.store_channel(channel);
-        assert_eq!(stored_channel.id, id.into());
+        assert_eq!(stored_channel.id, id);
         assert_eq!(stored_channel.name, "new name");
         assert_eq!(stored_channel.unread_messages, 23);
 
@@ -322,7 +320,7 @@ mod tests {
         assert_eq!(storage.channel(channels[1].id).unwrap().id, channels[1].id);
 
         let channel = storage.channel(channels[0].id).unwrap();
-        assert_eq!(channel.id, id.into());
+        assert_eq!(channel.id, id);
         assert_eq!(channel.name, "new name");
         assert_eq!(channel.unread_messages, 23);
     }
@@ -344,7 +342,7 @@ mod tests {
         assert_eq!(storage.channel(channels[0].id).unwrap().id, channels[0].id);
         assert_eq!(storage.channel(channels[1].id).unwrap().id, channels[1].id);
         let channel = storage.channel(channels[2].id).unwrap();
-        assert_eq!(channel.id, id.into());
+        assert_eq!(channel.id, id);
         assert_eq!(channel.name, "test");
         assert_eq!(channel.unread_messages, 42);
     }

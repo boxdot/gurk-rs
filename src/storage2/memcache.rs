@@ -87,7 +87,7 @@ impl<S: Storage> Storage for MemCache<S> {
     fn messages<'s>(
         &'s self,
         channel_id: ChannelId,
-    ) -> Box<dyn Iterator<Item = Cow<Message>> + 's> {
+    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + 's> {
         if let Some(messages) = self.messages.get(&channel_id) {
             Box::new(messages.iter().map(Cow::Borrowed))
         } else {

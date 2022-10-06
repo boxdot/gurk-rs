@@ -4,7 +4,6 @@ use regex_automata::Regex;
 use serde::{Deserialize, Serialize};
 use tui::widgets::ListState;
 
-use crate::data::Channel;
 use crate::MESSAGE_SCROLL_BACK;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,8 +57,8 @@ impl<T> Default for StatefulList<T> {
     }
 }
 
-impl FilteredStatefulList<Channel> {
-    pub fn filter(&mut self, filter: impl Fn(&Channel) -> bool) {
+impl<T> FilteredStatefulList<T> {
+    pub fn filter(&mut self, filter: impl Fn(&T) -> bool) {
         self.filter_elements(filter);
         // Update the selected message to not got past the bound of `self.filtered_items`
         self.state.select(if self.filtered_items.is_empty() {
@@ -156,6 +155,11 @@ impl<T> StatefulList<T> {
         };
         self.state.select(Some(i));
     }
+
+    pub fn selected_item(&self) -> Option<&T> {
+        let idx = self.state.selected()?;
+        Some(&self.items[idx])
+    }
 }
 
 impl<T> FilteredStatefulList<T> {
@@ -247,6 +251,11 @@ impl<T> FilteredStatefulList<T> {
             }
         };
         self.state.select(Some(i));
+    }
+
+    pub fn selected_item(&self) -> Option<&T> {
+        let idx = self.state.selected()?;
+        Some(&self.items[idx])
     }
 }
 
