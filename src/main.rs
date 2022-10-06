@@ -9,9 +9,9 @@ mod receipt;
 mod shortcuts;
 mod signal;
 mod storage;
+mod storage2;
 mod ui;
 mod util;
-mod storage2;
 
 use app::App;
 

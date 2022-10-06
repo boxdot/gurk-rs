@@ -22,7 +22,10 @@ expression: data
             "receipt": "Nothing"
           }
         ],
-        "unread_messages": 1
+        "unread_messages": 1,
+        "typing": {
+          "SingleTyping": false
+        }
       },
       {
         "id": {
@@ -74,8 +77,13 @@ expression: data
             "receipt": "Nothing"
           }
         ],
-        "unread_messages": 2
+        "unread_messages": 2,
+        "typing": {
+          "GroupTyping": []
+        }
       }
     ]
-  }
+  },
+  "names": {},
+  "contacts_sync_request_at": null
 }
