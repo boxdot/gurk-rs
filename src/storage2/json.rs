@@ -1,10 +1,12 @@
 use std::borrow::Cow;
+use std::collections::hash_map::Entry;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 use tracing::{error, info};
+use uuid::Uuid;
 
 use crate::data::{AppData, Channel, ChannelId, Message};
 
@@ -164,6 +166,38 @@ impl Storage for JsonStorage {
         }
         Cow::Borrowed(&self.data.channels.items[channel_idx].messages.items[idx])
     }
+
+    fn names<'s>(&'s self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + 's> {
+        Box::new(
+            self.data
+                .names
+                .iter()
+                .map(|(id, name)| (*id, name.as_str().into())),
+        )
+    }
+
+    fn name(&self, id: Uuid) -> Option<Cow<str>> {
+        self.data
+            .names
+            .get(&id)
+            .map(String::as_str)
+            .map(Cow::Borrowed)
+    }
+
+    fn store_name(&mut self, id: Uuid, name: String) -> Cow<str> {
+        match self.data.names.entry(id) {
+            Entry::Vacant(entry) => {
+                entry.insert(name);
+            }
+            Entry::Occupied(mut entry) => {
+                entry.insert(name);
+            }
+        }
+        if let Err(e) = self.save() {
+            error!(error =% e, "failed to save storage");
+        }
+        Cow::Borrowed(&self.data.names[&id])
+    }
 }
 
 #[cfg(test)]
@@ -213,12 +247,21 @@ mod tests {
             unread_messages: 2,
             typing: TypingSet::GroupTyping(Default::default()),
         };
+        let names = [
+            (user_id1, "ellie".to_string()),
+            (user_id2, "joel".to_string()),
+        ];
         let data = AppData {
             channels: FilteredStatefulList::_with_items(vec![channel1, channel2]),
-            names: Default::default(),
+            names: names.into_iter().collect(),
             contacts_sync_request_at: Default::default(),
         };
-        insta::assert_json_snapshot!(data);
+
+        let mut settings = insta::Settings::clone_current();
+        settings.set_sort_maps(true);
+        settings.bind(|| {
+            insta::assert_json_snapshot!(data);
+        });
     }
 
     fn json_storage_from_snapshot() -> impl Storage {
@@ -354,5 +397,23 @@ mod tests {
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[1].arrived_at, arrived_at);
         assert_eq!(messages[1].message.as_deref(), Some("new msg"));
+    }
+
+    #[test]
+    fn test_json_storage_names() {
+        let mut storage = json_storage_from_snapshot();
+        let id1: Uuid = "966960e0-a8cd-43f1-ac7a-2c986dd470cd".parse().unwrap();
+        let id2: Uuid = "a955d20f-6b83-4e69-846e-a99b1779ff7a".parse().unwrap();
+        let id3: Uuid = "91a6315b-027c-44ce-bacb-4d5cf012ba8c".parse().unwrap();
+
+        assert_eq!(storage.names().count(), 2);
+        assert_eq!(storage.name(id1).unwrap(), "ellie");
+        assert_eq!(storage.name(id2).unwrap(), "joel");
+
+        assert_eq!(storage.store_name(id3, "abby".to_string()), "abby");
+        assert_eq!(storage.names().count(), 3);
+        assert_eq!(storage.name(id1).unwrap(), "ellie");
+        assert_eq!(storage.name(id2).unwrap(), "joel");
+        assert_eq!(storage.name(id3).unwrap(), "abby");
     }
 }

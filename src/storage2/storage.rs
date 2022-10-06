@@ -1,5 +1,7 @@
 use std::borrow::Cow;
 
+use uuid::Uuid;
+
 use crate::data::{Channel, ChannelId, Message};
 
 pub trait Storage {
@@ -11,6 +13,10 @@ pub trait Storage {
         -> Box<dyn Iterator<Item = Cow<Message>> + 's>;
     fn message(&self, message_id: MessageId) -> Option<Cow<Message>>;
     fn store_message(&mut self, channel_id: ChannelId, message: Message) -> Cow<Message>;
+
+    fn names<'s>(&'s self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + 's>;
+    fn name(&self, id: Uuid) -> Option<Cow<str>>;
+    fn store_name(&mut self, id: Uuid, name: String) -> Cow<str>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

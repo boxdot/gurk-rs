@@ -4,6 +4,8 @@ use std::borrow::Cow;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 
+use uuid::Uuid;
+
 use crate::data::{Channel, ChannelId, Message};
 
 use super::{MessageId, Storage};
@@ -13,6 +15,7 @@ pub struct MemCache<S: Storage> {
     channels_index: BTreeMap<ChannelId, usize>,
     messages: BTreeMap<ChannelId, Vec<Message>>,
     messages_index: BTreeMap<MessageId, usize>,
+    names: BTreeMap<Uuid, String>,
     storage: S,
 }
 
@@ -35,11 +38,17 @@ impl<S: Storage> MemCache<S> {
             channels.push(channel.clone().into_owned());
         }
 
+        let names = storage
+            .names()
+            .map(|(id, name)| (id, name.into_owned()))
+            .collect();
+
         Self {
             channels,
             channels_index,
             messages,
             messages_index,
+            names,
             storage,
         }
     }
@@ -103,5 +112,29 @@ impl<S: Storage> Storage for MemCache<S> {
             }
         }
         self.storage.store_message(channel_id, message)
+    }
+
+    fn names<'s>(&'s self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + 's> {
+        Box::new(
+            self.names
+                .iter()
+                .map(|(id, name)| (*id, name.as_str().into())),
+        )
+    }
+
+    fn name(&self, id: Uuid) -> Option<Cow<str>> {
+        self.names.get(&id).map(String::as_str).map(Cow::Borrowed)
+    }
+
+    fn store_name(&mut self, id: Uuid, name: String) -> Cow<str> {
+        let name = match self.names.entry(id) {
+            Entry::Vacant(entry) => entry.insert(name),
+            Entry::Occupied(mut entry) => {
+                entry.insert(name);
+                entry.into_mut()
+            }
+        };
+
+        Cow::Borrowed(name)
     }
 }
