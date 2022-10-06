@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::receipt::Receipt;
 use crate::signal::{Attachment, GroupIdentifierBytes, GroupMasterKeyBytes};
-use crate::util::{FilteredStatefulList, StatefulList};
+use crate::util::FilteredStatefulList;
 
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppData {
@@ -34,8 +34,7 @@ pub struct Channel {
     pub id: ChannelId,
     pub name: String,
     pub group_data: Option<GroupData>,
-    #[serde(serialize_with = "Channel::serialize_msgs")]
-    pub messages: StatefulList<Message>,
+    pub messages: Vec<Message>,
     pub unread_messages: usize,
     pub typing: TypingSet,
 }
@@ -49,17 +48,13 @@ pub enum TypingSet {
 /// Proxy type which allows us to apply post-deserialization conversion.
 ///
 /// Used to migrate the schema. Change this type only in backwards-compatible way.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct JsonChannel {
     pub id: ChannelId,
     pub name: String,
     #[serde(default)]
     pub group_data: Option<GroupData>,
-    #[serde(
-        serialize_with = "Channel::serialize_msgs",
-        deserialize_with = "Channel::deserialize_msgs"
-    )]
-    pub messages: StatefulList<Message>,
+    pub messages: Vec<Message>,
     #[serde(default)]
     pub unread_messages: usize,
 }
@@ -128,31 +123,6 @@ impl Channel {
             ChannelId::User(id) => Some(id),
             ChannelId::Group(_) => None,
         }
-    }
-
-    pub fn selected_message(&self) -> Option<&Message> {
-        // Messages are shown in reversed order => selected is reversed
-        self.messages
-            .state
-            .selected()
-            .and_then(|idx| self.messages.items.len().checked_sub(idx + 1))
-            .and_then(|idx| self.messages.items.get(idx))
-    }
-
-    fn serialize_msgs<S>(messages: &StatefulList<Message>, ser: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::ser::Serializer,
-    {
-        // the messages StatefulList becomes the vec that was messages.items
-        messages.items.serialize(ser)
-    }
-
-    fn deserialize_msgs<'de, D>(deserializer: D) -> Result<StatefulList<Message>, D::Error>
-    where
-        D: serde::de::Deserializer<'de>,
-    {
-        let tmp: Vec<Message> = serde::de::Deserialize::deserialize(deserializer)?;
-        Ok(StatefulList::with_items(tmp))
     }
 }
 

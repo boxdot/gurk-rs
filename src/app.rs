@@ -321,10 +321,10 @@ impl App {
             .storage
             .channel(channel_id)
             .expect("non-existent channel");
-        let quote = channel.selected_message();
-        let sent_message = self
-            .signal_manager
-            .send_text(&*channel, input, quote, attachments);
+        let quote = self.selected_message();
+        let sent_message =
+            self.signal_manager
+                .send_text(&*channel, input, quote.as_deref(), attachments);
 
         let sent_message = self.storage.store_message(channel_id, sent_message);
         self.messages

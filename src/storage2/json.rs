@@ -45,10 +45,7 @@ impl JsonStorage {
 
         // invariant: messages are sorted by arrived_at
         for channel in &mut data.channels.items {
-            channel
-                .messages
-                .items
-                .sort_unstable_by_key(|msg| msg.arrived_at);
+            channel.messages.sort_unstable_by_key(|msg| msg.arrived_at);
         }
 
         Ok(Self {
@@ -119,7 +116,7 @@ impl Storage for JsonStorage {
             .iter()
             .find(|ch| ch.id == channel_id)
         {
-            Box::new(channel.messages.items.iter().map(Cow::Borrowed))
+            Box::new(channel.messages.iter().map(Cow::Borrowed))
         } else {
             Box::new(std::iter::empty())
         }
@@ -134,7 +131,6 @@ impl Storage for JsonStorage {
             .find(|ch| ch.id == message_id.channel_id)?;
         let message = channel
             .messages
-            .items
             .iter()
             .find(|message| message.arrived_at == message_id.arrived_at)?;
         Some(Cow::Borrowed(message))
@@ -152,22 +148,21 @@ impl Storage for JsonStorage {
             let channel = &mut self.data.channels.items[channel_idx];
             match channel
                 .messages
-                .items
                 .binary_search_by_key(&message.arrived_at, |msg| msg.arrived_at)
             {
                 Ok(idx) => {
-                    let stored_message = &mut channel.messages.items[idx];
+                    let stored_message = &mut channel.messages[idx];
                     *stored_message = message;
                     idx
                 }
                 Err(idx) => {
-                    channel.messages.items.insert(idx, message);
+                    channel.messages.insert(idx, message);
                     idx
                 }
             }
         };
         self.is_dirty = true;
-        Cow::Borrowed(&self.data.channels.items[channel_idx].messages.items[idx])
+        Cow::Borrowed(&self.data.channels.items[channel_idx].messages[idx])
     }
 
     fn names<'s>(&'s self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + 's> {
@@ -226,7 +221,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::data::TypingSet;
-    use crate::util::{FilteredStatefulList, StatefulList};
+    use crate::util::FilteredStatefulList;
 
     use super::*;
 
@@ -239,7 +234,7 @@ mod tests {
             id: user_id1.into(),
             name: "direct-channel".to_string(),
             group_data: None,
-            messages: StatefulList::with_items(vec![Message {
+            messages: vec![Message {
                 from_id: user_id2,
                 message: Some("hello".into()),
                 arrived_at: 1664832050000,
@@ -247,7 +242,7 @@ mod tests {
                 attachments: Default::default(),
                 reactions: Default::default(),
                 receipt: Default::default(),
-            }]),
+            }],
             unread_messages: 1,
             typing: TypingSet::SingleTyping(false),
         };
@@ -255,7 +250,7 @@ mod tests {
             id: ChannelId::Group(*b"4149b9686807fdb4a8c95d9b5413bbcd"),
             name: "group-channel".to_string(),
             group_data: None,
-            messages: StatefulList::with_items(vec![Message {
+            messages: vec![Message {
                 from_id: user_id3,
                 message: Some("world".into()),
                 arrived_at: 1664832050001,
@@ -263,7 +258,7 @@ mod tests {
                 attachments: Default::default(),
                 reactions: Default::default(),
                 receipt: Default::default(),
-            }]),
+            }],
             unread_messages: 2,
             typing: TypingSet::GroupTyping(Default::default()),
         };
@@ -272,7 +267,7 @@ mod tests {
             (user_id2, "joel".to_string()),
         ];
         let data = AppData {
-            channels: FilteredStatefulList::_with_items(vec![channel1, channel2]),
+            channels: FilteredStatefulList::with_items(vec![channel1, channel2]),
             names: names.into_iter().collect(),
             contacts_sync_request_at: DateTime::parse_from_rfc3339("2000-01-01T00:00:00Z")
                 .ok()

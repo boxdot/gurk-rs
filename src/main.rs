@@ -8,7 +8,6 @@ mod input;
 mod receipt;
 mod shortcuts;
 mod signal;
-mod storage;
 mod storage2;
 mod ui;
 mod util;

@@ -100,14 +100,6 @@ impl<'a, T> Iterator for StatefulIterator<'a, T> {
 }
 
 impl<T> StatefulList<T> {
-    pub fn with_items(items: Vec<T>) -> StatefulList<T> {
-        StatefulList {
-            state: ListState::default(),
-            items,
-            rendered: Default::default(),
-        }
-    }
-
     pub fn next(&mut self) {
         let i = match self.state.selected() {
             Some(i) => {
@@ -170,7 +162,8 @@ impl<T> FilteredStatefulList<T> {
         }
     }
 
-    pub fn _with_items(items: Vec<T>) -> FilteredStatefulList<T> {
+    #[cfg(test)]
+    pub fn with_items(items: Vec<T>) -> FilteredStatefulList<T> {
         FilteredStatefulList {
             state: ListState::default(),
             items,
