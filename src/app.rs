@@ -71,12 +71,9 @@ impl App {
         let mut messages: BTreeMap<_, StatefulList<_>> = BTreeMap::new();
         for channel in storage.channels() {
             channels.items.push(channel.id);
+            let channel_messages = &mut messages.entry(channel.id).or_default().items;
             for message in storage.messages(channel.id) {
-                messages
-                    .entry(channel.id)
-                    .or_default()
-                    .items
-                    .push(message.arrived_at);
+                channel_messages.push(message.arrived_at);
             }
         }
         channels.items.sort_unstable_by_key(|channel_id| {
@@ -247,7 +244,7 @@ impl App {
     fn selected_message(&self) -> Option<Cow<Message>> {
         // Messages are shown in reversed order => selected is reversed
         let channel_id = self.channels.selected_item()?;
-        let messages = self.messages.get(&channel_id)?;
+        let messages = self.messages.get(channel_id)?;
         let idx = messages.state.selected()?;
         let idx = messages.items.len().checked_sub(idx + 1)?;
         let arrived_at = messages.items.get(idx)?;
@@ -996,7 +993,6 @@ impl App {
                 id: channel_id,
                 name,
                 group_data: Some(group_data),
-                messages: Default::default(),
                 unread_messages: 0,
                 typing: TypingSet::GroupTyping(Default::default()),
             };
@@ -1071,7 +1067,6 @@ impl App {
                 id: user_id.into(),
                 name: self.config.user.name.clone(),
                 group_data: None,
-                messages: Default::default(),
                 unread_messages: 0,
                 typing: TypingSet::SingleTyping(false),
             };
@@ -1106,7 +1101,6 @@ impl App {
                 id: uuid.into(),
                 name: name.to_string(),
                 group_data: None,
-                messages: Default::default(),
                 unread_messages: 0,
                 typing: TypingSet::SingleTyping(false),
             };
@@ -1354,7 +1348,6 @@ mod tests {
                 members: vec![signal_manager.user_id()],
                 revision: 1,
             }),
-            messages: Default::default(),
             unread_messages: 1,
             typing: TypingSet::GroupTyping(Default::default()),
         };

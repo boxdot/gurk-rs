@@ -210,7 +210,10 @@ fn prepare_receipts(app: &mut App, height: usize) {
         Some(channel_id) => *channel_id,
         None => return,
     };
-    let messages = &app.messages[&channel_id];
+    let messages = match app.messages.get(&channel_id) {
+        Some(messages) => messages,
+        None => return,
+    };
     if messages.items.is_empty() {
         return;
     }

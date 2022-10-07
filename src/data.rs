@@ -1,9 +1,8 @@
 //! Part of the app which is serialized
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use anyhow::anyhow;
-use chrono::{DateTime, Utc};
 use presage::prelude::proto::data_message::Quote;
 use presage::prelude::{GroupMasterKey, GroupSecretParams};
 use serde::{Deserialize, Serialize};
@@ -12,83 +11,20 @@ use uuid::Uuid;
 
 use crate::receipt::Receipt;
 use crate::signal::{Attachment, GroupIdentifierBytes, GroupMasterKeyBytes};
-use crate::util::FilteredStatefulList;
 
-#[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AppData {
-    pub channels: FilteredStatefulList<Channel>,
-    /// Names retrieved from:
-    /// - profiles, when registered as main device)
-    /// - contacts, when linked as secondary device
-    /// - UUID when both have failed
-    ///
-    /// Do not use directly, use [`App::name_by_id`] instead.
-    pub names: HashMap<Uuid, String>,
-    #[serde(default)]
-    pub contacts_sync_request_at: Option<DateTime<Utc>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(try_from = "JsonChannel")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Channel {
     pub id: ChannelId,
     pub name: String,
     pub group_data: Option<GroupData>,
-    pub messages: Vec<Message>,
     pub unread_messages: usize,
     pub typing: TypingSet,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypingSet {
     SingleTyping(bool),
     GroupTyping(HashSet<Uuid>),
-}
-
-/// Proxy type which allows us to apply post-deserialization conversion.
-///
-/// Used to migrate the schema. Change this type only in backwards-compatible way.
-#[derive(Debug, Clone, Deserialize)]
-pub struct JsonChannel {
-    pub id: ChannelId,
-    pub name: String,
-    #[serde(default)]
-    pub group_data: Option<GroupData>,
-    pub messages: Vec<Message>,
-    #[serde(default)]
-    pub unread_messages: usize,
-}
-
-impl TryFrom<JsonChannel> for Channel {
-    type Error = anyhow::Error;
-    fn try_from(channel: JsonChannel) -> anyhow::Result<Self> {
-        let is_group = channel.group_data.is_some();
-        let mut channel = Channel {
-            id: channel.id,
-            name: channel.name,
-            group_data: channel.group_data,
-            messages: channel.messages,
-            unread_messages: channel.unread_messages,
-            typing: {
-                if is_group {
-                    TypingSet::GroupTyping(HashSet::new())
-                } else {
-                    TypingSet::SingleTyping(false)
-                }
-            },
-        };
-
-        // 1. The master key in ChannelId::Group was replaced by group identifier,
-        // the former was stored in group_data.
-        match (channel.id, channel.group_data.as_mut()) {
-            (ChannelId::Group(id), Some(group_data)) if group_data.master_key_bytes == [0; 32] => {
-                group_data.master_key_bytes = id;
-                channel.id = ChannelId::from_master_key_bytes(id)?;
-            }
-            _ => (),
-        }
-        Ok(channel)
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

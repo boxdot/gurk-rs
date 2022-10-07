@@ -22,10 +22,7 @@ expression: data
             "receipt": "Nothing"
           }
         ],
-        "unread_messages": 1,
-        "typing": {
-          "SingleTyping": false
-        }
+        "unread_messages": 1
       },
       {
         "id": {
@@ -77,10 +74,7 @@ expression: data
             "receipt": "Nothing"
           }
         ],
-        "unread_messages": 2,
-        "typing": {
-          "GroupTyping": []
-        }
+        "unread_messages": 2
       }
     ]
   },

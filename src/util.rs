@@ -157,16 +157,6 @@ impl<T> FilteredStatefulList<T> {
         }
     }
 
-    #[cfg(test)]
-    pub fn with_items(items: Vec<T>) -> FilteredStatefulList<T> {
-        FilteredStatefulList {
-            state: ListState::default(),
-            items,
-            filtered_items: Default::default(),
-            rendered: Default::default(),
-        }
-    }
-
     pub fn _get(&self, index: usize) -> Option<&T> {
         if let Some(i) = self.filtered_items.get(index) {
             self.items.get(*i)

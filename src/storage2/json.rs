@@ -1,22 +1,92 @@
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 use uuid::Uuid;
 
-use crate::data::{AppData, Channel, ChannelId, Message};
+use crate::data::{Channel, ChannelId, GroupData, Message, TypingSet};
 
 use super::storage::Metadata;
 use super::{MessageId, Storage};
 
 pub struct JsonStorage {
     data_path: PathBuf,
-    data: AppData,
+    data: JsonStorageData,
     is_dirty: bool,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct JsonStorageData {
+    channels: JsonChannels,
+    /// Names retrieved from:
+    /// - profiles, when registered as main device)
+    /// - contacts, when linked as secondary device
+    /// - UUID when both have failed
+    ///
+    /// Do not use directly, use [`App::name_by_id`] instead.
+    names: HashMap<Uuid, String>,
+    #[serde(default)]
+    contacts_sync_request_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct JsonChannels {
+    items: Vec<JsonChannel>,
+}
+
+/// Proxy type which allows us to apply post-deserialization conversion.
+///
+/// Used to migrate the schema. Change this type only in backwards-compatible way.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JsonChannel {
+    id: ChannelId,
+    name: String,
+    #[serde(default)]
+    group_data: Option<GroupData>,
+    messages: Vec<Message>,
+    #[serde(default)]
+    unread_messages: usize,
+    #[serde(skip)]
+    typing: Option<TypingSet>,
+}
+
+impl From<&JsonChannel> for Channel {
+    fn from(channel: &JsonChannel) -> Self {
+        let is_group = channel.group_data.is_some();
+        Self {
+            id: channel.id,
+            name: channel.name.clone(),
+            group_data: channel.group_data.clone(),
+            unread_messages: channel.unread_messages,
+            typing: channel.typing.clone().unwrap_or_else(|| {
+                if !is_group {
+                    TypingSet::SingleTyping(false)
+                } else {
+                    TypingSet::GroupTyping(Default::default())
+                }
+            }),
+        }
+    }
+}
+
+impl From<(Channel, Vec<Message>)> for JsonChannel {
+    fn from((channel, messages): (Channel, Vec<Message>)) -> Self {
+        Self {
+            id: channel.id,
+            name: channel.name,
+            group_data: channel.group_data,
+            messages,
+            unread_messages: channel.unread_messages,
+            typing: Some(channel.typing),
+        }
+    }
 }
 
 impl JsonStorage {
@@ -43,8 +113,20 @@ impl JsonStorage {
             Self::load_data_from(data_path).unwrap_or_default()
         };
 
-        // invariant: messages are sorted by arrived_at
         for channel in &mut data.channels.items {
+            // migration:
+            // The master key in ChannelId::Group was replaced by group identifier,
+            // the former was stored in group_data.
+            match (channel.id, channel.group_data.as_mut()) {
+                (ChannelId::Group(id), Some(group_data))
+                    if group_data.master_key_bytes == [0; 32] =>
+                {
+                    group_data.master_key_bytes = id;
+                    channel.id = ChannelId::from_master_key_bytes(id)?;
+                }
+                _ => (),
+            }
+            // invariant: messages are sorted by arrived_at
             channel.messages.sort_unstable_by_key(|msg| msg.arrived_at);
         }
 
@@ -55,7 +137,7 @@ impl JsonStorage {
         })
     }
 
-    fn load_data_from(data_path: &Path) -> anyhow::Result<AppData> {
+    fn load_data_from(data_path: &Path) -> anyhow::Result<JsonStorageData> {
         info!("loading app data from: {}", data_path.display());
         let f = BufReader::new(File::open(data_path)?);
         Ok(serde_json::from_reader(f)?)
@@ -74,7 +156,14 @@ impl JsonStorage {
 
 impl Storage for JsonStorage {
     fn channels<'s>(&'s self) -> Box<dyn Iterator<Item = Cow<Channel>> + 's> {
-        Box::new(self.data.channels.items.iter().map(Cow::Borrowed))
+        Box::new(
+            self.data
+                .channels
+                .items
+                .iter()
+                .map(Into::into)
+                .map(Cow::Owned),
+        )
     }
 
     fn channel(&self, channel_id: ChannelId) -> Option<Cow<Channel>> {
@@ -83,7 +172,8 @@ impl Storage for JsonStorage {
             .items
             .iter()
             .find(|channel| channel.id == channel_id)
-            .map(Cow::Borrowed)
+            .map(Into::into)
+            .map(Cow::Owned)
     }
 
     fn store_channel(&mut self, channel: Channel) -> Cow<Channel> {
@@ -95,14 +185,17 @@ impl Storage for JsonStorage {
             .position(|ch| ch.id == channel.id)
         {
             let stored_channel = &mut self.data.channels.items[idx];
-            *stored_channel = channel;
+            let messages = std::mem::take(&mut stored_channel.messages);
+            *stored_channel = (channel, messages).into();
             idx
         } else {
+            let channel = (channel, Vec::new()).into();
+            let idx = self.data.channels.items.len();
             self.data.channels.items.push(channel);
-            self.data.channels.items.len() - 1
+            idx
         };
         self.is_dirty = true;
-        Cow::Borrowed(&self.data.channels.items[channel_idx])
+        Cow::Owned(Channel::from(&self.data.channels.items[channel_idx]))
     }
 
     fn messages<'s>(
@@ -221,7 +314,6 @@ mod tests {
     use uuid::Uuid;
 
     use crate::data::TypingSet;
-    use crate::util::FilteredStatefulList;
 
     use super::*;
 
@@ -230,7 +322,7 @@ mod tests {
         let user_id1: Uuid = "966960e0-a8cd-43f1-ac7a-2c986dd470cd".parse().unwrap();
         let user_id2: Uuid = "a955d20f-6b83-4e69-846e-a99b1779ff7a".parse().unwrap();
         let user_id3: Uuid = "ac9b8aa1-691a-47e1-a566-d3e942945d07".parse().unwrap();
-        let channel1 = Channel {
+        let channel1 = JsonChannel {
             id: user_id1.into(),
             name: "direct-channel".to_string(),
             group_data: None,
@@ -244,9 +336,9 @@ mod tests {
                 receipt: Default::default(),
             }],
             unread_messages: 1,
-            typing: TypingSet::SingleTyping(false),
+            typing: Some(TypingSet::SingleTyping(false)),
         };
-        let channel2 = Channel {
+        let channel2 = JsonChannel {
             id: ChannelId::Group(*b"4149b9686807fdb4a8c95d9b5413bbcd"),
             name: "group-channel".to_string(),
             group_data: None,
@@ -260,14 +352,16 @@ mod tests {
                 receipt: Default::default(),
             }],
             unread_messages: 2,
-            typing: TypingSet::GroupTyping(Default::default()),
+            typing: Some(TypingSet::GroupTyping(Default::default())),
         };
         let names = [
             (user_id1, "ellie".to_string()),
             (user_id2, "joel".to_string()),
         ];
-        let data = AppData {
-            channels: FilteredStatefulList::with_items(vec![channel1, channel2]),
+        let data = JsonStorageData {
+            channels: JsonChannels {
+                items: vec![channel1, channel2],
+            },
             names: names.into_iter().collect(),
             contacts_sync_request_at: DateTime::parse_from_rfc3339("2000-01-01T00:00:00Z")
                 .ok()
@@ -334,7 +428,6 @@ mod tests {
             id: id.into(),
             name: "test".to_string(),
             group_data: None,
-            messages: Default::default(),
             unread_messages: 42,
             typing: TypingSet::SingleTyping(false),
         });
