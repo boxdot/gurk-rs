@@ -377,7 +377,7 @@ mod tests {
 
     fn json_storage_from_snapshot() -> impl Storage {
         let json =
-            include_str!("snapshots/gurk__storage2__json__tests__json_storage_data_model.snap")
+            include_str!("snapshots/gurk__storage__json__tests__json_storage_data_model.snap")
                 .rsplit("---")
                 .next()
                 .unwrap();

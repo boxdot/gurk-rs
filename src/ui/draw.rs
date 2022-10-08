@@ -17,7 +17,7 @@ use crate::cursor::Cursor;
 use crate::data::Message;
 use crate::receipt::{Receipt, ReceiptEvent};
 use crate::shortcuts::{ShortCut, SHORTCUTS};
-use crate::storage2::MessageId;
+use crate::storage::MessageId;
 use crate::util::utc_timestamp_msec_to_local;
 use crate::App;
 

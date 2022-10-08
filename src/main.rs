@@ -8,7 +8,7 @@ mod input;
 mod receipt;
 mod shortcuts;
 mod signal;
-mod storage2;
+mod storage;
 mod ui;
 mod util;
 
@@ -32,7 +32,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use self::storage2::JsonStorage;
+use self::storage::JsonStorage;
 
 const TARGET_FPS: u64 = 144;
 const RECEIPT_TICK_PERIOD: u64 = 144;

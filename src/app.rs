@@ -5,7 +5,7 @@ use crate::receipt::{Receipt, ReceiptEvent, ReceiptHandler};
 use crate::signal::{
     Attachment, GroupIdentifierBytes, GroupMasterKeyBytes, ProfileKey, ResolvedGroup, SignalManager,
 };
-use crate::storage2::{MessageId, Storage};
+use crate::storage::{MessageId, Storage};
 use crate::util::{
     self, FilteredStatefulList, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX,
 };
@@ -1328,7 +1328,7 @@ mod tests {
     use crate::config::User;
     use crate::data::GroupData;
     use crate::signal::test::SignalManagerMock;
-    use crate::storage2::{ForgetfulStorage, MemCache};
+    use crate::storage::{ForgetfulStorage, MemCache};
 
     use std::cell::RefCell;
     use std::rc::Rc;
