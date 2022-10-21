@@ -36,7 +36,7 @@ fn get_version() -> Result<Version> {
 }
 
 fn extract_section(changelog: &str, version: Version) -> Result<&str> {
-    let parser = Parser::new(&changelog);
+    let parser = Parser::new(changelog);
     let h2 = parser.into_offset_iter().filter_map(|(event, range)| {
         if let Event::Start(Tag::Heading(2)) = event {
             Some(range)

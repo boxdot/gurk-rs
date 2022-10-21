@@ -38,6 +38,7 @@ const TARGET_FPS: u64 = 144;
 const RECEIPT_TICK_PERIOD: u64 = 144;
 const FRAME_BUDGET: Duration = Duration::from_millis(1000 / TARGET_FPS);
 const RECEIPT_BUDGET: Duration = Duration::from_millis(RECEIPT_TICK_PERIOD * 1000 / TARGET_FPS);
+const EXPIRE_BUDGET: Duration = Duration::from_millis(10_000);
 const MESSAGE_SCROLL_BACK: bool = false;
 
 #[derive(Debug, StructOpt)]
@@ -89,7 +90,8 @@ pub enum Event {
     Message(Content),
     Resize { cols: u16, rows: u16 },
     Quit(Option<anyhow::Error>),
-    Tick,
+    ReceiptTick,
+    ExpireTick,
 }
 
 async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
@@ -172,14 +174,27 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
     let mut last_render_at = Instant::now();
     let is_render_spawned = Arc::new(AtomicBool::new(false));
 
-    let tick_tx = tx.clone();
+    let receipt_tick_tx = tx.clone();
     // Tick to trigger receipt sending
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(RECEIPT_BUDGET);
         loop {
             interval.tick().await;
-            tick_tx
-                .send(Event::Tick)
+            receipt_tick_tx
+                .send(Event::ReceiptTick)
+                .await
+                .expect("Cannot tick: events channel closed.");
+        }
+    });
+
+    let expire_tick_tx = tx.clone();
+    // Tick to trigger receipt sending
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(EXPIRE_BUDGET);
+        loop {
+            interval.tick().await;
+            expire_tick_tx
+                .send(Event::ReceiptTick)
                 .await
                 .expect("Cannot tick: events channel closed.");
         }
@@ -210,8 +225,12 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
         }
 
         match rx.recv().await {
-            Some(Event::Tick) => {
+            Some(Event::ReceiptTick) => {
                 let _ = app.step_receipts();
+                // TODO Handle expired messages
+            }
+            Some(Event::ExpireTick) => {
+                // Check for expired messages
             }
             Some(Event::Click(event)) => match event.kind {
                 MouseEventKind::Down(MouseButton::Left) => {

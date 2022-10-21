@@ -1,6 +1,6 @@
 //! Part of the app which is serialized
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BinaryHeap, HashMap, HashSet};
 
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
@@ -28,6 +28,26 @@ pub struct AppData {
     pub contacts_sync_request_at: Option<DateTime<Utc>>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Default, PartialEq, Eq)]
+pub struct MessageCounter {
+    inner: u64,
+}
+
+impl MessageCounter {
+    pub fn new() -> Self {
+        Self { inner: 0 }
+    }
+
+    pub fn next(&mut self) -> u64 {
+        let (n, ovf) = self.inner.overflowing_add(1);
+        if ovf {
+            tracing::error!("Reached max message id (2^64 messages?!)");
+            panic!("Message id overflow.")
+        }
+        n
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "JsonChannel")]
 pub struct Channel {
@@ -39,6 +59,7 @@ pub struct Channel {
     pub unread_messages: usize,
     pub typing: TypingSet,
     pub expire_timer: Option<u32>,
+    pub counter: MessageCounter,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -63,6 +84,8 @@ pub struct JsonChannel {
     // Default to `None`
     #[serde(default)]
     pub expire_timestamp: Option<u32>,
+    #[serde(default)]
+    pub counter: MessageCounter,
 }
 
 impl TryFrom<JsonChannel> for Channel {
@@ -83,6 +106,7 @@ impl TryFrom<JsonChannel> for Channel {
                 }
             },
             expire_timer: channel.expire_timestamp,
+            counter: MessageCounter::new(),
         };
 
         // 1. The master key in ChannelId::Group was replaced by group identifier,
@@ -237,13 +261,12 @@ pub struct Message {
     /// The timestamp at which the message should get deleted
     #[serde(default)]
     pub expire_timestamp: ExpireTimer,
+    /// Id of the message on the channel
+    #[serde(default)]
+    pub id: Option<u64>,
 }
 
 impl Message {
-    // sdsd
-    // FIXME Expiration start timestamp is not always [`now()`]
-    // On the case of a sync'ed message, the start timestamp is sooner in the past.
-    // See https://github.com/signalapp/Signal-Desktop/blob/190cd9408b67de68a74096f37bff5b2dc9dd3674/protos/SignalService.proto#L404
     pub fn new(
         from_id: Uuid,
         message: Option<String>,
@@ -302,4 +325,9 @@ impl ExpireTimer {
             delay_s.map(|d| d as u64 * 1_000 + start.unwrap_or_else(utc_now_timestamp_msec)),
         )
     }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ExpireController {
+    queue: BinaryHeap<u32>,
 }
