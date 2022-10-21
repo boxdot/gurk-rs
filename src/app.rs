@@ -1,5 +1,7 @@
 use crate::config::Config;
-use crate::data::{AppData, Channel, ChannelId, ExpireTimer, Message, TypingAction, TypingSet};
+use crate::data::{
+    AppData, Channel, ChannelId, ExpireTimer, Message, MessageCounter, TypingAction, TypingSet,
+};
 use crate::input::Input;
 use crate::receipt::{Receipt, ReceiptEvent, ReceiptHandler};
 use crate::signal::{Attachment, GroupMasterKeyBytes, ProfileKey, ResolvedGroup, SignalManager};
@@ -365,7 +367,9 @@ impl App {
                 let expiration =
                     ExpireTimer::from_delay_now(self.get_channel(channel_idx).expire_timer);
 
-                let message = Message::new(user_id, body, timestamp, attachments, expiration);
+                let id = self.get_channel(channel_idx).counter.next();
+
+                let message = Message::new(user_id, body, timestamp, attachments, expiration, id);
                 (channel_idx, message)
             }
             // Direct/group message by us from a different device
@@ -430,14 +434,16 @@ impl App {
                 let expire_timestamp =
                     ExpireTimer::from_delay_and_start(expire_timer, expiration_start_timestamp);
 
+                let id = self.get_channel(channel_idx).counter.next();
+
                 add_emoji_from_sticker(&mut body, sticker);
                 let quote = quote
-                    .and_then(|q| Message::from_quote(q, expire_timestamp))
+                    .and_then(|q| Message::from_quote(q, expire_timestamp, id))
                     .map(Box::new);
                 let attachments = self.save_attachments(attachment_pointers).await;
                 let message = Message {
                     quote,
-                    ..Message::new(user_id, body, timestamp, attachments, expire_timestamp)
+                    ..Message::new(user_id, body, timestamp, attachments, expire_timestamp, id)
                 };
 
                 (channel_idx, message)
@@ -614,13 +620,14 @@ impl App {
                     channel.expire_timer = expire_timer;
                 }
                 let expire_timestamp = ExpireTimer::from_delay_now(expire_timer);
+                let id = self.get_channel(channel_idx).counter.next();
 
                 let quote = quote
-                    .and_then(|q| Message::from_quote(q, expire_timestamp))
+                    .and_then(|q| Message::from_quote(q, expire_timestamp, id))
                     .map(Box::new);
                 let message = Message {
                     quote,
-                    ..Message::new(uuid, body, timestamp, attachments, expire_timestamp)
+                    ..Message::new(uuid, body, timestamp, attachments, expire_timestamp, id)
                 };
 
                 if message.is_empty() {
@@ -1010,6 +1017,7 @@ impl App {
                 unread_messages: 0,
                 typing: TypingSet::GroupTyping(HashSet::new()),
                 expire_timer,
+                counter: MessageCounter::new(),
             });
             Ok(self.data.channels.items.len() - 1)
         }
@@ -1084,6 +1092,7 @@ impl App {
                 unread_messages: 0,
                 typing: TypingSet::SingleTyping(false),
                 expire_timer: None,
+                counter: MessageCounter::new(),
             });
             self.data.channels.items.len() - 1
         }
@@ -1116,6 +1125,7 @@ impl App {
                 unread_messages: 0,
                 typing: TypingSet::SingleTyping(false),
                 expire_timer,
+                counter: MessageCounter::new(),
             });
             self.data.channels.items.len() - 1
         }
@@ -1274,6 +1284,15 @@ impl App {
         });
         self.data.channels = channels;
     }
+
+    pub fn handle_expired(&mut self) {
+        // TODO: We may want to instead only do one channel at a time
+        //  to avoid having the app freeze when a large number of channels
+        //  are handled
+        for c in self.data.channels.items.iter_mut() {
+            c.handle_expired();
+        }
+    }
 }
 
 /// Returns an emoji string if `s` is an emoji or if `s` is a GitHub emoji shortcode.
@@ -1356,10 +1375,12 @@ mod tests {
                 receipt: Default::default(),
                 to_skip: false,
                 expire_timestamp: ExpireTimer::from_delay_now(None),
+                id: None,
             }]),
             unread_messages: 1,
             typing: TypingSet::GroupTyping(HashSet::new()),
             expire_timer: Some(42),
+            counter: MessageCounter::new(),
         });
         app.data.channels.state.select(Some(0));
 

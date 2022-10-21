@@ -70,8 +70,9 @@ impl SignalManager for SignalManagerMock {
             text: message.message.clone(),
             ..Default::default()
         });
+        let id = _channel.counter.next();
         let quote_message = quote
-            .and_then(|q| Message::from_quote(q, ExpireTimer::from_delay_now(None)))
+            .and_then(|q| Message::from_quote(q, ExpireTimer::from_delay_now(None), id))
             .map(Box::new);
         let message = Message {
             from_id: self.user_id(),
@@ -84,6 +85,7 @@ impl SignalManager for SignalManagerMock {
             receipt: Receipt::Sent,
             to_skip: false,
             expire_timestamp: ExpireTimer::from_delay_now(None),
+            id: Some(id),
         };
         self.sent_messages.borrow_mut().push(message.clone());
         println!("sent messages: {:?}", self.sent_messages.borrow());

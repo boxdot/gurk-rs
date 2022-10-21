@@ -1,5 +1,7 @@
 //! Part of the app which is serialized
 
+use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 
 use anyhow::anyhow;
@@ -28,23 +30,32 @@ pub struct AppData {
     pub contacts_sync_request_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct MessageCounter {
-    inner: u64,
+    inner: RefCell<u64>,
 }
 
 impl MessageCounter {
     pub fn new() -> Self {
-        Self { inner: 0 }
+        Self {
+            inner: RefCell::new(0),
+        }
     }
 
-    pub fn next(&mut self) -> u64 {
-        let (n, ovf) = self.inner.overflowing_add(1);
+    pub fn next(&self) -> u64 {
+        let (n, ovf) = self.inner.borrow().overflowing_add(1);
+        *self.inner.borrow_mut() = n;
         if ovf {
             tracing::error!("Reached max message id (2^64 messages?!)");
             panic!("Message id overflow.")
         }
         n
+    }
+}
+
+impl Default for MessageCounter {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -190,6 +201,8 @@ impl Channel {
         let tmp: Vec<Message> = serde::de::Deserialize::deserialize(deserializer)?;
         Ok(StatefulList::with_items(tmp))
     }
+
+    pub fn handle_expired(&mut self) {}
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -273,6 +286,7 @@ impl Message {
         arrived_at: u64,
         attachments: Vec<Attachment>,
         expire_timestamp: ExpireTimer,
+        id: u64,
     ) -> Self {
         Self {
             from_id,
@@ -284,10 +298,12 @@ impl Message {
             receipt: Receipt::Sent,
             to_skip: false,
             expire_timestamp,
+            id: Some(id),
         }
     }
 
-    pub fn from_quote(quote: Quote, expire_timestamp: ExpireTimer) -> Option<Message> {
+    // FIXME: Not sure what to do here. Should we give it an id?
+    pub fn from_quote(quote: Quote, expire_timestamp: ExpireTimer, id: u64) -> Option<Message> {
         Some(Message {
             from_id: quote.author_uuid?.parse().ok()?,
             message: quote.text,
@@ -298,6 +314,7 @@ impl Message {
             receipt: Receipt::Sent,
             to_skip: false,
             expire_timestamp,
+            id: Some(id),
         })
     }
 
@@ -327,7 +344,48 @@ impl ExpireTimer {
     }
 }
 
+// FIXME: change that to [`TimeStamp`]
+#[derive(PartialEq, Eq, Deserialize, Serialize)]
+pub struct ExpireEntry(u64, u64);
+
+impl Ord for ExpireEntry {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
+impl PartialOrd for ExpireEntry {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(match self.0.cmp(&other.0) {
+            Ordering::Less => Ordering::Greater,
+            Ordering::Equal => Ordering::Equal,
+            Ordering::Greater => Ordering::Less,
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct ExpireController {
-    queue: BinaryHeap<u32>,
+    queue: BinaryHeap<ExpireEntry>,
+}
+
+/// Struct to iterate over a channel's message which just passed
+/// their expiration timestamp
+pub struct ExpireIterator<'a> {
+    controller: &'a mut ExpireController,
+    // FIXME: change that to [`TimeStamp`]
+    timestamp: u64,
+}
+
+impl<'a> Iterator for ExpireIterator<'a> {
+    type Item = ExpireEntry;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.controller.queue.peek() {
+            Some(entry) if entry.0 <= self.timestamp => Some(()),
+            _ => None,
+        }
+        // TODO: Remove this unwrap by more clever use of methods
+        .map(|_| self.controller.queue.pop().unwrap())
+    }
 }

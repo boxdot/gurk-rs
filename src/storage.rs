@@ -124,7 +124,7 @@ pub mod test {
 #[cfg(test)]
 mod tests {
     use crate::{
-        data::{Channel, ChannelId, TypingSet},
+        data::{Channel, ChannelId, MessageCounter, TypingSet},
         util::FilteredStatefulList,
     };
 
@@ -190,6 +190,7 @@ mod tests {
                 unread_messages: 0,
                 typing: TypingSet::SingleTyping(false),
                 expire_timer: Some(42),
+                counter: MessageCounter::new(),
             }]),
             contacts_sync_request_at: None,
         };

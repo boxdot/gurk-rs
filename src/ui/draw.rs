@@ -710,6 +710,7 @@ mod tests {
             receipt: Receipt::Sent,
             expire_timestamp: ExpireTimer::from_delay_now(Some(42)),
             to_skip: true,
+            id: None,
         }
     }
 

@@ -227,10 +227,9 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
         match rx.recv().await {
             Some(Event::ReceiptTick) => {
                 let _ = app.step_receipts();
-                // TODO Handle expired messages
             }
             Some(Event::ExpireTick) => {
-                // Check for expired messages
+                // TODO Handle expired messages
             }
             Some(Event::Click(event)) => match event.kind {
                 MouseEventKind::Down(MouseButton::Left) => {
