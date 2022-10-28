@@ -6,7 +6,12 @@
 
 - Upgrade presage (this will force relinking the device, due to incompatible changes) ([#182])
 
+### Fixed
+
+-  Use maintenance fixed branch of presage with updated root CA ([#190])
+
 [#182]: https://github.com/boxdot/gurk-rs/pull/182
+[#190]: https://github.com/boxdot/gurk-rs/pull/190
 
 ## 0.2.5
 
