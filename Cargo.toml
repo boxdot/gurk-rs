@@ -62,7 +62,7 @@ qr2term = "0.3.0"
 quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
 tempfile = "3.2.0"
-uuid = { version = "0.8.2", features = ["v4"] }
+uuid = { version = "1.2", features = ["v4"] }
 
 # [patch."https://github.com/whisperfish/presage.git"]
 # presage = { path = "../presage" }

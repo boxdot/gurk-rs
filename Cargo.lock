@@ -1007,8 +1007,7 @@ dependencies = [
  "tracing-subscriber",
  "tui",
  "unicode-width",
- "uuid 0.8.2",
- "uuid 1.2.1",
+ "uuid",
  "whoami",
 ]
 
@@ -1332,7 +1331,7 @@ dependencies = [
  "sha2 0.9.9",
  "subtle",
  "thiserror",
- "uuid 1.2.1",
+ "uuid",
  "x25519-dalek",
 ]
 
@@ -1365,7 +1364,7 @@ dependencies = [
  "sha2 0.10.5",
  "thiserror",
  "url",
- "uuid 1.2.1",
+ "uuid",
  "zkgroup",
 ]
 
@@ -3191,19 +3190,11 @@ checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
 
 [[package]]
 name = "uuid"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
-dependencies = [
- "getrandom 0.2.7",
-]
-
-[[package]]
-name = "uuid"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "feb41e78f93363bb2df8b0e86a2ca30eed7806ea16ea0c790d757cf93f79be83"
 dependencies = [
+ "getrandom 0.2.7",
  "serde",
 ]
 
