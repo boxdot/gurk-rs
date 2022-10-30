@@ -75,7 +75,7 @@ impl JsonStorage {
 
         // if data file exists, be conservative and fail rather than overriding and losing the messages
         if data_path.exists() {
-            Self::load_app_data_from(&data_path).with_context(|| {
+            Self::load_app_data_from(data_path).with_context(|| {
                 format!(
                     "failed to load stored data from '{}':\n\
             This might happen due to incompatible data model when Gurk is upgraded.\n\

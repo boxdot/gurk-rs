@@ -18,7 +18,7 @@ use crate::data::Message;
 use crate::receipt::{Receipt, ReceiptEvent};
 use crate::shortcuts::{ShortCut, SHORTCUTS};
 use crate::util::utc_timestamp_msec_to_local;
-use crate::App;
+use crate::app::App;
 
 use super::name_resolver::NameResolver;
 use super::CHANNEL_VIEW_RATIO;

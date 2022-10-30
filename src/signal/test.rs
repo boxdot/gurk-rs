@@ -1,20 +1,20 @@
 use std::pin::Pin;
 use std::{cell::RefCell, rc::Rc};
 
-use anyhow::bail;
 use async_trait::async_trait;
 use gh_emoji::Replacer;
+use presage::libsignal_service::prelude::AttachmentIdentifier;
 use presage::prelude::proto::data_message::Quote;
 use presage::prelude::proto::AttachmentPointer;
 use presage::prelude::{AttachmentSpec, Contact, Content};
 use tokio_stream::Stream;
 use uuid::Uuid;
 
-use crate::data::{Channel, Message};
+use crate::data::{Channel, GroupData, Message};
 use crate::receipt::Receipt;
 use crate::util::utc_now_timestamp_msec;
 
-use super::{Attachment, ProfileKey, SignalManager};
+use super::{Attachment, ProfileKey, ResolvedGroup, SignalManager};
 
 /// Signal manager mock which does not send any messages.
 pub struct SignalManagerMock {
@@ -41,16 +41,33 @@ impl SignalManager for SignalManagerMock {
 
     async fn resolve_group(
         &mut self,
-        _master_key_bytes: super::GroupMasterKeyBytes,
-    ) -> anyhow::Result<super::ResolvedGroup> {
-        bail!("mocked signal manager cannot resolve groups");
+        master_key_bytes: super::GroupMasterKeyBytes,
+    ) -> anyhow::Result<ResolvedGroup> {
+        Ok(ResolvedGroup {
+            name: "some_group".to_string(),
+            group_data: GroupData {
+                master_key_bytes,
+                members: Default::default(),
+                revision: 0,
+            },
+            profile_keys: Default::default(),
+        })
     }
 
     async fn save_attachment(
         &mut self,
-        _attachment_pointer: AttachmentPointer,
+        attachment_pointer: AttachmentPointer,
     ) -> anyhow::Result<Attachment> {
-        bail!("mocked signal manager cannot save attachments");
+        let id = match attachment_pointer.attachment_identifier.unwrap() {
+            AttachmentIdentifier::CdnId(id) => id.to_string(),
+            AttachmentIdentifier::CdnKey(id) => id,
+        };
+        Ok(Attachment {
+            id,
+            content_type: attachment_pointer.content_type.unwrap(),
+            filename: attachment_pointer.file_name.unwrap().into(),
+            size: attachment_pointer.size.unwrap(),
+        })
     }
 
     fn send_receipt(&self, _: Uuid, _: Vec<u64>, _: Receipt) {}
@@ -82,7 +99,6 @@ impl SignalManager for SignalManagerMock {
             receipt: Receipt::Sent,
         };
         self.sent_messages.borrow_mut().push(message.clone());
-        println!("sent messages: {:?}", self.sent_messages.borrow());
         message
     }
 

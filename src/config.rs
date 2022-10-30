@@ -18,8 +18,12 @@ pub struct Config {
     /// Whether to show receipts (sent, delivered, read) information next to your user name in UI
     #[serde(default = "default_true")]
     pub show_receipts: bool,
+    #[serde(default = "default_true")]
+    pub notifications: bool,
     /// User configuration
     pub user: User,
+    #[serde(default, skip_serializing_if = "DeveloperConfig::is_default")]
+    pub developer: DeveloperConfig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -28,6 +32,18 @@ pub struct User {
     pub name: String,
     /// Phone number used in Signal
     pub phone_number: String,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeveloperConfig {
+    /// Dump raw messages to `messages.json` for collecting debug/benchmark data
+    pub dump_raw_messages: bool,
+}
+
+impl DeveloperConfig {
+    fn is_default(&self) -> bool {
+        self == &Self::default()
+    }
 }
 
 impl Config {
@@ -39,6 +55,8 @@ impl Config {
             signal_db_path: default_signal_db_path(),
             first_name_only: false,
             show_receipts: true,
+            notifications: true,
+            developer: Default::default(),
         }
     }
 
