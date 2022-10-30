@@ -1210,7 +1210,7 @@ fn dump_raw_message(content: &Content) -> anyhow::Result<()> {
     let content = crate::dev::ContentBase64::from(content);
 
     serde_json::to_writer(&mut writer, &content)?;
-    writeln!(writer, "")?;
+    writeln!(writer)?;
 
     Ok(())
 }
@@ -1258,7 +1258,7 @@ mod tests {
     use crate::config::User;
     use crate::data::GroupData;
     use crate::signal::test::SignalManagerMock;
-    use crate::storage::test::InMemoryStorage;
+    use crate::storage::InMemoryStorage;
 
     use std::cell::RefCell;
     use std::rc::Rc;

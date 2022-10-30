@@ -3,33 +3,15 @@ use std::io::BufReader;
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use gurk::app::App;
 use gurk::config::{Config, User};
-use gurk::data::{AppData, Channel, ChannelId, GroupData, Message, TypingSet};
+use gurk::data::{Channel, ChannelId, GroupData, Message, TypingSet};
 use gurk::dev::ContentBase64;
 use gurk::signal::test::SignalManagerMock;
 use gurk::signal::GroupMasterKeyBytes;
-use gurk::storage::Storage;
+use gurk::storage::InMemoryStorage;
 use gurk::util::StatefulList;
 use presage::prelude::Content;
 use tracing::info;
 use uuid::Uuid;
-
-pub struct InMemoryStorage {}
-
-impl InMemoryStorage {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-impl Storage for InMemoryStorage {
-    fn save_app_data(&self, _data: &AppData) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    fn load_app_data(&self) -> anyhow::Result<AppData> {
-        Ok(Default::default())
-    }
-}
 
 fn test_app() -> App {
     let signal_manager = SignalManagerMock::new();

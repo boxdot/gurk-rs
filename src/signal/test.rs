@@ -26,10 +26,16 @@ pub struct SignalManagerMock {
 impl SignalManagerMock {
     pub fn new() -> Self {
         Self {
-            user_id: Uuid::new_v4(),
+            user_id: Uuid::nil(),
             emoji_replacer: Replacer::new(),
             sent_messages: Default::default(),
         }
+    }
+}
+
+impl Default for SignalManagerMock {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

@@ -95,29 +95,23 @@ impl JsonStorage {
     }
 }
 
-#[cfg(test)]
-pub mod test {
-    use crate::data::AppData;
+/// In-memory storage used for testing.
+#[derive(Default)]
+pub struct InMemoryStorage {}
 
-    use super::Storage;
+impl InMemoryStorage {
+    pub fn new() -> Self {
+        Default::default()
+    }
+}
 
-    /// In-memory storage used for testing.
-    pub struct InMemoryStorage {}
-
-    impl InMemoryStorage {
-        pub fn new() -> Self {
-            Self {}
-        }
+impl Storage for InMemoryStorage {
+    fn save_app_data(&self, _data: &AppData) -> anyhow::Result<()> {
+        Ok(())
     }
 
-    impl Storage for InMemoryStorage {
-        fn save_app_data(&self, _data: &AppData) -> anyhow::Result<()> {
-            Ok(())
-        }
-
-        fn load_app_data(&self) -> anyhow::Result<AppData> {
-            Ok(Default::default())
-        }
+    fn load_app_data(&self) -> anyhow::Result<AppData> {
+        Ok(Default::default())
     }
 }
 
