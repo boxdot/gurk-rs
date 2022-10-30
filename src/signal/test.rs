@@ -65,7 +65,7 @@ impl SignalManager for SignalManagerMock {
         Ok(Attachment {
             id,
             content_type: attachment_pointer.content_type.unwrap(),
-            filename: attachment_pointer.file_name.unwrap().into(),
+            filename: "somefile".to_string().into(),
             size: attachment_pointer.size.unwrap(),
         })
     }

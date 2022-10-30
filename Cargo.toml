@@ -64,7 +64,7 @@ base64 = "0.13.1"
 quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
 tempfile = "3.2.0"
-criterion = { version = "0.4", features = ["async_tokio"] }
+criterion = { version = "0.4", features = ["async_tokio", "html_reports"] }
 
 [[bench]]
 name = "app"

@@ -1,6 +1,6 @@
 use std::io::BufReader;
 
-use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use gurk::app::App;
 use gurk::config::{Config, User};
 use gurk::data::{AppData, Channel, ChannelId, GroupData, Message, TypingSet};
@@ -10,6 +10,7 @@ use gurk::signal::GroupMasterKeyBytes;
 use gurk::storage::Storage;
 use gurk::util::StatefulList;
 use presage::prelude::Content;
+use tracing::info;
 use uuid::Uuid;
 
 pub struct InMemoryStorage {}
@@ -74,6 +75,8 @@ fn test_app() -> App {
 pub fn bench_on_message(c: &mut Criterion) {
     use std::io::BufRead;
 
+    let _ = tracing_subscriber::fmt::try_init();
+
     let f = std::fs::File::open("messages.raw.json").unwrap();
     let reader = BufReader::new(f);
     let mut data = Vec::new();
@@ -83,6 +86,7 @@ pub fn bench_on_message(c: &mut Criterion) {
         let content = Content::try_from(content_base64).unwrap();
         data.push(content);
     }
+    info!(n = %data.len(), "messages");
 
     c.bench_function("on_message", move |b| {
         b.to_async(tokio::runtime::Runtime::new().unwrap())
