@@ -1071,8 +1071,10 @@ impl App {
     }
 
     fn notify(&self, summary: &str, text: &str) {
-        if let Err(e) = Notification::new().summary(summary).body(text).show() {
-            error!("failed to send notification: {}", e);
+        if self.config.notifications {
+            if let Err(e) = Notification::new().summary(summary).body(text).show() {
+                error!("failed to send notification: {}", e);
+            }
         }
     }
 

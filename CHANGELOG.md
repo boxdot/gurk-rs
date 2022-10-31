@@ -2,6 +2,10 @@
 
 ## Unreleased (0.3.0-dev)
 
+### Added
+
+- Add notifications config toggling system notifications
+
 ### Changed
 
 - Upgrade presage (this will force relinking the device, due to incompatible changes) ([#182])
