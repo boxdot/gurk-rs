@@ -4,7 +4,7 @@
 
 ### Added
 
-- Add notifications config toggling system notifications
+- Add notifications config toggling system notifications ([#188], [#192])
 
 ### Changed
 
@@ -15,8 +15,10 @@
 -  Use maintenance fixed branch of presage with updated root CA ([#189], [#190])
 
 [#182]: https://github.com/boxdot/gurk-rs/pull/182
+[#188]: https://github.com/boxdot/gurk-rs/pull/188
 [#189]: https://github.com/boxdot/gurk-rs/pull/189
 [#190]: https://github.com/boxdot/gurk-rs/pull/190
+[#192]: https://github.com/boxdot/gurk-rs/pull/192
 
 ## 0.2.5
 
