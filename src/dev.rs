@@ -1,5 +1,9 @@
-use presage::prelude::proto::{CallMessage, ReceiptMessage, TypingMessage};
-use presage::prelude::{Content, ContentBody, DataMessage, Metadata, ServiceAddress, SyncMessage};
+use std::fs::OpenOptions;
+use std::io::BufWriter;
+
+use anyhow::anyhow;
+use presage::prelude::proto;
+use presage::prelude::{Content, Metadata, ServiceAddress};
 use prost::Message;
 use serde::{Deserialize, Serialize};
 
@@ -7,8 +11,7 @@ use serde::{Deserialize, Serialize};
 pub struct ContentBase64 {
     #[serde(with = "MetadataDef")]
     pub metadata: Metadata,
-    pub body_type: ContentBodyType,
-    pub body_proto_base64: String,
+    pub content_proto_base64: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -31,31 +34,13 @@ impl From<Metadata> for MetadataDef {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-pub enum ContentBodyType {
-    DataMessage,
-    SynchronizeMessage,
-    CallMessage,
-    ReceiptMessage,
-    TypingMessage,
-}
-
 impl From<&Content> for ContentBase64 {
     fn from(content: &Content) -> Self {
-        use ContentBody::*;
-        let (body_type, body_proto_bytes) = match &content.body {
-            DataMessage(msg) => (ContentBodyType::DataMessage, msg.encode_to_vec()),
-            SynchronizeMessage(msg) => (ContentBodyType::SynchronizeMessage, msg.encode_to_vec()),
-            CallMessage(msg) => (ContentBodyType::CallMessage, msg.encode_to_vec()),
-            ReceiptMessage(msg) => (ContentBodyType::ReceiptMessage, msg.encode_to_vec()),
-            TypingMessage(msg) => (ContentBodyType::TypingMessage, msg.encode_to_vec()),
-        };
-
-        let body_proto_base64 = base64::encode(&body_proto_bytes);
+        let content_proto_base64 =
+            base64::encode(&content.body.clone().into_proto().encode_to_vec());
         Self {
             metadata: content.metadata.clone(),
-            body_type,
-            body_proto_base64,
+            content_proto_base64,
         }
     }
 }
@@ -64,18 +49,26 @@ impl TryFrom<ContentBase64> for Content {
     type Error = anyhow::Error;
 
     fn try_from(content: ContentBase64) -> Result<Self, Self::Error> {
-        let body_bytes = base64::decode(&content.body_proto_base64)?;
-        let buf = body_bytes.as_slice();
-        let body = match content.body_type {
-            ContentBodyType::DataMessage => DataMessage::decode(buf)?.into(),
-            ContentBodyType::SynchronizeMessage => SyncMessage::decode(buf)?.into(),
-            ContentBodyType::CallMessage => CallMessage::decode(buf)?.into(),
-            ContentBodyType::ReceiptMessage => ReceiptMessage::decode(buf)?.into(),
-            ContentBodyType::TypingMessage => TypingMessage::decode(buf)?.into(),
-        };
-        Ok(Self {
-            metadata: content.metadata,
-            body,
-        })
+        let content_bytes = base64::decode(&content.content_proto_base64)?;
+        let content_proto = proto::Content::decode(&*content_bytes)?;
+        Self::from_proto(content_proto, content.metadata)
+            .ok_or_else(|| anyhow!("invalid content proto"))
     }
+}
+
+pub fn dump_raw_message(content: &Content) -> anyhow::Result<()> {
+    use std::io::Write;
+
+    let f = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("messages.raw.json")?;
+    let mut writer = BufWriter::new(f);
+
+    let content = ContentBase64::from(content);
+
+    serde_json::to_writer(&mut writer, &content)?;
+    writeln!(writer)?;
+
+    Ok(())
 }

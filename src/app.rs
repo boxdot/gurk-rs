@@ -30,8 +30,6 @@ use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::collections::HashSet;
 use std::convert::TryInto;
-use std::fs::OpenOptions;
-use std::io::BufWriter;
 use std::path::Path;
 
 /// Amount of time to skip contacts sync after the last sync
@@ -335,7 +333,7 @@ impl App {
         // tracing::debug!("incoming: {:#?}", content);
 
         if self.config.developer.dump_raw_messages {
-            if let Err(e) = dump_raw_message(&content) {
+            if let Err(e) = crate::dev::dump_raw_message(&content) {
                 warn!(error = %e, "failed to dump raw message");
             }
         }
@@ -1196,23 +1194,6 @@ impl App {
         });
         self.data.channels = channels;
     }
-}
-
-fn dump_raw_message(content: &Content) -> anyhow::Result<()> {
-    use std::io::Write;
-
-    let f = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("messages.raw.json")?;
-    let mut writer = BufWriter::new(f);
-
-    let content = crate::dev::ContentBase64::from(content);
-
-    serde_json::to_writer(&mut writer, &content)?;
-    writeln!(writer)?;
-
-    Ok(())
 }
 
 /// Returns an emoji string if `s` is an emoji or if `s` is a GitHub emoji shortcode.
