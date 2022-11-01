@@ -4,7 +4,7 @@ use regex_automata::Regex;
 use serde::{Deserialize, Serialize};
 use tui::widgets::ListState;
 
-use crate::MESSAGE_SCROLL_BACK;
+const MESSAGE_SCROLL_BACK: bool = false;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StatefulList<T> {

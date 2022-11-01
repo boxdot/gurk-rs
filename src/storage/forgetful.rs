@@ -7,6 +7,7 @@ use crate::data::{Channel, ChannelId, Message};
 use super::storage::Metadata;
 use super::{MessageId, Storage};
 
+/// A storage which actually does not store anything, therefore forgetful.
 pub struct ForgetfulStorage;
 
 impl Storage for ForgetfulStorage {

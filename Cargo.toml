@@ -21,8 +21,11 @@ opt-level = 3
 debug = 0
 lto = "thin"
 
+[features]
+dev = ["prost", "base64"]
+
 [dependencies]
-presage = { git = "https://github.com/whisperfish/presage", rev = "3e03d88", default-features = false, features = ["sled-config-store"] }
+presage = { git = "https://github.com/whisperfish/presage", rev = "f84d958", default-features = false, features = ["sled-config-store"] }
 
 anyhow = "1.0.40"
 async-trait = "0.1.51"
@@ -43,27 +46,35 @@ regex-automata = "0.1.10"
 scopeguard = "1.1.0"
 serde = { version = "1.0.125", features = ["derive"] }
 serde_json = "1.0.64"
-structopt = "0.3.21"
 textwrap = "0.14.2"
 tokio = { version = "1.5.0", default-features = false, features = ["rt-multi-thread", "macros", "net", "time"] }
 tokio-stream = "0.1.5"
 toml = "0.5.8"
-tui = {version = "0.15.0", default-features = false, features = ["crossterm"]}
+tui = { version = "0.15.0", default-features = false, features = ["crossterm"] }
 unicode-width = "0.1.8"
-uuid = "0.8.2"
+uuid = { version = "1.2", features = ["v4"] }
 whoami = "1.1.2"
 tracing = "0.1.35"
 tracing-appender = "0.2.2"
 tracing-subscriber = "0.3.11"
 futures-channel = "0.3.24"
 qr2term = "0.3.0"
+clap = { version = "4.0.18", features = ["derive"] }
+
+# dev feature dependencies
+prost = { version = "0.10.0", optional = true }
+base64 = { version = "0.13.0", optional = true }
 
 [dev-dependencies]
 insta = { version = "1.21.0", features = ["json"] }
 quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
 tempfile = "3.2.0"
-uuid = { version = "0.8.2", features = ["v4"] }
+criterion = { version = "0.4", features = ["async_tokio", "html_reports"] }
+
+[[bench]]
+name = "app"
+harness = false
 
 # [patch."https://github.com/whisperfish/presage.git"]
 # presage = { path = "../presage" }

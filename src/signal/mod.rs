@@ -1,6 +1,5 @@
 mod r#impl;
 mod manager;
-#[cfg(test)]
 pub mod test;
 
 use anyhow::{bail, Context as _};

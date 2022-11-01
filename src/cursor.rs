@@ -302,7 +302,7 @@ impl Cursor {
         let end = text[self.idx..]
             .char_indices()
             .find(|&(_, c)| c == '\n')
-            .map(&|(idx, _)| idx)
+            .map(|(idx, _)| idx)
             .unwrap_or_else(|| text.len());
         if self.idx == end && end < text.len() {
             text.remove(end);
