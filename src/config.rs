@@ -18,6 +18,7 @@ pub struct Config {
     /// Whether to show receipts (sent, delivered, read) information next to your user name in UI
     #[serde(default = "default_true")]
     pub show_receipts: bool,
+    /// Whether to show system notifications on incoming messages
     #[serde(default = "default_true")]
     pub notifications: bool,
     /// User configuration
