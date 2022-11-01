@@ -1,18 +1,8 @@
 //! Signal Messenger client for terminal
 
-mod app;
-mod config;
-mod cursor;
-mod data;
-mod input;
-mod receipt;
-mod shortcuts;
-mod signal;
-mod storage;
-mod ui;
-mod util;
-
-use app::App;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use clap::Parser;
 use crossterm::{
@@ -23,22 +13,19 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use gurk::{config, signal, ui};
 use presage::prelude::Content;
 use tokio_stream::StreamExt;
 use tracing::{error, info, metadata::LevelFilter};
 use tui::{backend::CrosstermBackend, Terminal};
 
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-
-use crate::storage::JsonStorage;
+use gurk::app::App;
+use gurk::storage::JsonStorage;
 
 const TARGET_FPS: u64 = 144;
 const RECEIPT_TICK_PERIOD: u64 = 144;
 const FRAME_BUDGET: Duration = Duration::from_millis(1000 / TARGET_FPS);
 const RECEIPT_BUDGET: Duration = Duration::from_millis(RECEIPT_TICK_PERIOD * 1000 / TARGET_FPS);
-const MESSAGE_SCROLL_BACK: bool = false;
 
 #[derive(Debug, Parser)]
 #[command(author, version, about, long_about = None)]
@@ -49,6 +36,11 @@ struct Args {
     /// Relinks the device (helpful when device was unlinked)
     #[clap(long)]
     relink: bool,
+    /// Dump raw messages to `messages.json` in the current working directory
+    ///
+    /// Used for collecting benchmark data
+    #[clap(long)]
+    dump_messages: bool,
 }
 
 #[tokio::main]

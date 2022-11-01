@@ -23,6 +23,9 @@ pub struct Config {
     pub notifications: bool,
     /// User configuration
     pub user: User,
+    #[cfg(feature = "dev")]
+    #[serde(default, skip_serializing_if = "DeveloperConfig::is_default")]
+    pub developer: DeveloperConfig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -31,6 +34,20 @@ pub struct User {
     pub name: String,
     /// Phone number used in Signal
     pub phone_number: String,
+}
+
+#[cfg(feature = "dev")]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeveloperConfig {
+    /// Dump raw messages to `messages.json` for collecting debug/benchmark data
+    pub dump_raw_messages: bool,
+}
+
+#[cfg(feature = "dev")]
+impl DeveloperConfig {
+    fn is_default(&self) -> bool {
+        self == &Self::default()
+    }
 }
 
 impl Config {
@@ -43,6 +60,8 @@ impl Config {
             first_name_only: false,
             show_receipts: true,
             notifications: true,
+            #[cfg(feature = "dev")]
+            developer: Default::default(),
         }
     }
 

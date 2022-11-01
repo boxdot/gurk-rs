@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 use tui::widgets::ListState;
 
 use crate::data::Channel;
-use crate::MESSAGE_SCROLL_BACK;
+
+const MESSAGE_SCROLL_BACK: bool = false;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StatefulList<T> {

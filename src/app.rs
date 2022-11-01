@@ -331,6 +331,14 @@ impl App {
 
     pub async fn on_message(&mut self, content: Content) -> anyhow::Result<()> {
         // tracing::debug!("incoming: {:#?}", content);
+
+        #[cfg(feature = "dev")]
+        if self.config.developer.dump_raw_messages {
+            if let Err(e) = crate::dev::dump_raw_message(&content) {
+                warn!(error = %e, "failed to dump raw message");
+            }
+        }
+
         let user_id = self.user_id;
 
         let (channel_idx, message) = match (content.metadata, content.body) {
@@ -1150,7 +1158,7 @@ impl App {
         self.display_help
     }
 
-    pub(crate) async fn request_contacts_sync(&mut self) -> anyhow::Result<()> {
+    pub async fn request_contacts_sync(&mut self) -> anyhow::Result<()> {
         let now = Utc::now();
         let do_sync = self
             .data
@@ -1232,7 +1240,7 @@ mod tests {
     use crate::config::User;
     use crate::data::GroupData;
     use crate::signal::test::SignalManagerMock;
-    use crate::storage::test::InMemoryStorage;
+    use crate::storage::InMemoryStorage;
 
     use std::cell::RefCell;
     use std::rc::Rc;
