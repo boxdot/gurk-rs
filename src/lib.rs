@@ -4,6 +4,7 @@ pub mod app;
 pub mod config;
 pub mod cursor;
 pub mod data;
+#[cfg(feature = "dev")]
 pub mod dev;
 pub mod input;
 pub mod receipt;

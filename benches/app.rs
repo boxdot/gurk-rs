@@ -1,10 +1,8 @@
-use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use gurk::app::App;
 use gurk::config::{Config, User};
-use gurk::dev::ContentBase64;
 use gurk::signal::test::SignalManagerMock;
 use gurk::storage::InMemoryStorage;
 use presage::prelude::Content;
@@ -27,7 +25,8 @@ fn test_app() -> App {
 
 pub fn bench_on_message(c: &mut Criterion) {
     let _ = tracing_subscriber::fmt::try_init();
-    let data = read_input_data("messages.raw.json");
+    let data = read_input_data("messages.raw.json").expect("failed to read data");
+    info!(n = %data.len(), "messages");
     c.bench_function("on_message", move |b| {
         b.to_async(tokio::runtime::Runtime::new().unwrap())
             .iter_batched(
@@ -42,18 +41,27 @@ pub fn bench_on_message(c: &mut Criterion) {
     });
 }
 
-fn read_input_data(path: impl AsRef<Path>) -> Vec<Content> {
-    let f = std::fs::File::open(path).unwrap();
-    let reader = BufReader::new(f);
-    let mut data = Vec::new();
-    for line in reader.lines() {
-        let line = line.unwrap();
-        let content_base64: ContentBase64 = serde_json::from_str(&line).unwrap();
-        let content = Content::try_from(content_base64).unwrap();
-        data.push(content);
+#[allow(unused_variables)]
+fn read_input_data(path: impl AsRef<Path>) -> anyhow::Result<Vec<Content>> {
+    #[cfg(feature = "dev")]
+    {
+        use std::io::{BufRead, BufReader};
+
+        let f = std::fs::File::open(path)?;
+        let reader = BufReader::new(f);
+        let mut data = Vec::new();
+        for line in reader.lines() {
+            let line = line?;
+            let content_base64: gurk::dev::ContentBase64 = serde_json::from_str(&line)?;
+            let content = Content::try_from(content_base64)?;
+            data.push(content);
+        }
+        Ok(data)
     }
-    info!(n = %data.len(), "messages");
-    data
+    #[cfg(not(feature = "dev"))]
+    {
+        anyhow::bail!("failed to read data; please enable the cargo 'dev' feature");
+    }
 }
 
 criterion_group!(benches, bench_on_message);

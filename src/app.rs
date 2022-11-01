@@ -332,6 +332,7 @@ impl App {
     pub async fn on_message(&mut self, content: Content) -> anyhow::Result<()> {
         // tracing::debug!("incoming: {:#?}", content);
 
+        #[cfg(feature = "dev")]
         if self.config.developer.dump_raw_messages {
             if let Err(e) = crate::dev::dump_raw_message(&content) {
                 warn!(error = %e, "failed to dump raw message");
