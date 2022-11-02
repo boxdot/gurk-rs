@@ -72,6 +72,10 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
+      - name: Build and run xtask
+        uses: actions-rs/cargo@v1
+        with:
+          command: xtask
 
   build-x86_64-unknown-linux-musl:
     name: build (x86_64-unknown-linux-musl)
@@ -98,6 +102,12 @@ jobs:
         with:
           command: build
           args: --target x86_64-unknown-linux-musl
+      - name: Build and run xtask
+        uses: actions-rs/cargo@v1
+        # xtask miscompiles on musl platform without explicit target flag
+        with:
+          command: build
+          args: -p xtask --target x86_64-unknown-linux-musl
 
   build-aarch64-unknown-linux-gnu:
     name: build (aarch64-unknown-linux-gnu)
@@ -121,6 +131,10 @@ jobs:
         with:
           command: build
           args: --target aarch64-unknown-linux-gnu
+      - name: Build and run xtask
+        uses: actions-rs/cargo@v1
+        with:
+          command: xtask
 
   build-aarch64-unknown-linux-musl:
     name: build (aarch64-unknown-linux-musl)
@@ -145,9 +159,10 @@ jobs:
           override: true
       - name: Build
         uses: actions-rs/cargo@v1
+        # xtask miscompiles on musl platform without explicit target flag
         with:
-          command: build
-          args: --target x86_64-unknown-linux-musl
+          command: run
+          args: -p xtask --target x86_64-unknown-linux-musl
 
   build-test-x86_64-apple-darwin:
     name: build and test (x86_64-apple-darwin)
@@ -175,6 +190,10 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
+      - name: Build and run xtask
+        uses: actions-rs/cargo@v1
+        with:
+          command: xtask
 
   build-aarch64-apple-darwin:
     name: build (aarch64-apple-darwin)
@@ -200,3 +219,7 @@ jobs:
         with:
           command: build
           args: --target aarch64-apple-darwin
+      - name: Build and run xtask
+        uses: actions-rs/cargo@v1
+        with:
+          command: xtask
