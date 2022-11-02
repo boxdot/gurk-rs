@@ -1,9 +1,8 @@
 name: release
-# on:
-#   push:
-#     tags:
-#       - 'v*.*.*'
-on: [push, pull_request]
+on:
+  push:
+    tags:
+      - 'v*.*.*'
 
 env:
   CARGO_INCREMENTAL: 0
@@ -12,27 +11,27 @@ env:
   FETCH_DEPTH: 0 # pull in the tags for the version string
 
 jobs:
-  # dist-changelog:
-  #   name: dist (changelog)
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Checkout repository
-  #       uses: actions/checkout@v2
-  #       with:
-  #         fetch-depth: ${{ env.FETCH_DEPTH }}
-  #     - name: Install Rust toolchain
-  #       uses: actions-rs/toolchain@v1
-  #       with:
-  #         toolchain: stable
-  #         profile: minimal
-  #         override: true
-  #     - name: Generate checklog
-  #       run: cargo xtask changelog
-  #     - name: Upload artifacts
-  #       uses: actions/upload-artifact@v2
-  #       with:
-  #         name: dist-changelog
-  #         path: dist
+  dist-changelog:
+    name: dist (changelog)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: ${{ env.FETCH_DEPTH }}
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+      - name: Generate checklog
+        run: cargo xtask changelog
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: dist-changelog
+          path: dist
 
   dist-x86_64-unknown-linux-gnu:
     name: dist (x86_64-unknown-linux-gnu)
@@ -202,53 +201,53 @@ jobs:
           name: dist-aarch64-apple-darwin
           path: dist
 
-  # publish:
-  #   name: publish
-  #   runs-on: ubuntu-18.04
-  #   needs:
-  #     - dist-changelog
-  #     - dist-x86_64-unknown-linux-gnu
-  #     - dist-x86_64-unknown-linux-musl
-  #     - dist-aarch64-unknown-linux-gnu
-  #     - dist-aarch64-unknown-linux-musl
-  #     - dist-x86_64-apple-darwin
-  #     - dist-aarch64-apple-darwin
-  #   steps:
-  #     - uses: actions/download-artifact@v2
-  #       with:
-  #         name: dist-changelog
-  #         path: dist
-  #     - uses: actions/download-artifact@v2
-  #       with:
-  #         name: dist-aarch64-apple-darwin
-  #         path: dist
-  #     - uses: actions/download-artifact@v2
-  #       with:
-  #         name: dist-x86_64-apple-darwin
-  #         path: dist
-  #     - uses: actions/download-artifact@v2
-  #       with:
-  #         name: dist-x86_64-unknown-linux-gnu
-  #         path: dist
-  #     - uses: actions/download-artifact@v2
-  #       with:
-  #         name: dist-x86_64-unknown-linux-musl
-  #         path: dist
-  #     - uses: actions/download-artifact@v2
-  #       with:
-  #         name: dist-aarch64-unknown-linux-gnu
-  #         path: dist
-  #     - uses: actions/download-artifact@v2
-  #       with:
-  #         name: dist-aarch64-unknown-linux-musl
-  #         path: dist
-  #     - run: ls -al
-  #       working-directory: dist
-  #     - name: Release
-  #       uses: softprops/action-gh-release@v1
-  #       env:
-  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  #       with:
-  #         body_path: dist/CHANGELOG.md
-  #         files: dist/*.tar.gz
-  #         draft: true
+  publish:
+    name: publish
+    runs-on: ubuntu-18.04
+    needs:
+      - dist-changelog
+      - dist-x86_64-unknown-linux-gnu
+      - dist-x86_64-unknown-linux-musl
+      - dist-aarch64-unknown-linux-gnu
+      - dist-aarch64-unknown-linux-musl
+      - dist-x86_64-apple-darwin
+      - dist-aarch64-apple-darwin
+    steps:
+      - uses: actions/download-artifact@v2
+        with:
+          name: dist-changelog
+          path: dist
+      - uses: actions/download-artifact@v2
+        with:
+          name: dist-aarch64-apple-darwin
+          path: dist
+      - uses: actions/download-artifact@v2
+        with:
+          name: dist-x86_64-apple-darwin
+          path: dist
+      - uses: actions/download-artifact@v2
+        with:
+          name: dist-x86_64-unknown-linux-gnu
+          path: dist
+      - uses: actions/download-artifact@v2
+        with:
+          name: dist-x86_64-unknown-linux-musl
+          path: dist
+      - uses: actions/download-artifact@v2
+        with:
+          name: dist-aarch64-unknown-linux-gnu
+          path: dist
+      - uses: actions/download-artifact@v2
+        with:
+          name: dist-aarch64-unknown-linux-musl
+          path: dist
+      - run: ls -al
+        working-directory: dist
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          body_path: dist/CHANGELOG.md
+          files: dist/*.tar.gz
+          draft: true
