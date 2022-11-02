@@ -12,27 +12,27 @@ env:
   FETCH_DEPTH: 0 # pull in the tags for the version string
 
 jobs:
-  dist-changelog:
-    name: dist (changelog)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: ${{ env.FETCH_DEPTH }}
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          override: true
-      - name: Generate checklog
-        run: cargo xtask changelog
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v2
-        with:
-          name: dist-changelog
-          path: dist
+  # dist-changelog:
+  #   name: dist (changelog)
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v2
+  #       with:
+  #         fetch-depth: ${{ env.FETCH_DEPTH }}
+  #     - name: Install Rust toolchain
+  #       uses: actions-rs/toolchain@v1
+  #       with:
+  #         toolchain: stable
+  #         profile: minimal
+  #         override: true
+  #     - name: Generate checklog
+  #       run: cargo xtask changelog
+  #     - name: Upload artifacts
+  #       uses: actions/upload-artifact@v2
+  #       with:
+  #         name: dist-changelog
+  #         path: dist
 
   dist-x86_64-unknown-linux-gnu:
     name: dist (x86_64-unknown-linux-gnu)
@@ -140,7 +140,7 @@ jobs:
           override: true
       - name: Dist
         # FIXME: building xtask without explicit target segfaults rustc
-        run: cargo run -p xtask --target aarch64-unknown-linux-musl  -- dist
+        run: cargo run -p xtask --target x86_64-unknown-linux-musl  -- dist
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
