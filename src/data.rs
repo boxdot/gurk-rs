@@ -1,9 +1,8 @@
 //! Part of the app which is serialized
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use anyhow::anyhow;
-use chrono::{DateTime, Utc};
 use presage::prelude::proto::data_message::Quote;
 use presage::prelude::{GroupMasterKey, GroupSecretParams};
 use serde::{Deserialize, Serialize};
@@ -12,88 +11,23 @@ use uuid::Uuid;
 
 use crate::receipt::Receipt;
 use crate::signal::{Attachment, GroupIdentifierBytes, GroupMasterKeyBytes};
-use crate::util::{FilteredStatefulList, StatefulList};
 
-#[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AppData {
-    pub channels: FilteredStatefulList<Channel>,
-    /// Names retrieved from:
-    /// - profiles, when registered as main device)
-    /// - contacts, when linked as secondary device
-    /// - UUID when both have failed
-    ///
-    /// Do not use directly, use [`App::name_by_id`] instead.
-    pub names: HashMap<Uuid, String>,
-    #[serde(default)]
-    pub contacts_sync_request_at: Option<DateTime<Utc>>,
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(try_from = "JsonChannel")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Channel {
     pub id: ChannelId,
     pub name: String,
     pub group_data: Option<GroupData>,
-    #[serde(serialize_with = "Channel::serialize_msgs")]
-    pub messages: StatefulList<Message>,
     pub unread_messages: usize,
     pub typing: TypingSet,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypingSet {
     SingleTyping(bool),
     GroupTyping(HashSet<Uuid>),
 }
 
-/// Proxy type which allows us to apply post-deserialization conversion.
-///
-/// Used to migrate the schema. Change this type only in backwards-compatible way.
-#[derive(Deserialize)]
-pub struct JsonChannel {
-    pub id: ChannelId,
-    pub name: String,
-    #[serde(default)]
-    pub group_data: Option<GroupData>,
-    #[serde(deserialize_with = "Channel::deserialize_msgs")]
-    pub messages: StatefulList<Message>,
-    #[serde(default)]
-    pub unread_messages: usize,
-}
-
-impl TryFrom<JsonChannel> for Channel {
-    type Error = anyhow::Error;
-    fn try_from(channel: JsonChannel) -> anyhow::Result<Self> {
-        let is_group = channel.group_data.is_some();
-        let mut channel = Channel {
-            id: channel.id,
-            name: channel.name,
-            group_data: channel.group_data,
-            messages: channel.messages,
-            unread_messages: channel.unread_messages,
-            typing: {
-                if is_group {
-                    TypingSet::GroupTyping(HashSet::new())
-                } else {
-                    TypingSet::SingleTyping(false)
-                }
-            },
-        };
-
-        // 1. The master key in ChannelId::Group was replaced by group identifier,
-        // the former was stored in group_data.
-        match (channel.id, channel.group_data.as_mut()) {
-            (ChannelId::Group(id), Some(group_data)) if group_data.master_key_bytes == [0; 32] => {
-                group_data.master_key_bytes = id;
-                channel.id = ChannelId::from_master_key_bytes(id)?;
-            }
-            _ => (),
-        }
-        Ok(channel)
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GroupData {
     #[serde(default)]
     pub master_key_bytes: GroupMasterKeyBytes,
@@ -102,14 +36,14 @@ pub struct GroupData {
 }
 
 impl Channel {
-    pub fn reset_writing(&mut self, user: Uuid) {
+    pub fn reset_writing(&mut self, user: Uuid) -> bool {
         match &mut self.typing {
-            TypingSet::GroupTyping(ref mut hash_set) => {
-                hash_set.remove(&user);
-            }
-            TypingSet::SingleTyping(_) => {
+            TypingSet::GroupTyping(ref mut hash_set) => hash_set.remove(&user),
+            TypingSet::SingleTyping(true) => {
                 self.typing = TypingSet::SingleTyping(false);
+                true
             }
+            TypingSet::SingleTyping(false) => false,
         }
     }
 
@@ -126,31 +60,6 @@ impl Channel {
             ChannelId::Group(_) => None,
         }
     }
-
-    pub fn selected_message(&self) -> Option<&Message> {
-        // Messages are shown in reversed order => selected is reversed
-        self.messages
-            .state
-            .selected()
-            .and_then(|idx| self.messages.items.len().checked_sub(idx + 1))
-            .and_then(|idx| self.messages.items.get(idx))
-    }
-
-    fn serialize_msgs<S>(messages: &StatefulList<Message>, ser: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::ser::Serializer,
-    {
-        // the messages StatefulList becomes the vec that was messages.items
-        messages.items.serialize(ser)
-    }
-
-    fn deserialize_msgs<'de, D>(deserializer: D) -> Result<StatefulList<Message>, D::Error>
-    where
-        D: serde::de::Deserializer<'de>,
-    {
-        let tmp: Vec<Message> = serde::de::Deserialize::deserialize(deserializer)?;
-        Ok(StatefulList::with_items(tmp))
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -162,6 +71,15 @@ pub enum ChannelId {
 impl From<Uuid> for ChannelId {
     fn from(id: Uuid) -> Self {
         ChannelId::User(id)
+    }
+}
+
+impl PartialEq<Uuid> for ChannelId {
+    fn eq(&self, other: &Uuid) -> bool {
+        match self {
+            ChannelId::User(id) => id == other,
+            ChannelId::Group(_) => false,
+        }
     }
 }
 

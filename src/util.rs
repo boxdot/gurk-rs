@@ -4,11 +4,9 @@ use regex_automata::Regex;
 use serde::{Deserialize, Serialize};
 use tui::widgets::ListState;
 
-use crate::data::Channel;
-
 const MESSAGE_SCROLL_BACK: bool = false;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StatefulList<T> {
     #[serde(skip)]
     pub state: ListState,
@@ -59,8 +57,8 @@ impl<T> Default for StatefulList<T> {
     }
 }
 
-impl FilteredStatefulList<Channel> {
-    pub fn filter(&mut self, filter: impl Fn(&Channel) -> bool) {
+impl<T> FilteredStatefulList<T> {
+    pub fn filter(&mut self, filter: impl Fn(&T) -> bool) {
         self.filter_elements(filter);
         // Update the selected message to not got past the bound of `self.filtered_items`
         self.state.select(if self.filtered_items.is_empty() {
@@ -102,14 +100,6 @@ impl<'a, T> Iterator for StatefulIterator<'a, T> {
 }
 
 impl<T> StatefulList<T> {
-    pub fn with_items(items: Vec<T>) -> StatefulList<T> {
-        StatefulList {
-            state: ListState::default(),
-            items,
-            rendered: Default::default(),
-        }
-    }
-
     pub fn next(&mut self) {
         let i = match self.state.selected() {
             Some(i) => {
@@ -164,15 +154,6 @@ impl<T> FilteredStatefulList<T> {
         StatefulIterator {
             index: 0,
             list: self,
-        }
-    }
-
-    pub fn _with_items(items: Vec<T>) -> FilteredStatefulList<T> {
-        FilteredStatefulList {
-            state: ListState::default(),
-            items,
-            filtered_items: Default::default(),
-            rendered: Default::default(),
         }
     }
 
@@ -248,6 +229,11 @@ impl<T> FilteredStatefulList<T> {
             }
         };
         self.state.select(Some(i));
+    }
+
+    pub fn selected_item(&self) -> Option<&T> {
+        let idx = self.state.selected()?;
+        Some(&self.items[idx])
     }
 }
 

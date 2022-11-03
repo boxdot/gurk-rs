@@ -4,7 +4,7 @@ use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use gurk::app::App;
 use gurk::config::{Config, User};
 use gurk::signal::test::SignalManagerMock;
-use gurk::storage::InMemoryStorage;
+use gurk::storage::{ForgetfulStorage, MemCache};
 use presage::prelude::Content;
 use tracing::info;
 
@@ -18,15 +18,17 @@ fn test_app() -> App {
             })
         },
         Box::new(SignalManagerMock::new()),
-        Box::new(InMemoryStorage::new()),
+        Box::new(MemCache::new(ForgetfulStorage)),
     )
     .unwrap()
 }
 
 pub fn bench_on_message(c: &mut Criterion) {
     let _ = tracing_subscriber::fmt::try_init();
-    let data = read_input_data("messages.raw.json").expect("failed to read data");
-    info!(n = %data.len(), "messages");
+    let path =
+        std::env::var("RAW_MESSAGES_FILE").unwrap_or_else(|_| "messages.raw.json".to_string());
+    let data = read_input_data(&path).expect("failed to read data");
+    info!(n = data.len(), from = path, "messages");
     c.bench_function("on_message", move |b| {
         b.to_async(tokio::runtime::Runtime::new().unwrap())
             .iter_batched(

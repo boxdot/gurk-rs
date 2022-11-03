@@ -18,6 +18,7 @@ use crate::cursor::Cursor;
 use crate::data::Message;
 use crate::receipt::{Receipt, ReceiptEvent};
 use crate::shortcuts::{ShortCut, SHORTCUTS};
+use crate::storage::MessageId;
 use crate::util::utc_timestamp_msec_to_local;
 
 use super::name_resolver::NameResolver;
@@ -92,16 +93,16 @@ fn draw_channels<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     app.filter_channels(&pattern);
 
     let channels: Vec<ListItem> = app
-        .data
         .channels
         .iter()
+        .filter_map(|&channel_id| app.storage.channel(channel_id))
         .map(|channel| {
             let unread_messages_label = if channel.unread_messages != 0 {
                 format!(" ({})", channel.unread_messages)
             } else {
                 String::new()
             };
-            let label = format!("{}{}", app.channel_name(channel), unread_messages_label);
+            let label = format!("{}{}", app.channel_name(&*channel), unread_messages_label);
             let label_width = label.width();
             let label = if label.width() <= channel_list_width || unread_messages_label.is_empty() {
                 label
@@ -119,7 +120,7 @@ fn draw_channels<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let channels = List::new(channels)
         .block(Block::default().borders(Borders::ALL).title("Channels"))
         .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray));
-    f.render_stateful_widget(channels, area, &mut app.data.channels.state);
+    f.render_stateful_widget(channels, area, &mut app.channels.state);
 }
 
 fn wrap(text: &str, mut cursor: Cursor, width: usize) -> (String, Cursor, usize) {
@@ -204,44 +205,51 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 }
 
 fn prepare_receipts(app: &mut App, height: usize) {
-    let mut to_send = Vec::new();
     let user_id = app.user_id;
-    let channel = app
-        .data
-        .channels
-        .state
-        .selected()
-        .and_then(|idx| app.data.channels.items.get_mut(idx));
-    let channel = match channel {
-        Some(c) if !c.messages.items.is_empty() => c,
-        _ => return,
+    let channel_id = match app.channels.selected_item() {
+        Some(channel_id) => *channel_id,
+        None => return,
     };
+    let messages = match app.messages.get(&channel_id) {
+        Some(messages) => messages,
+        None => return,
+    };
+    if messages.items.is_empty() {
+        return;
+    }
 
-    let offset = if let Some(selected) = channel.messages.state.selected() {
-        channel
-            .messages
+    let offset = if let Some(selected) = messages.state.selected() {
+        messages
             .rendered
             .offset
             .min(selected)
             .max(selected.saturating_sub(height))
     } else {
-        channel.messages.rendered.offset
+        messages.rendered.offset
     };
 
-    let messages = &mut channel.messages.items[..];
-
-    for msg in messages.iter_mut().rev().skip(offset) {
-        if let Receipt::Delivered = msg.receipt {
-            if msg.from_id != user_id {
-                to_send.push((msg.from_id, msg.arrived_at));
-                msg.receipt = Receipt::Read
+    let read_messages: Vec<Message> = app
+        .storage
+        .messages(channel_id)
+        .rev()
+        .skip(offset)
+        .filter_map(|message| {
+            if let Receipt::Delivered = message.receipt {
+                if message.from_id != user_id {
+                    let mut message = message.into_owned();
+                    message.receipt = Receipt::Read;
+                    return Some(message);
+                }
             }
-        }
-    }
-    if !to_send.is_empty() {
-        to_send
-            .into_iter()
-            .for_each(|(u, t)| app.add_receipt_event(ReceiptEvent::new(u, t, Receipt::Read)))
+            None
+        })
+        .collect();
+
+    for message in read_messages {
+        let from_id = message.from_id;
+        let arrived_at = message.arrived_at;
+        app.storage.store_message(channel_id, message);
+        app.add_receipt_event(ReceiptEvent::new(from_id, arrived_at, Receipt::Read));
     }
 }
 
@@ -255,36 +263,36 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
     prepare_receipts(app, height);
 
-    let channel = app.data.channels.state.selected().and_then(|idx| {
-        app.data
-            .channels
-            .items
-            .get(*app.data.channels.filtered_items.get(idx).unwrap())
+    let channel_id = app.channels.state.selected().and_then(|idx| {
+        let idx = *app.channels.filtered_items.get(idx).unwrap();
+        app.channels.items.get(idx)
     });
-    let channel = match channel {
-        Some(c) if !c.messages.items.is_empty() => c,
+    let channel_id = match channel_id {
+        Some(id) => *id,
         _ => return,
     };
+    let channel = app
+        .storage
+        .channel(channel_id)
+        .expect("non-existent channel");
 
-    let writing_people = app.writing_people(channel);
+    let writing_people = app.writing_people(&*channel);
 
     // Calculate the offset in messages we start rendering with.
     // `offset` includes the selected message (if any), and is at most height-many messages to
     // the selected message, since we can't render more than height-many of them.
-    let offset = if let Some(selected) = channel.messages.state.selected() {
-        channel
-            .messages
+    let messages = &app.messages[&channel_id];
+    let offset = if let Some(selected) = messages.state.selected() {
+        messages
             .rendered
             .offset
             .min(selected)
             .max(selected.saturating_sub(height))
     } else {
-        channel.messages.rendered.offset
+        messages.rendered.offset
     };
 
-    let messages = &channel.messages.items[..];
-
-    let names = NameResolver::compute_for_channel(app, channel);
+    let names = NameResolver::compute_for_channel(app, &*channel);
     let max_username_width = names.max_name_width();
 
     // message display options
@@ -297,25 +305,20 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let prefix = " ".repeat(prefix_width);
 
     // The day of the message at the bottom of the viewport
-    let mut previous_msg_day = utc_timestamp_msec_to_local(
-        messages
-            .iter()
-            .rev()
-            .skip(offset)
-            .map(|msg| msg.arrived_at)
-            .next()
-            .unwrap_or_default(),
-    )
-    .num_days_from_ce();
+    let messages_to_render = messages.items.iter().rev().skip(offset).copied();
+    let mut previous_msg_day =
+        utc_timestamp_msec_to_local(messages_to_render.clone().next().unwrap_or_default())
+            .num_days_from_ce();
 
-    let messages_from_offset = messages
-        .iter()
-        .rev()
-        .skip(offset)
-        .flat_map(|msg| {
+    let messages_from_offset = messages_to_render
+        .flat_map(|arrived_at| {
+            let msg = app
+                .storage
+                .message(MessageId::new(channel_id, arrived_at))
+                .expect("non-existent message");
             let date_division = display_date_line(msg.arrived_at, &mut previous_msg_day, width);
-            let show_receipt = ShowReceipt::from_msg(msg, app.user_id, app.config.show_receipts);
-            let msg = display_message(&names, msg, &prefix, width as usize, height, show_receipt);
+            let show_receipt = ShowReceipt::from_msg(&msg, app.user_id, app.config.show_receipts);
+            let msg = display_message(&names, &msg, &prefix, width as usize, height, show_receipt);
 
             [date_division, msg]
         })
@@ -324,7 +327,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     // counters to accumulate messages as long they fit into the list height,
     // or up to the selected message
     let mut items_height = 0;
-    let selected = channel.messages.state.selected().unwrap_or(0);
+    let selected = messages.state.selected().unwrap_or(0);
 
     let mut items: Vec<ListItem<'static>> = messages_from_offset
         .enumerate()
@@ -370,12 +373,14 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray))
         .start_corner(Corner::BottomLeft);
 
-    // re-borrow channel mutably
-    let channel_idx = app.data.channels.state.selected().unwrap_or_default();
-    let channel = &mut app.data.channels.items[channel_idx];
+    // re-borrow channel messages mutably
+    let messages = app
+        .messages
+        .get_mut(&channel_id)
+        .expect("non-existent channel");
 
     // update selected state to point within `items`
-    let state = &mut channel.messages.state;
+    let state = &mut messages.state;
     let selected_global = state.selected();
     if let Some(selected) = selected_global {
         state.select(Some(selected - offset));
@@ -385,7 +390,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
     // restore selected state and update offset
     state.select(selected_global);
-    channel.messages.rendered.offset = offset;
+    messages.rendered.offset = offset;
 }
 
 fn display_time(timestamp: u64) -> String {
@@ -661,7 +666,7 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
     let shorts_widget =
         List::new(shorts).block(Block::default().borders(Borders::ALL).title("Help"));
-    f.render_stateful_widget(shorts_widget, area, &mut app.data.channels.state);
+    f.render_stateful_widget(shorts_widget, area, &mut app.channels.state);
 }
 
 fn displayed_quote(names: &NameResolver, quote: &Message) -> Option<String> {
