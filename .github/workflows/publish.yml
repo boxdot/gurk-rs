@@ -79,7 +79,8 @@ jobs:
           target: x86_64-unknown-linux-musl
           override: true
       - name: Dist
-        run: cargo xtask dist
+        # FIXME: building xtask without explicit target segfaults rustc
+        run: cargo run -p xtask --target x86_64-unknown-linux-musl  -- dist
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
@@ -137,7 +138,8 @@ jobs:
           target: aarch64-unknown-linux-musl
           override: true
       - name: Dist
-        run: cargo xtask dist
+        # FIXME: building xtask without explicit target segfaults rustc
+        run: cargo run -p xtask --target x86_64-unknown-linux-musl  -- dist
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
