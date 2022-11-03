@@ -13,8 +13,7 @@ use uuid::Uuid;
 
 use crate::data::{Channel, ChannelId, GroupData, Message, TypingSet};
 
-use super::storage::Metadata;
-use super::{MessageId, Storage};
+use super::{MessageId, Metadata, Storage};
 
 pub struct JsonStorage {
     data_path: PathBuf,

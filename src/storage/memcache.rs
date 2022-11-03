@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::borrow::Cow;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
@@ -8,8 +6,7 @@ use uuid::Uuid;
 
 use crate::data::{Channel, ChannelId, Message};
 
-use super::storage::Metadata;
-use super::{MessageId, Storage};
+use super::{MessageId, Metadata, Storage};
 
 pub struct MemCache<S: Storage> {
     channels: Vec<Channel>,

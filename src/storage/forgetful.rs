@@ -4,8 +4,7 @@ use uuid::Uuid;
 
 use crate::data::{Channel, ChannelId, Message};
 
-use super::storage::Metadata;
-use super::{MessageId, Storage};
+use super::{MessageId, Metadata, Storage};
 
 /// A storage which actually does not store anything, therefore forgetful.
 pub struct ForgetfulStorage;
