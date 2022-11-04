@@ -2,24 +2,24 @@ use std::{env, fs::File, path::Path};
 
 use anyhow::Result;
 use flate2::{write::GzEncoder, Compression};
-use xshell::{cmd, mkdir_p, rm_rf};
+use xshell::{cmd, Shell};
 
 use crate::{flags, project_root};
 
 impl flags::Dist {
-    pub(crate) fn run(self) -> Result<()> {
+    pub(crate) fn run(self, sh: &Shell) -> Result<()> {
         let dist = project_root().join("dist");
-        rm_rf(&dist)?;
-        mkdir_p(&dist)?;
+        sh.remove_path(&dist)?;
+        sh.create_dir(&dist)?;
 
-        build()?;
+        build(sh)?;
         Ok(())
     }
 }
 
-fn build() -> Result<()> {
+fn build(sh: &Shell) -> Result<()> {
     let target = get_target();
-    cmd!("cargo build --target {target} --release --locked").run()?;
+    cmd!(sh, "cargo build --target {target} --release --locked").run()?;
 
     let suffix = exe_suffix(&target);
     let src = Path::new("target")

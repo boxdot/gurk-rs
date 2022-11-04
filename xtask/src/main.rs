@@ -5,19 +5,16 @@ mod flags;
 use anyhow::Result;
 use std::env;
 use std::path::{Path, PathBuf};
-use xshell::pushd;
+use xshell::Shell;
 
 fn main() -> Result<()> {
-    let _d = pushd(project_root())?;
+    let sh = Shell::new()?;
+    let _d = sh.push_dir(project_root());
 
     let flags = flags::Xtask::from_env()?;
     match flags.subcommand {
-        flags::XtaskCmd::Help(_) => {
-            println!("{}", flags::Xtask::HELP);
-            Ok(())
-        }
-        flags::XtaskCmd::Dist(cmd) => cmd.run(),
-        flags::XtaskCmd::Changelog(cmd) => cmd.run(),
+        flags::XtaskCmd::Dist(cmd) => cmd.run(&sh),
+        flags::XtaskCmd::Changelog(cmd) => cmd.run(&sh),
     }
 }
 

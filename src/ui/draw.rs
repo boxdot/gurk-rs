@@ -102,7 +102,7 @@ fn draw_channels<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
             } else {
                 String::new()
             };
-            let label = format!("{}{}", app.channel_name(&*channel), unread_messages_label);
+            let label = format!("{}{}", app.channel_name(&channel), unread_messages_label);
             let label_width = label.width();
             let label = if label.width() <= channel_list_width || unread_messages_label.is_empty() {
                 label
@@ -276,7 +276,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         .channel(channel_id)
         .expect("non-existent channel");
 
-    let writing_people = app.writing_people(&*channel);
+    let writing_people = app.writing_people(&channel);
 
     // Calculate the offset in messages we start rendering with.
     // `offset` includes the selected message (if any), and is at most height-many messages to
@@ -292,7 +292,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         messages.rendered.offset
     };
 
-    let names = NameResolver::compute_for_channel(app, &*channel);
+    let names = NameResolver::compute_for_channel(app, &channel);
     let max_username_width = names.max_name_width();
 
     // message display options

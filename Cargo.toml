@@ -30,50 +30,50 @@ dev = ["prost", "base64"]
 [dependencies]
 presage = { git = "https://github.com/whisperfish/presage", rev = "f84d958", default-features = false, features = ["sled-config-store"] }
 
-anyhow = "1.0.40"
-async-trait = "0.1.51"
+anyhow = "1.0.66"
+async-trait = "0.1.58"
 chrono = { version = "0.4.22", features = ["serde"] }
-crossterm = { version = "0.19.0", features = ["event-stream"] }
+crossterm = { version = "0.25.0", features = ["event-stream"] }
 derivative = "2.2.0"
-dirs = "3.0.2"
+dirs = "4.0.0"
 emoji = "0.2.1"
-gh-emoji = "1.0.3"
+gh-emoji = "1.0.7"
 hostname = "0.3.1"
-itertools = "0.10.0"
-log-panics = "2.0.0"
-mime_guess = "2.0.3"
-notify-rust = "4.5.8"
+itertools = "0.10.5"
+log-panics = "2.1.0"
+mime_guess = "2.0.4"
+notify-rust = "4.5.10"
 opener = "0.5.0"
 phonenumber = "0.3.1"
 regex-automata = "0.1.10"
 scopeguard = "1.1.0"
-serde = { version = "1.0.125", features = ["derive"] }
-serde_json = "1.0.64"
-textwrap = "0.14.2"
-tokio = { version = "1.5.0", default-features = false, features = ["rt-multi-thread", "macros", "net", "time"] }
-tokio-stream = "0.1.5"
-toml = "0.5.8"
-tui = { version = "0.15.0", default-features = false, features = ["crossterm"] }
-unicode-width = "0.1.8"
+serde = { version = "1.0.147", features = ["derive"] }
+serde_json = "1.0.87"
+textwrap = "0.16.0"
+tokio = { version = "1.21.2", default-features = false, features = ["rt-multi-thread", "macros", "net", "time"] }
+tokio-stream = "0.1.11"
+toml = "0.5.9"
+tui = { version = "0.19.0", default-features = false, features = ["crossterm"] }
+unicode-width = "0.1.10"
 uuid = { version = "1.2", features = ["v4"] }
-whoami = "1.1.2"
-tracing = "0.1.35"
+whoami = "1.2.3"
+tracing = "0.1.37"
 tracing-appender = "0.2.2"
-tracing-subscriber = "0.3.11"
-futures-channel = "0.3.24"
-qr2term = "0.3.0"
-clap = { version = "4.0.18", features = ["derive"] }
+tracing-subscriber = "0.3.16"
+futures-channel = "0.3.25"
+qr2term = "0.3.1"
+clap = { version = "4.0.19", features = ["derive"] }
 
 # dev feature dependencies
-prost = { version = "0.10.0", optional = true }
-base64 = { version = "0.13.0", optional = true }
+prost = { version = "0.10.4", optional = true }
+base64 = { version = "0.13.1", optional = true }
 
 [dev-dependencies]
 criterion = { version = "0.4", features = ["async_tokio", "html_reports"] }
 insta = { version = "1.21.0", features = ["json"] }
 quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
-tempfile = "3.2.0"
+tempfile = "3.3.0"
 
 [[bench]]
 name = "app"

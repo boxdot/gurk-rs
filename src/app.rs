@@ -284,7 +284,7 @@ impl App {
         })?;
 
         self.signal_manager
-            .send_reaction(&*channel, &*message, emoji.clone(), remove);
+            .send_reaction(&channel, &message, emoji.clone(), remove);
 
         let channel_id = channel.id;
         let arrived_at = message.arrived_at;
@@ -328,7 +328,7 @@ impl App {
         let quote = self.selected_message();
         let sent_message =
             self.signal_manager
-                .send_text(&*channel, input, quote.as_deref(), attachments);
+                .send_text(&channel, input, quote.as_deref(), attachments);
 
         let sent_message = self.storage.store_message(channel_id, sent_message);
         self.messages
