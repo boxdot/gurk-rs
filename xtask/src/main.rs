@@ -11,7 +11,7 @@ fn main() -> Result<()> {
     let sh = Shell::new()?;
     let _d = sh.push_dir(project_root());
 
-    let flags = flags::Xtask::from_env()?;
+    let flags = flags::Xtask::from_env_or_exit();
     match flags.subcommand {
         flags::XtaskCmd::Dist(cmd) => cmd.run(&sh),
         flags::XtaskCmd::Changelog(cmd) => cmd.run(&sh),

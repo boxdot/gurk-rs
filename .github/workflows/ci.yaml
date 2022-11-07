@@ -76,6 +76,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: xtask
+          args: --help
 
   build-x86_64-unknown-linux-musl:
     name: build (x86_64-unknown-linux-musl)
@@ -135,6 +136,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: xtask
+          args: --help
 
   build-aarch64-unknown-linux-musl:
     name: build (aarch64-unknown-linux-musl)
@@ -194,6 +196,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: xtask
+          args: --help
 
   build-aarch64-apple-darwin:
     name: build (aarch64-apple-darwin)
@@ -223,3 +226,4 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: xtask
+          args: --help
