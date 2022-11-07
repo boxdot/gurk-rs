@@ -1,22 +1,22 @@
 use anyhow::{anyhow, bail, Result};
-use pulldown_cmark::{Event, Parser, Tag};
+use pulldown_cmark::{Event, HeadingLevel, Parser, Tag};
 use semver::Version;
-use xshell::{mkdir_p, read_file, rm_rf, write_file};
+use xshell::Shell;
 
 use crate::{flags, project_root};
 
 impl flags::Changelog {
-    pub(crate) fn run(self) -> Result<()> {
+    pub(crate) fn run(self, sh: &Shell) -> Result<()> {
         let dist = project_root().join("dist");
-        rm_rf(&dist)?;
-        mkdir_p(&dist)?;
+        sh.remove_path(&dist)?;
+        sh.create_dir(&dist)?;
 
         let version = get_version()?;
 
-        let changelog = read_file("CHANGELOG.md")?;
+        let changelog = sh.read_file("CHANGELOG.md")?;
         let section = extract_section(&changelog, version)?;
 
-        write_file(dist.join("CHANGELOG.md"), section.trim())?;
+        sh.write_file(dist.join("CHANGELOG.md"), section.trim())?;
         Ok(())
     }
 }
@@ -26,7 +26,8 @@ fn get_version() -> Result<Version> {
         .map_err(|_| anyhow!("missing GITHUB_REF; not running in GitHub actions?"))?;
     github_ref
         .strip_prefix("refs/tags/v")
-        .and_then(|s| Version::parse(s).ok())
+        .map(|s| Version::parse(s))
+        .transpose()?
         .ok_or_else(|| {
             anyhow!(
                 "failed to extract version from '{}'; not running for a tag?",
@@ -38,7 +39,7 @@ fn get_version() -> Result<Version> {
 fn extract_section(changelog: &str, version: Version) -> Result<&str> {
     let parser = Parser::new(&changelog);
     let h2 = parser.into_offset_iter().filter_map(|(event, range)| {
-        if let Event::Start(Tag::Heading(2)) = event {
+        if let Event::Start(Tag::Heading(HeadingLevel::H2, _, _)) = event {
             Some(range)
         } else {
             None

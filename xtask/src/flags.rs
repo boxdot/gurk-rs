@@ -5,11 +5,6 @@ xflags::xflags! {
 
     /// Run custom build command.
     cmd xtask {
-        default cmd help {
-            /// Print help information.
-            optional -h, --help
-        }
-
         /// Build dist archive
         cmd dist {}
 
@@ -27,14 +22,8 @@ pub struct Xtask {
 
 #[derive(Debug)]
 pub enum XtaskCmd {
-    Help(Help),
     Dist(Dist),
     Changelog(Changelog),
-}
-
-#[derive(Debug)]
-pub struct Help {
-    pub help: bool,
 }
 
 #[derive(Debug)]
@@ -44,7 +33,10 @@ pub struct Dist;
 pub struct Changelog;
 
 impl Xtask {
-    pub const HELP: &'static str = Self::HELP_;
+    #[allow(dead_code)]
+    pub fn from_env_or_exit() -> Self {
+        Self::from_env_or_exit_()
+    }
 
     #[allow(dead_code)]
     pub fn from_env() -> xflags::Result<Self> {
