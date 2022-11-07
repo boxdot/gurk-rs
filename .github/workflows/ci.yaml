@@ -107,7 +107,7 @@ jobs:
         uses: actions-rs/cargo@v1
         # xtask miscompiles on musl platform without explicit target flag
         with:
-          command: build
+          command: run
           args: -p xtask --target x86_64-unknown-linux-musl -- --help
 
   build-aarch64-unknown-linux-gnu:
