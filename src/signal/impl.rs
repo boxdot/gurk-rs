@@ -12,7 +12,7 @@ use presage::prelude::proto::{AttachmentPointer, ReceiptMessage};
 use presage::prelude::{
     AttachmentSpec, Contact, Content, ContentBody, DataMessage, GroupContextV2, GroupMasterKey,
 };
-use presage::{Registered, SledConfigStore};
+use presage::{Registered, SledStore};
 use tokio_stream::Stream;
 use tracing::{error, warn};
 use uuid::Uuid;
@@ -24,12 +24,12 @@ use crate::util::utc_now_timestamp_msec;
 use super::{Attachment, GroupMasterKeyBytes, ProfileKey, ResolvedGroup, SignalManager};
 
 pub(super) struct PresageManager {
-    manager: presage::Manager<SledConfigStore, Registered>,
+    manager: presage::Manager<SledStore, Registered>,
     emoji_replacer: Replacer,
 }
 
 impl PresageManager {
-    pub(super) fn new(manager: presage::Manager<presage::SledConfigStore, Registered>) -> Self {
+    pub(super) fn new(manager: presage::Manager<presage::SledStore, Registered>) -> Self {
         Self {
             manager,
             emoji_replacer: Replacer::new(),
@@ -116,7 +116,7 @@ impl SignalManager for PresageManager {
             timestamp: timestamps,
         };
 
-        let manager = self.manager.clone();
+        let mut manager = self.manager.clone();
         tokio::task::spawn_local(async move {
             let body = ContentBody::ReceiptMessage(data_message);
             if let Err(e) = manager
@@ -157,7 +157,7 @@ impl SignalManager for PresageManager {
 
         match channel.id {
             ChannelId::User(uuid) => {
-                let manager = self.manager.clone();
+                let mut manager = self.manager.clone();
                 tokio::task::spawn_local(async move {
                     upload_attachments(&manager, attachments, &mut data_message).await;
 
@@ -170,7 +170,7 @@ impl SignalManager for PresageManager {
             }
             ChannelId::Group(_) => {
                 if let Some(group_data) = channel.group_data.as_ref() {
-                    let manager = self.manager.clone();
+                    let mut manager = self.manager.clone();
                     let self_uuid = self.user_id();
 
                     data_message.group_v2 = Some(GroupContextV2 {
@@ -233,7 +233,7 @@ impl SignalManager for PresageManager {
 
         match (channel.id, channel.group_data.as_ref()) {
             (ChannelId::User(uuid), _) => {
-                let manager = self.manager.clone();
+                let mut manager = self.manager.clone();
                 let body = ContentBody::DataMessage(data_message);
                 tokio::task::spawn_local(async move {
                     if let Err(e) = manager.send_message(uuid, body, timestamp).await {
@@ -243,7 +243,7 @@ impl SignalManager for PresageManager {
                 });
             }
             (ChannelId::Group(_), Some(group_data)) => {
-                let manager = self.manager.clone();
+                let mut manager = self.manager.clone();
                 let self_uuid = self.user_id();
 
                 data_message.group_v2 = Some(GroupContextV2 {
@@ -282,7 +282,7 @@ impl SignalManager for PresageManager {
     }
 
     async fn request_contacts_sync(&self) -> anyhow::Result<()> {
-        Ok(self.manager.request_contacts_sync().await?)
+        Ok(self.manager.clone().request_contacts_sync().await?)
     }
 
     fn contact_by_id(&self, id: Uuid) -> anyhow::Result<Option<Contact>> {
@@ -295,7 +295,7 @@ impl SignalManager for PresageManager {
 }
 
 async fn upload_attachments(
-    manager: &presage::Manager<presage::SledConfigStore, Registered>,
+    manager: &presage::Manager<presage::SledStore, Registered>,
     attachments: Vec<(AttachmentSpec, Vec<u8>)>,
     data_message: &mut DataMessage,
 ) {
