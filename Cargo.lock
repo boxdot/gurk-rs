@@ -15,6 +15,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b613b8e1e3cf911a086f53f03bf286f52fd7a7258e4fa606f0ef220d39d8877"
 dependencies = [
  "generic-array",
+ "rand_core 0.6.4",
 ]
 
 [[package]]
@@ -111,6 +112,12 @@ name = "arrayvec"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23b62fc65de8e4e7f52534fb52b0f3ed04746ae267519eef2a83941e8085068b"
+
+[[package]]
+name = "arrayvec"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8da52d66c7071e2e3fa2a1e5c6d088fec47b593032b254f5e980de8ea54454d6"
 
 [[package]]
 name = "async-broadcast"
@@ -252,6 +259,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
 
 [[package]]
+name = "base64ct"
+version = "1.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b645a089122eccb6111b4f81cbc1a49f5900ac4666bb93ac027feaecf15607bf"
+
+[[package]]
 name = "bincode"
 version = "1.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -265,6 +278,20 @@ name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
+
+[[package]]
+name = "blake3"
+version = "1.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a08e53fc5a564bb15bfe6fae56bd71522205f1f91893f9c0116edad6496c183f"
+dependencies = [
+ "arrayref",
+ "arrayvec 0.7.2",
+ "cc",
+ "cfg-if",
+ "constant_time_eq",
+ "digest 0.10.5",
+]
 
 [[package]]
 name = "block"
@@ -364,6 +391,31 @@ name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
+
+[[package]]
+name = "chacha20"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c80e5460aa66fe3b91d40bcbdab953a597b60053e34d684ac6903f863b680a6"
+dependencies = [
+ "cfg-if",
+ "cipher",
+ "cpufeatures",
+ "zeroize",
+]
+
+[[package]]
+name = "chacha20poly1305"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a18446b09be63d457bbec447509e85f662f32952b035ce892290396bc0b0cff5"
+dependencies = [
+ "aead",
+ "chacha20",
+ "cipher",
+ "poly1305",
+ "zeroize",
+]
 
 [[package]]
 name = "checked_int_cast"
@@ -521,6 +573,12 @@ dependencies = [
  "terminal_size",
  "winapi",
 ]
+
+[[package]]
+name = "constant_time_eq"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "245097e9a4535ee1e3e3931fcfcd55a796a44c643e8596ff6566d68f09b87bbc"
 
 [[package]]
 name = "core-foundation"
@@ -956,6 +1014,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fs_extra"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2022715d62ab30faffd124d40b76f4134a550a87792276512b18d63272333394"
+
+[[package]]
 name = "futures"
 version = "0.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1140,7 +1204,7 @@ dependencies = [
 
 [[package]]
 name = "gurk"
-version = "0.3.1-dev"
+version = "0.4.0-dev"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1500,7 +1564,7 @@ version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6607c62aa161d23d17a9072cc5da0be67cdfc89d3afb1e8d9c842bebc2525ffe"
 dependencies = [
- "arrayvec",
+ "arrayvec 0.5.2",
  "bitflags",
  "cfg-if",
  "ryu",
@@ -1544,7 +1608,7 @@ dependencies = [
 [[package]]
 name = "libsignal-service"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/libsignal-service-rs?rev=8666ba56f47e405aaf8ed243be6e2ad1b5ad68c1#8666ba56f47e405aaf8ed243be6e2ad1b5ad68c1"
+source = "git+https://github.com/whisperfish/libsignal-service-rs?rev=0e851d867a33e74008335a4174da8a8c47faba33#0e851d867a33e74008335a4174da8a8c47faba33"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -1577,7 +1641,7 @@ dependencies = [
 [[package]]
 name = "libsignal-service-hyper"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/libsignal-service-rs?rev=8666ba56f47e405aaf8ed243be6e2ad1b5ad68c1#8666ba56f47e405aaf8ed243be6e2ad1b5ad68c1"
+source = "git+https://github.com/whisperfish/libsignal-service-rs?rev=0e851d867a33e74008335a4174da8a8c47faba33#0e851d867a33e74008335a4174da8a8c47faba33"
 dependencies = [
  "async-trait",
  "async-tungstenite",
@@ -1679,6 +1743,25 @@ name = "match_cfg"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ffbee8634e0d45d258acb448e7eaab3fce7a0a467395d4d9f228e3c1f01fb2e4"
+
+[[package]]
+name = "matrix-sdk-store-encryption"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ddee75c3cca58f3a323283dc4e849d19d52988903f907ed0fb53dcad5d6fd25"
+dependencies = [
+ "blake3",
+ "chacha20poly1305",
+ "displaydoc",
+ "hmac 0.12.1",
+ "pbkdf2",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "sha2 0.10.6",
+ "thiserror",
+ "zeroize",
+]
 
 [[package]]
 name = "memchr"
@@ -2013,6 +2096,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "password-hash"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7676374caaee8a325c9e7a2ae557f216c5563a171d6997b0ef8a65af35147700"
+dependencies = [
+ "base64ct",
+ "rand_core 0.6.4",
+ "subtle",
+]
+
+[[package]]
+name = "pbkdf2"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83a0692ec44e4cf1ef28ca317f14f8f07da2d95ec3fa01f86e4467b725e60917"
+dependencies = [
+ "digest 0.10.5",
+ "hmac 0.12.1",
+ "password-hash",
+ "sha2 0.10.6",
+]
+
+[[package]]
 name = "percent-encoding"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2175,6 +2281,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly1305"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "048aeb476be11a4b6ca432ca569e375810de9294ae78f4774e78ea98a9246ede"
+dependencies = [
+ "cpufeatures",
+ "opaque-debug",
+ "universal-hash",
+]
+
+[[package]]
 name = "polyval"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2194,19 +2311,25 @@ checksum = "eb9f9e6e233e5c4a35559a617bf40a4ec447db2e84c20b55a6f83167b7e57872"
 
 [[package]]
 name = "presage"
-version = "0.3.0"
-source = "git+https://github.com/whisperfish/presage?rev=f84d958#f84d9580e894c480dd9fcecb6de4159b85e6965b"
+version = "0.4.0"
+source = "git+https://github.com/whisperfish/presage?rev=faef707#faef7072b4b6d37971e7411bc3bba8a8a6c24517"
 dependencies = [
  "async-trait",
  "base64 0.12.3",
+ "bytes",
+ "fs_extra",
  "futures",
  "hex",
  "libsignal-service",
  "libsignal-service-hyper",
  "log",
+ "matrix-sdk-store-encryption",
+ "prost 0.10.4",
+ "prost-build 0.10.4",
  "rand 0.7.3",
  "serde",
  "serde_json",
+ "sha2 0.10.6",
  "sled",
  "thiserror",
  "url",
