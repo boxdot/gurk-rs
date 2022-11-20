@@ -19,8 +19,8 @@ pub static SHORTCUTS: &[ShortCut] = &[
         description: "Switch between single-line and multi-line modes.",
     },
     ShortCut {
-        event: "alt+tab",
-        description: "Switch between message input box and search bar.",
+        event: "ctrl+p",
+        description: "Open pop-up for selecting a channel",
     },
     ShortCut {
         event: "ctrl+w / ctrl+backspace / alt+backspace",
@@ -56,7 +56,7 @@ pub static SHORTCUTS: &[ShortCut] = &[
     },
     ShortCut {
         event: "Esc",
-        description: "Reset message selection.",
+        description: "Reset message selection / Close popup.",
     },
     ShortCut {
         event: "alt+Up / PgUp",
