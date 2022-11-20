@@ -1,3 +1,4 @@
+use crate::channels::SelectChannel;
 use crate::config::Config;
 use crate::data::{Channel, ChannelId, Message, TypingAction, TypingSet};
 use crate::input::Input;
@@ -56,6 +57,7 @@ pub struct App {
     pub input: Input,
     pub search_box: Input,
     pub is_multiline_input: bool,
+    pub(crate) select_channel: SelectChannel,
 }
 
 impl App {
@@ -105,12 +107,15 @@ impl App {
             input: Default::default(),
             search_box: Default::default(),
             is_multiline_input: false,
+            select_channel: Default::default(),
         })
     }
 
     pub fn get_input(&mut self) -> &mut Input {
         if self.is_searching {
             &mut self.search_box
+        } else if self.select_channel.is_shown {
+            &mut self.select_channel.input
         } else {
             &mut self.input
         }
@@ -179,20 +184,43 @@ impl App {
     pub fn on_key(&mut self, key: KeyEvent) -> anyhow::Result<()> {
         match key.code {
             KeyCode::Char('\r') => self.get_input().put_char('\n'),
-            KeyCode::Enter if key.modifiers.contains(KeyModifiers::ALT) && !self.is_searching => {
-                self.is_multiline_input = !self.is_multiline_input;
-            }
-            KeyCode::Enter if self.is_multiline_input && !self.is_searching => {
-                self.get_input().new_line();
-            }
-            KeyCode::Enter if !self.get_input().data.is_empty() && !self.is_searching => {
-                if let Some(idx) = self.channels.state.selected() {
-                    self.send_input(self.channels.filtered_items[idx])?;
-                }
-            }
             KeyCode::Enter => {
-                // input is empty
-                self.try_open_url();
+                if !self.is_searching && !self.select_channel.is_shown {
+                    if key.modifiers.contains(KeyModifiers::ALT) {
+                        self.is_multiline_input = !self.is_multiline_input;
+                    } else if self.is_multiline_input {
+                        self.get_input().new_line();
+                    } else if !self.input.data.is_empty() {
+                        if let Some(idx) = self.channels.state.selected() {
+                            self.send_input(self.channels.filtered_items[idx])?;
+                        }
+                    } else {
+                        // input is empty
+                        self.try_open_url();
+                    }
+                } else if self.select_channel.is_shown {
+                    if let Some(idx) = self.select_channel.state.selected() {
+                        self.select_channel.is_shown = false;
+                        let item_idx = *self
+                            .select_channel
+                            .filtered_index
+                            .get(idx)
+                            .context("filtered_index and state in select_channel mismatch")?;
+                        let item = self
+                            .select_channel
+                            .items
+                            .get(item_idx)
+                            .context("filtered_index and items in select_channel mismatch")?;
+                        let (idx, _) = self
+                            .channels
+                            .items
+                            .iter()
+                            .enumerate()
+                            .find(|(_, &id)| id == item.channel_id)
+                            .context("channel disappeared during channel select popup")?;
+                        self.channels.state.select(Some(idx));
+                    }
+                }
             }
             KeyCode::Home => {
                 self.get_input().on_home();
@@ -209,7 +237,19 @@ impl App {
             KeyCode::Backspace => {
                 self.get_input().on_backspace();
             }
-            KeyCode::Esc => self.reset_message_selection(),
+            KeyCode::Char('p') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                if !self.select_channel.is_shown {
+                    self.select_channel.reset(&*self.storage);
+                }
+                self.select_channel.is_shown = !self.select_channel.is_shown;
+            }
+            KeyCode::Esc => {
+                if self.select_channel.is_shown {
+                    self.select_channel.is_shown = false;
+                } else {
+                    self.reset_message_selection();
+                }
+            }
             KeyCode::Char(c) => self.get_input().put_char(c),
             KeyCode::Tab => {
                 if let Some(idx) = self.channels.state.selected() {
@@ -1292,6 +1332,18 @@ impl App {
             }
         });
         self.channels = channels;
+    }
+
+    pub fn is_select_channel_shown(&self) -> bool {
+        self.select_channel.is_shown
+    }
+
+    pub fn select_channel_prev(&mut self) {
+        self.select_channel.prev();
+    }
+
+    pub fn select_channel_next(&mut self) {
+        self.select_channel.next();
     }
 }
 

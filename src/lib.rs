@@ -1,6 +1,7 @@
 //! Signal Messenger client for terminal
 
 pub mod app;
+mod channels;
 pub mod config;
 pub mod cursor;
 pub mod data;
