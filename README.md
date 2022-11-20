@@ -80,7 +80,6 @@ libraries that are not available on crates.io.
 
 * App navigation
   * `f1` Toggle help panel.
-  * `alt+tab` Switch between message input box and search bar.
 * Message input
   * `tab` Send emoji from input line as reaction on selected message.
   * `alt+enter` Switch between multi-line and singl-line input modes.
@@ -103,6 +102,7 @@ libraries that are not available on crates.io.
   * `alt+Down / PgDown` Select next message.
   * `ctrl+j / Up` Select previous channel.
   * `ctrl+k / Down` Select next channel.
+  * `ctrl+p` Open / close channel selection popup.
 
 ## License
 
