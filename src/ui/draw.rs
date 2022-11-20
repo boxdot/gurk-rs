@@ -95,8 +95,6 @@ fn draw_select_channel_popup<B: Backend>(f: &mut Frame<B>, select_channel: &mut 
 
 fn draw_channels<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let channel_list_width = area.width.saturating_sub(2) as usize;
-    app.channel_text_width = channel_list_width;
-
     let channels: Vec<ListItem> = app
         .channels
         .items
@@ -202,7 +200,7 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let input = Paragraph::new(Text::from(wrapped_input))
         .block(Block::default().borders(Borders::ALL).title(title));
     f.render_widget(input, chunks[1]);
-    if !app.is_searching {
+    if !app.select_channel.is_shown {
         f.set_cursor(
             chunks[1].x + cursor.col as u16 + 1,  // +1 for frame
             chunks[1].y + cursor.line as u16 + 1, // +1 for frame

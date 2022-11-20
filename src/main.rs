@@ -213,7 +213,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                     let col = event.column;
                     let row = event.row;
                     if let Some(channel_idx) =
-                        ui::coords_within_channels_view(&terminal.get_frame(), &app, col, row)
+                        ui::coords_within_channels_view(terminal.get_frame().size(), col, row)
                             .map(|(_, row)| row as usize)
                             .filter(|&idx| idx < app.channels.items.len())
                     {
@@ -273,7 +273,6 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                 KeyCode::Down if event.modifiers.contains(KeyModifiers::ALT) => app.on_pgdn(),
                 KeyCode::PageUp => app.on_pgup(),
                 KeyCode::PageDown => app.on_pgdn(),
-                KeyCode::Tab if event.modifiers.contains(KeyModifiers::ALT) => app.toggle_search(),
                 KeyCode::Char('f') if event.modifiers.contains(KeyModifiers::ALT) => {
                     app.get_input().move_forward_word();
                 }

@@ -49,11 +49,8 @@ pub struct App {
     url_regex: LazyRegex,
     attachment_regex: LazyRegex,
     display_help: bool,
-    pub is_searching: bool,
-    pub channel_text_width: usize,
     receipt_handler: ReceiptHandler,
     pub input: Input,
-    pub search_box: Input,
     pub is_multiline_input: bool,
     pub(crate) select_channel: SelectChannel,
 }
@@ -100,20 +97,15 @@ impl App {
             url_regex: LazyRegex::new(URL_REGEX),
             attachment_regex: LazyRegex::new(ATTACHMENT_REGEX),
             display_help: false,
-            is_searching: false,
-            channel_text_width: 0,
             receipt_handler: ReceiptHandler::new(),
             input: Default::default(),
-            search_box: Default::default(),
             is_multiline_input: false,
             select_channel: Default::default(),
         })
     }
 
     pub fn get_input(&mut self) -> &mut Input {
-        if self.is_searching {
-            &mut self.search_box
-        } else if self.select_channel.is_shown {
+        if self.select_channel.is_shown {
             &mut self.select_channel.input
         } else {
             &mut self.input
@@ -184,7 +176,7 @@ impl App {
         match key.code {
             KeyCode::Char('\r') => self.get_input().put_char('\n'),
             KeyCode::Enter => {
-                if !self.is_searching && !self.select_channel.is_shown {
+                if !self.select_channel.is_shown {
                     if key.modifiers.contains(KeyModifiers::ALT) {
                         self.is_multiline_input = !self.is_multiline_input;
                     } else if self.is_multiline_input {
@@ -1268,10 +1260,6 @@ impl App {
 
     pub fn toggle_help(&mut self) {
         self.display_help = !self.display_help;
-    }
-
-    pub fn toggle_search(&mut self) {
-        self.is_searching = !self.is_searching;
     }
 
     pub fn is_help(&self) -> bool {
