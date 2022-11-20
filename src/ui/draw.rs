@@ -14,6 +14,7 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use uuid::Uuid;
 
 use crate::app::App;
+use crate::channels::SelectChannel;
 use crate::cursor::Cursor;
 use crate::data::Message;
 use crate::receipt::{Receipt, ReceiptEvent};
@@ -54,92 +55,42 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     draw_chat(f, app, chunks[1]);
 
     if app.select_channel.is_shown {
-        let area = centered_rect(60, 60, f.size());
-
-        let chunks = Layout::default()
-            .constraints([Constraint::Length(1 + 2), Constraint::Min(0)].as_ref())
-            .direction(Direction::Vertical)
-            .split(area);
-
-        f.render_widget(Clear, area);
-        let input = Paragraph::new(Text::from(app.select_channel.input.data.clone())).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title("Select channel"),
-        );
-        f.render_widget(input, chunks[0]);
-        let cursor = &app.select_channel.input.cursor;
-        f.set_cursor(
-            chunks[0].x + cursor.col as u16 + 1,
-            chunks[0].y + cursor.line as u16 + 1,
-        );
-
-        app.select_channel.filtered_index = app
-            .select_channel
-            .items
-            .iter()
-            .enumerate()
-            .filter_map(|(idx, item)| {
-                if item
-                    .name
-                    .to_ascii_lowercase()
-                    .contains(&app.select_channel.input.data.to_ascii_lowercase())
-                {
-                    Some(idx)
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        let items: Vec<_> = app
-            .select_channel
-            .filtered_index
-            .iter()
-            .map(|&idx| app.select_channel.items[idx].name.clone())
-            .map(ListItem::new)
-            .collect();
-
-        match app.select_channel.state.selected() {
-            Some(idx) if items.len() <= idx => {
-                app.select_channel.state.select(items.len().checked_sub(1));
-            }
-            None if !items.is_empty() => {
-                app.select_channel.state.select(Some(0));
-            }
-            _ => (),
-        }
-        let list = List::new(items)
-            .block(Block::default().borders(Borders::ALL))
-            .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray));
-        f.render_stateful_widget(list, chunks[1], &mut app.select_channel.state);
+        draw_select_channel_popup(f, &mut app.select_channel);
     }
 }
 
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::default()
+fn draw_select_channel_popup<B: Backend>(f: &mut Frame<B>, select_channel: &mut SelectChannel) {
+    let area = centered_rect(60, 60, f.size());
+    let chunks = Layout::default()
+        .constraints([Constraint::Length(1 + 2), Constraint::Min(0)].as_ref())
         .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Percentage((100 - percent_y) / 2),
-                Constraint::Percentage(percent_y),
-                Constraint::Percentage((100 - percent_y) / 2),
-            ]
-            .as_ref(),
-        )
-        .split(r);
-
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints(
-            [
-                Constraint::Percentage((100 - percent_x) / 2),
-                Constraint::Percentage(percent_x),
-                Constraint::Percentage((100 - percent_x) / 2),
-            ]
-            .as_ref(),
-        )
-        .split(popup_layout[1])[1]
+        .split(area);
+    f.render_widget(Clear, area);
+    let input = Paragraph::new(Text::from(select_channel.input.data.clone())).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title("Select channel"),
+    );
+    f.render_widget(input, chunks[0]);
+    let cursor = &select_channel.input.cursor;
+    f.set_cursor(
+        chunks[0].x + cursor.col as u16 + 1,
+        chunks[0].y + cursor.line as u16 + 1,
+    );
+    let items: Vec<_> = select_channel.filtered_names().map(ListItem::new).collect();
+    match select_channel.state.selected() {
+        Some(idx) if items.len() <= idx => {
+            select_channel.state.select(items.len().checked_sub(1));
+        }
+        None if !items.is_empty() => {
+            select_channel.state.select(Some(0));
+        }
+        _ => (),
+    }
+    let list = List::new(items)
+        .block(Block::default().borders(Borders::ALL))
+        .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray));
+    f.render_stateful_widget(list, chunks[1], &mut select_channel.state);
 }
 
 fn draw_channels_column<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
@@ -760,6 +711,32 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 fn displayed_quote(names: &NameResolver, quote: &Message) -> Option<String> {
     let (name, _) = names.resolve(quote.from_id);
     Some(format!("({}) {}", name, quote.message.as_ref()?))
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Percentage((100 - percent_y) / 2),
+                Constraint::Percentage(percent_y),
+                Constraint::Percentage((100 - percent_y) / 2),
+            ]
+            .as_ref(),
+        )
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Percentage((100 - percent_x) / 2),
+                Constraint::Percentage(percent_x),
+                Constraint::Percentage((100 - percent_x) / 2),
+            ]
+            .as_ref(),
+        )
+        .split(popup_layout[1])[1]
 }
 
 #[cfg(test)]

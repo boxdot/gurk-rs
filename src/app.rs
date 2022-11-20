@@ -199,24 +199,14 @@ impl App {
                         self.try_open_url();
                     }
                 } else if self.select_channel.is_shown {
-                    if let Some(idx) = self.select_channel.state.selected() {
+                    if let Some(channel_id) = self.select_channel.selected_channel_id().copied() {
                         self.select_channel.is_shown = false;
-                        let item_idx = *self
-                            .select_channel
-                            .filtered_index
-                            .get(idx)
-                            .context("filtered_index and state in select_channel mismatch")?;
-                        let item = self
-                            .select_channel
-                            .items
-                            .get(item_idx)
-                            .context("filtered_index and items in select_channel mismatch")?;
                         let (idx, _) = self
                             .channels
                             .items
                             .iter()
                             .enumerate()
-                            .find(|(_, &id)| id == item.channel_id)
+                            .find(|(_, &id)| id == channel_id)
                             .context("channel disappeared during channel select popup")?;
                         self.channels.state.select(Some(idx));
                     }
