@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Replace search box by channel selection popup (Ctrl+p) ([#203])
+
+[#203]: https://github.com/boxdot/gurk-rs/pull/203
+
 ## 0.3.0
 
 ⚠️ This release requires relinking.
