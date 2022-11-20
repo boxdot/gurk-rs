@@ -7,9 +7,7 @@ use crate::signal::{
     Attachment, GroupIdentifierBytes, GroupMasterKeyBytes, ProfileKey, ResolvedGroup, SignalManager,
 };
 use crate::storage::{MessageId, Storage};
-use crate::util::{
-    self, FilteredStatefulList, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX,
-};
+use crate::util::{self, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX};
 
 use anyhow::{anyhow, bail, Context as _};
 use chrono::{Duration, Utc};
@@ -44,7 +42,7 @@ pub struct App {
     pub config: Config,
     signal_manager: Box<dyn SignalManager>,
     pub storage: Box<dyn Storage>,
-    pub channels: FilteredStatefulList<ChannelId>,
+    pub channels: StatefulList<ChannelId>,
     pub messages: BTreeMap<ChannelId, StatefulList<u64 /* arrived at*/>>,
     pub user_id: Uuid,
     pub should_quit: bool,
@@ -69,7 +67,7 @@ impl App {
         let user_id = signal_manager.user_id();
 
         // build index of channels and messages for using them as lists content
-        let mut channels: FilteredStatefulList<ChannelId> = Default::default();
+        let mut channels: StatefulList<ChannelId> = Default::default();
         let mut messages: BTreeMap<_, StatefulList<_>> = BTreeMap::new();
         for channel in storage.channels() {
             channels.items.push(channel.id);
@@ -89,6 +87,7 @@ impl App {
                 .map(|channel| channel.name.clone());
             (Reverse(last_message_arrived_at), channel_name)
         });
+        channels.next();
 
         Ok(Self {
             config,
@@ -192,7 +191,7 @@ impl App {
                         self.get_input().new_line();
                     } else if !self.input.data.is_empty() {
                         if let Some(idx) = self.channels.state.selected() {
-                            self.send_input(self.channels.filtered_items[idx])?;
+                            self.send_input(idx)?;
                         }
                     } else {
                         // input is empty
@@ -1294,34 +1293,6 @@ impl App {
             self.storage.store_metadata(metadata);
         }
         Ok(())
-    }
-
-    /// Filters visible channel based on the provided `pattern`
-    ///
-    /// `pattern` is compared to channel name or channel member contact names, case insensitively.
-    pub(crate) fn filter_channels(&mut self, pattern: &str) {
-        let pattern = pattern.to_lowercase();
-
-        // move out `channels` temporarily to make borrow checker happy
-        let mut channels = std::mem::take(&mut self.channels);
-        channels.filter(|channel_id: &ChannelId| {
-            let channel = self
-                .storage
-                .channel(*channel_id)
-                .expect("non-existent channel");
-            match pattern.chars().next() {
-                None => true,
-                Some('@') => match channel.group_data.as_ref() {
-                    Some(group_data) => group_data
-                        .members
-                        .iter()
-                        .any(|&id| self.name_by_id(id).to_lowercase().contains(&pattern[1..])),
-                    None => channel.name.to_lowercase().contains(&pattern[1..]),
-                },
-                _ => channel.name.to_lowercase().contains(&pattern),
-            }
-        });
-        self.channels = channels;
     }
 
     pub fn is_select_channel_shown(&self) -> bool {

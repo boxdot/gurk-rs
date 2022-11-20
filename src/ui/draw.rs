@@ -51,7 +51,7 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
         .direction(Direction::Horizontal)
         .split(f.size());
 
-    draw_channels_column(f, app, chunks[0]);
+    draw_channels(f, app, chunks[0]);
     draw_chat(f, app, chunks[1]);
 
     if app.select_channel.is_shown {
@@ -93,46 +93,13 @@ fn draw_select_channel_popup<B: Backend>(f: &mut Frame<B>, select_channel: &mut 
     f.render_stateful_widget(list, chunks[1], &mut select_channel.state);
 }
 
-fn draw_channels_column<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
-    let text_width = area.width.saturating_sub(2) as usize;
-    let (wrapped_input, cursor, num_input_lines) = wrap(
-        &app.search_box.data,
-        app.search_box.cursor.clone(),
-        text_width,
-    );
-
-    let chunks = Layout::default()
-        .constraints(
-            [
-                Constraint::Length(num_input_lines as u16 + 2),
-                Constraint::Min(0),
-            ]
-            .as_ref(),
-        )
-        .direction(Direction::Vertical)
-        .split(area);
-
-    draw_channels(f, app, chunks[1]);
-
-    let input = Paragraph::new(Text::from(wrapped_input))
-        .block(Block::default().borders(Borders::ALL).title("Search"));
-    f.render_widget(input, chunks[0]);
-    if app.is_searching {
-        f.set_cursor(
-            chunks[0].x + cursor.col as u16 + 1,
-            chunks[0].y + cursor.line as u16 + 1,
-        );
-    }
-}
-
 fn draw_channels<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let channel_list_width = area.width.saturating_sub(2) as usize;
-    let pattern = app.search_box.data.clone();
     app.channel_text_width = channel_list_width;
-    app.filter_channels(&pattern);
 
     let channels: Vec<ListItem> = app
         .channels
+        .items
         .iter()
         .filter_map(|&channel_id| app.storage.channel(channel_id))
         .map(|channel| {
@@ -302,13 +269,8 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
     prepare_receipts(app, height);
 
-    let channel_id = app.channels.state.selected().and_then(|idx| {
-        let idx = *app.channels.filtered_items.get(idx).unwrap();
-        app.channels.items.get(idx)
-    });
-    let channel_id = match channel_id {
-        Some(id) => *id,
-        _ => return,
+    let Some(&channel_id) = app.channels.selected_item() else {
+        return
     };
     let channel = app
         .storage
