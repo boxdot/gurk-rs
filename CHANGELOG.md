@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Do not create log file when logging is disabled ([#204])
+
+[#204]: https://github.com/boxdot/gurk-rs/pull/204
+
 ## 0.3.0
 
 ⚠️ This release requires relinking.
