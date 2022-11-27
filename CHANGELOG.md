@@ -6,7 +6,12 @@
 
 - Replace search box by channel selection popup (Ctrl+p) ([#203])
 
+### Fixed
+
+- Do not create log file when logging is disabled ([#204])
+
 [#203]: https://github.com/boxdot/gurk-rs/pull/203
+[#204]: https://github.com/boxdot/gurk-rs/pull/204
 
 ## 0.3.0
 
