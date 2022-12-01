@@ -48,9 +48,9 @@ struct Args {
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    if args.verbosity > 0 {
+    let _guard = if args.verbosity > 0 {
         let file_appender = tracing_appender::rolling::never("./", "gurk.log");
-        let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+        let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
         tracing_subscriber::fmt()
             .with_max_level(match args.verbosity {
                 0 => LevelFilter::OFF,
@@ -61,7 +61,10 @@ async fn main() -> anyhow::Result<()> {
             .with_writer(non_blocking)
             .with_ansi(false)
             .init();
-    }
+        Some(guard)
+    } else {
+        None
+    };
 
     log_panics::init();
 
