@@ -1,3 +1,4 @@
+use crate::channels::SelectChannel;
 use crate::config::Config;
 use crate::data::{Channel, ChannelId, Message, TypingAction, TypingSet};
 use crate::input::Input;
@@ -6,9 +7,7 @@ use crate::signal::{
     Attachment, GroupIdentifierBytes, GroupMasterKeyBytes, ProfileKey, ResolvedGroup, SignalManager,
 };
 use crate::storage::{MessageId, Storage};
-use crate::util::{
-    self, FilteredStatefulList, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX,
-};
+use crate::util::{self, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX};
 
 use anyhow::{anyhow, bail, Context as _};
 use chrono::{Duration, Utc};
@@ -43,19 +42,17 @@ pub struct App {
     pub config: Config,
     signal_manager: Box<dyn SignalManager>,
     pub storage: Box<dyn Storage>,
-    pub channels: FilteredStatefulList<ChannelId>,
+    pub channels: StatefulList<ChannelId>,
     pub messages: BTreeMap<ChannelId, StatefulList<u64 /* arrived at*/>>,
     pub user_id: Uuid,
     pub should_quit: bool,
     url_regex: LazyRegex,
     attachment_regex: LazyRegex,
     display_help: bool,
-    pub is_searching: bool,
-    pub channel_text_width: usize,
     receipt_handler: ReceiptHandler,
     pub input: Input,
-    pub search_box: Input,
     pub is_multiline_input: bool,
+    pub(crate) select_channel: SelectChannel,
 }
 
 impl App {
@@ -67,7 +64,7 @@ impl App {
         let user_id = signal_manager.user_id();
 
         // build index of channels and messages for using them as lists content
-        let mut channels: FilteredStatefulList<ChannelId> = Default::default();
+        let mut channels: StatefulList<ChannelId> = Default::default();
         let mut messages: BTreeMap<_, StatefulList<_>> = BTreeMap::new();
         for channel in storage.channels() {
             channels.items.push(channel.id);
@@ -87,6 +84,7 @@ impl App {
                 .map(|channel| channel.name.clone());
             (Reverse(last_message_arrived_at), channel_name)
         });
+        channels.next();
 
         Ok(Self {
             config,
@@ -99,18 +97,16 @@ impl App {
             url_regex: LazyRegex::new(URL_REGEX),
             attachment_regex: LazyRegex::new(ATTACHMENT_REGEX),
             display_help: false,
-            is_searching: false,
-            channel_text_width: 0,
             receipt_handler: ReceiptHandler::new(),
             input: Default::default(),
-            search_box: Default::default(),
             is_multiline_input: false,
+            select_channel: Default::default(),
         })
     }
 
     pub fn get_input(&mut self) -> &mut Input {
-        if self.is_searching {
-            &mut self.search_box
+        if self.select_channel.is_shown {
+            &mut self.select_channel.input
         } else {
             &mut self.input
         }
@@ -179,20 +175,33 @@ impl App {
     pub fn on_key(&mut self, key: KeyEvent) -> anyhow::Result<()> {
         match key.code {
             KeyCode::Char('\r') => self.get_input().put_char('\n'),
-            KeyCode::Enter if key.modifiers.contains(KeyModifiers::ALT) && !self.is_searching => {
-                self.is_multiline_input = !self.is_multiline_input;
-            }
-            KeyCode::Enter if self.is_multiline_input && !self.is_searching => {
-                self.get_input().new_line();
-            }
-            KeyCode::Enter if !self.get_input().data.is_empty() && !self.is_searching => {
-                if let Some(idx) = self.channels.state.selected() {
-                    self.send_input(self.channels.filtered_items[idx])?;
-                }
-            }
             KeyCode::Enter => {
-                // input is empty
-                self.try_open_url();
+                if !self.select_channel.is_shown {
+                    if key.modifiers.contains(KeyModifiers::ALT) {
+                        self.is_multiline_input = !self.is_multiline_input;
+                    } else if self.is_multiline_input {
+                        self.get_input().new_line();
+                    } else if !self.input.data.is_empty() {
+                        if let Some(idx) = self.channels.state.selected() {
+                            self.send_input(idx)?;
+                        }
+                    } else {
+                        // input is empty
+                        self.try_open_url();
+                    }
+                } else if self.select_channel.is_shown {
+                    if let Some(channel_id) = self.select_channel.selected_channel_id().copied() {
+                        self.select_channel.is_shown = false;
+                        let (idx, _) = self
+                            .channels
+                            .items
+                            .iter()
+                            .enumerate()
+                            .find(|(_, &id)| id == channel_id)
+                            .context("channel disappeared during channel select popup")?;
+                        self.channels.state.select(Some(idx));
+                    }
+                }
             }
             KeyCode::Home => {
                 self.get_input().on_home();
@@ -209,7 +218,19 @@ impl App {
             KeyCode::Backspace => {
                 self.get_input().on_backspace();
             }
-            KeyCode::Esc => self.reset_message_selection(),
+            KeyCode::Char('p') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                if !self.select_channel.is_shown {
+                    self.select_channel.reset(&*self.storage);
+                }
+                self.select_channel.is_shown = !self.select_channel.is_shown;
+            }
+            KeyCode::Esc => {
+                if self.select_channel.is_shown {
+                    self.select_channel.is_shown = false;
+                } else {
+                    self.reset_message_selection();
+                }
+            }
             KeyCode::Char(c) => self.get_input().put_char(c),
             KeyCode::Tab => {
                 if let Some(idx) = self.channels.state.selected() {
@@ -1241,10 +1262,6 @@ impl App {
         self.display_help = !self.display_help;
     }
 
-    pub fn toggle_search(&mut self) {
-        self.is_searching = !self.is_searching;
-    }
-
     pub fn is_help(&self) -> bool {
         self.display_help
     }
@@ -1266,32 +1283,16 @@ impl App {
         Ok(())
     }
 
-    /// Filters visible channel based on the provided `pattern`
-    ///
-    /// `pattern` is compared to channel name or channel member contact names, case insensitively.
-    pub(crate) fn filter_channels(&mut self, pattern: &str) {
-        let pattern = pattern.to_lowercase();
+    pub fn is_select_channel_shown(&self) -> bool {
+        self.select_channel.is_shown
+    }
 
-        // move out `channels` temporarily to make borrow checker happy
-        let mut channels = std::mem::take(&mut self.channels);
-        channels.filter(|channel_id: &ChannelId| {
-            let channel = self
-                .storage
-                .channel(*channel_id)
-                .expect("non-existent channel");
-            match pattern.chars().next() {
-                None => true,
-                Some('@') => match channel.group_data.as_ref() {
-                    Some(group_data) => group_data
-                        .members
-                        .iter()
-                        .any(|&id| self.name_by_id(id).to_lowercase().contains(&pattern[1..])),
-                    None => channel.name.to_lowercase().contains(&pattern[1..]),
-                },
-                _ => channel.name.to_lowercase().contains(&pattern),
-            }
-        });
-        self.channels = channels;
+    pub fn select_channel_prev(&mut self) {
+        self.select_channel.prev();
+    }
+
+    pub fn select_channel_next(&mut self) {
+        self.select_channel.next();
     }
 }
 

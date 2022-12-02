@@ -8,12 +8,13 @@ use tui::backend::Backend;
 use tui::layout::{Constraint, Corner, Direction, Layout, Rect};
 use tui::style::{Color, Style};
 use tui::text::{Span, Spans, Text};
-use tui::widgets::{Block, Borders, List, ListItem, Paragraph};
+use tui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph};
 use tui::Frame;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use uuid::Uuid;
 
 use crate::app::App;
+use crate::channels::SelectChannel;
 use crate::cursor::Cursor;
 use crate::data::Message;
 use crate::receipt::{Receipt, ReceiptEvent};
@@ -50,50 +51,53 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
         .direction(Direction::Horizontal)
         .split(f.size());
 
-    draw_channels_column(f, app, chunks[0]);
+    draw_channels(f, app, chunks[0]);
     draw_chat(f, app, chunks[1]);
+
+    if app.select_channel.is_shown {
+        draw_select_channel_popup(f, &mut app.select_channel);
+    }
 }
 
-fn draw_channels_column<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
-    let text_width = area.width.saturating_sub(2) as usize;
-    let (wrapped_input, cursor, num_input_lines) = wrap(
-        &app.search_box.data,
-        app.search_box.cursor.clone(),
-        text_width,
-    );
-
+fn draw_select_channel_popup<B: Backend>(f: &mut Frame<B>, select_channel: &mut SelectChannel) {
+    let area = centered_rect(60, 60, f.size());
     let chunks = Layout::default()
-        .constraints(
-            [
-                Constraint::Length(num_input_lines as u16 + 2),
-                Constraint::Min(0),
-            ]
-            .as_ref(),
-        )
+        .constraints([Constraint::Length(1 + 2), Constraint::Min(0)].as_ref())
         .direction(Direction::Vertical)
         .split(area);
-
-    draw_channels(f, app, chunks[1]);
-
-    let input = Paragraph::new(Text::from(wrapped_input))
-        .block(Block::default().borders(Borders::ALL).title("Search"));
+    f.render_widget(Clear, area);
+    let input = Paragraph::new(Text::from(select_channel.input.data.clone())).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title("Select channel"),
+    );
     f.render_widget(input, chunks[0]);
-    if app.is_searching {
-        f.set_cursor(
-            chunks[0].x + cursor.col as u16 + 1,
-            chunks[0].y + cursor.line as u16 + 1,
-        );
+    let cursor = &select_channel.input.cursor;
+    f.set_cursor(
+        chunks[0].x + cursor.col as u16 + 1,
+        chunks[0].y + cursor.line as u16 + 1,
+    );
+    let items: Vec<_> = select_channel.filtered_names().map(ListItem::new).collect();
+    match select_channel.state.selected() {
+        Some(idx) if items.len() <= idx => {
+            select_channel.state.select(items.len().checked_sub(1));
+        }
+        None if !items.is_empty() => {
+            select_channel.state.select(Some(0));
+        }
+        _ => (),
     }
+    let list = List::new(items)
+        .block(Block::default().borders(Borders::ALL))
+        .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray));
+    f.render_stateful_widget(list, chunks[1], &mut select_channel.state);
 }
 
 fn draw_channels<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let channel_list_width = area.width.saturating_sub(2) as usize;
-    let pattern = app.search_box.data.clone();
-    app.channel_text_width = channel_list_width;
-    app.filter_channels(&pattern);
-
     let channels: Vec<ListItem> = app
         .channels
+        .items
         .iter()
         .filter_map(|&channel_id| app.storage.channel(channel_id))
         .map(|channel| {
@@ -196,7 +200,7 @@ fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let input = Paragraph::new(Text::from(wrapped_input))
         .block(Block::default().borders(Borders::ALL).title(title));
     f.render_widget(input, chunks[1]);
-    if !app.is_searching {
+    if !app.select_channel.is_shown {
         f.set_cursor(
             chunks[1].x + cursor.col as u16 + 1,  // +1 for frame
             chunks[1].y + cursor.line as u16 + 1, // +1 for frame
@@ -263,13 +267,8 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
     prepare_receipts(app, height);
 
-    let channel_id = app.channels.state.selected().and_then(|idx| {
-        let idx = *app.channels.filtered_items.get(idx).unwrap();
-        app.channels.items.get(idx)
-    });
-    let channel_id = match channel_id {
-        Some(id) => *id,
-        _ => return,
+    let Some(&channel_id) = app.channels.selected_item() else {
+        return
     };
     let channel = app
         .storage
@@ -672,6 +671,32 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 fn displayed_quote(names: &NameResolver, quote: &Message) -> Option<String> {
     let (name, _) = names.resolve(quote.from_id);
     Some(format!("({}) {}", name, quote.message.as_ref()?))
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Percentage((100 - percent_y) / 2),
+                Constraint::Percentage(percent_y),
+                Constraint::Percentage((100 - percent_y) / 2),
+            ]
+            .as_ref(),
+        )
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Percentage((100 - percent_x) / 2),
+                Constraint::Percentage(percent_x),
+                Constraint::Percentage((100 - percent_x) / 2),
+            ]
+            .as_ref(),
+        )
+        .split(popup_layout[1])[1]
 }
 
 #[cfg(test)]
