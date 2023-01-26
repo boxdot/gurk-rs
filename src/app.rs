@@ -27,7 +27,7 @@ use presage::prelude::{
     AttachmentSpec, Content, ServiceAddress,
 };
 use regex_automata::Regex;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use std::borrow::Cow;

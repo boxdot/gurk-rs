@@ -99,7 +99,7 @@ impl SignalManager for PresageManager {
         };
 
         let filepath = data_dir.join(filename);
-        std::fs::write(&filepath, &attachment_data)?;
+        std::fs::write(&filepath, attachment_data)?;
 
         Ok(Attachment {
             id: date,

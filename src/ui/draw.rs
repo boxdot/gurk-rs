@@ -226,8 +226,7 @@ fn prepare_receipts(app: &mut App, height: usize) {
         messages
             .rendered
             .offset
-            .min(selected)
-            .max(selected.saturating_sub(height))
+            .clamp(selected.saturating_sub(height), selected)
     } else {
         messages.rendered.offset
     };
@@ -285,8 +284,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
         messages
             .rendered
             .offset
-            .min(selected)
-            .max(selected.saturating_sub(height))
+            .clamp(selected.saturating_sub(height), selected)
     } else {
         messages.rendered.offset
     };
@@ -317,7 +315,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
                 .expect("non-existent message");
             let date_division = display_date_line(msg.arrived_at, &mut previous_msg_day, width);
             let show_receipt = ShowReceipt::from_msg(&msg, app.user_id, app.config.show_receipts);
-            let msg = display_message(&names, &msg, &prefix, width as usize, height, show_receipt);
+            let msg = display_message(&names, &msg, &prefix, width, height, show_receipt);
 
             [date_division, msg]
         })
