@@ -67,6 +67,7 @@ clap = { version = "4.0.19", features = ["derive"] }
 # dev feature dependencies
 prost = { version = "0.10.4", optional = true }
 base64 = { version = "0.13.1", optional = true }
+arboard = { version = "3.2.0", features = ["wayland-data-control"] }
 
 [dev-dependencies]
 criterion = { version = "0.4", features = ["async_tokio", "html_reports"] }

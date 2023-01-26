@@ -10,6 +10,7 @@ use crate::storage::{MessageId, Storage};
 use crate::util::{self, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX};
 
 use anyhow::{anyhow, bail, Context as _};
+use arboard::Clipboard;
 use chrono::{Duration, Utc};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use itertools::Itertools;
@@ -26,7 +27,7 @@ use presage::prelude::{
     AttachmentSpec, Content, ServiceAddress,
 };
 use regex_automata::Regex;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use std::borrow::Cow;
@@ -34,6 +35,7 @@ use std::cmp::Reverse;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 
 /// Amount of time to skip contacts sync after the last sync
 const CONTACTS_SYNC_DEADLINE_SEC: i64 = 60 * 60; // 1h
@@ -53,6 +55,7 @@ pub struct App {
     pub input: Input,
     pub is_multiline_input: bool,
     pub(crate) select_channel: SelectChannel,
+    clipboard: Option<Arc<Mutex<Clipboard>>>,
 }
 
 impl App {
@@ -86,6 +89,11 @@ impl App {
         });
         channels.next();
 
+        let clipboard = Clipboard::new()
+            .map(|clipboard| Arc::new(Mutex::new(clipboard)))
+            .map_err(|error| warn!(%error, "clipboard disabled"))
+            .ok();
+
         Ok(Self {
             config,
             signal_manager,
@@ -101,6 +109,7 @@ impl App {
             input: Default::default(),
             is_multiline_input: false,
             select_channel: Default::default(),
+            clipboard,
         })
     }
 
@@ -1293,6 +1302,23 @@ impl App {
 
     pub fn select_channel_next(&mut self) {
         self.select_channel.next();
+    }
+
+    pub fn copy_selection(&self) {
+        if let Some(message) = self.selected_message() {
+            if let Some(text) = message.message.as_ref() {
+                if let Some(clipboard) = self.clipboard.clone() {
+                    let text = text.clone();
+                    tokio::task::spawn_blocking(move || {
+                        if let Err(error) = clipboard.lock().expect("poisoned").set_text(text) {
+                            error!(%error, "failed to copy text to clipboard");
+                        } else {
+                            info!("copied selected text to clipboard");
+                        }
+                    });
+                }
+            }
+        }
     }
 }
 

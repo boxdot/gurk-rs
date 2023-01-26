@@ -59,11 +59,11 @@ pub static SHORTCUTS: &[ShortCut] = &[
         description: "Reset message selection / Close popup.",
     },
     ShortCut {
-        event: "alt+Up / PgUp",
+        event: "alt+Up / alt+k / PgUp",
         description: "Select previous message.",
     },
     ShortCut {
-        event: "alt+Down / PgDown",
+        event: "alt+Down / alt+j / PgDown",
         description: "Select next message.",
     },
     ShortCut {
@@ -81,5 +81,9 @@ pub static SHORTCUTS: &[ShortCut] = &[
     ShortCut {
         event: "ctrl+k / Down, multi-line mode",
         description: "Next line",
+    },
+    ShortCut {
+        event: "alt+y",
+        description: "Copy selected message to clipboard",
     },
 ];
