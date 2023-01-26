@@ -35,7 +35,6 @@ use std::cmp::Reverse;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 
 /// Amount of time to skip contacts sync after the last sync
 const CONTACTS_SYNC_DEADLINE_SEC: i64 = 60 * 60; // 1h
@@ -55,7 +54,7 @@ pub struct App {
     pub input: Input,
     pub is_multiline_input: bool,
     pub(crate) select_channel: SelectChannel,
-    clipboard: Option<Arc<Mutex<Clipboard>>>,
+    clipboard: Option<Clipboard>,
 }
 
 impl App {
@@ -90,7 +89,6 @@ impl App {
         channels.next();
 
         let clipboard = Clipboard::new()
-            .map(|clipboard| Arc::new(Mutex::new(clipboard)))
             .map_err(|error| warn!(%error, "clipboard disabled"))
             .ok();
 
@@ -1304,18 +1302,16 @@ impl App {
         self.select_channel.next();
     }
 
-    pub fn copy_selection(&self) {
+    pub fn copy_selection(&mut self) {
         if let Some(message) = self.selected_message() {
             if let Some(text) = message.message.as_ref() {
-                if let Some(clipboard) = self.clipboard.clone() {
-                    let text = text.clone();
-                    tokio::task::spawn_blocking(move || {
-                        if let Err(error) = clipboard.lock().expect("poisoned").set_text(text) {
-                            error!(%error, "failed to copy text to clipboard");
-                        } else {
-                            info!("copied selected text to clipboard");
-                        }
-                    });
+                let text = text.clone();
+                if let Some(clipboard) = self.clipboard.as_mut() {
+                    if let Err(error) = clipboard.set_text(text) {
+                        error!(%error, "failed to copy text to clipboard");
+                    } else {
+                        info!("copied selected text to clipboard");
+                    }
                 }
             }
         }
