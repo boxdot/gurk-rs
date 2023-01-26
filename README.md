@@ -98,11 +98,13 @@ libraries that are not available on crates.io.
   * `ctrl+e / End` Move cursor the the end of the line.
 * Message/channel selection
   * `Esc` Reset message selection.
-  * `alt+Up / PgUp` Select previous message.
-  * `alt+Down / PgDown` Select next message.
+  * `alt+Up / alt+k / PgUp` Select previous message.
+  * `alt+Down / alt+j / PgDown` Select next message.
   * `ctrl+j / Up` Select previous channel.
   * `ctrl+k / Down` Select next channel.
   * `ctrl+p` Open / close channel selection popup.
+* Clipboard
+  * `alt+y` Copy selected message to clipboard.
 
 ## License
 

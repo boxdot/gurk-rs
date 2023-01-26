@@ -56,11 +56,11 @@ pub async fn ensure_linked_device(
                 .to_string_lossy()
                 .split('.')
                 .find(|s| !s.is_empty())
-                .map(|s| format!("@{}", s))
+                .map(|s| format!("@{s}"))
         })
         .unwrap_or_default();
-    let device_name = format!("gurk{}", at_hostname);
-    println!("Linking new device with device name: {}", device_name);
+    let device_name = format!("gurk{at_hostname}");
+    println!("Linking new device with device name: {device_name}");
 
     let (tx, rx) = futures_channel::oneshot::channel();
     let (manager, _) = tokio::try_join!(

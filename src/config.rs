@@ -119,7 +119,7 @@ impl Config {
             .parent()
             .ok_or_else(|| anyhow!("invalid config path {}: no parent dir", path.display()))?;
         fs::create_dir_all(parent_dir).unwrap();
-        fs::write(path, &content)?;
+        fs::write(path, content)?;
         Ok(())
     }
 }

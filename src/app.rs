@@ -10,6 +10,7 @@ use crate::storage::{MessageId, Storage};
 use crate::util::{self, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX};
 
 use anyhow::{anyhow, bail, Context as _};
+use arboard::Clipboard;
 use chrono::{Duration, Utc};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use itertools::Itertools;
@@ -53,6 +54,7 @@ pub struct App {
     pub input: Input,
     pub is_multiline_input: bool,
     pub(crate) select_channel: SelectChannel,
+    clipboard: Option<Clipboard>,
 }
 
 impl App {
@@ -86,6 +88,10 @@ impl App {
         });
         channels.next();
 
+        let clipboard = Clipboard::new()
+            .map_err(|error| warn!(%error, "clipboard disabled"))
+            .ok();
+
         Ok(Self {
             config,
             signal_manager,
@@ -101,6 +107,7 @@ impl App {
             input: Default::default(),
             is_multiline_input: false,
             select_channel: Default::default(),
+            clipboard,
         })
     }
 
@@ -928,7 +935,7 @@ impl App {
 
         if is_added && channel_id != ChannelId::User(self.user_id) {
             // Notification
-            let mut notification = format!("reacted {}", emoji);
+            let mut notification = format!("reacted {emoji}");
             if let Some(text) = message.message.as_ref() {
                 notification.push_str(" to: ");
                 notification.push_str(text);
@@ -940,7 +947,7 @@ impl App {
 
             let sender_name = self.name_by_id(sender_uuid);
             let summary = if let ChannelId::Group(_) = channel_id {
-                Cow::from(format!("{} in {}", sender_name, channel_name))
+                Cow::from(format!("{sender_name} in {channel_name}"))
             } else {
                 Cow::from(sender_name)
             };
@@ -1294,6 +1301,21 @@ impl App {
     pub fn select_channel_next(&mut self) {
         self.select_channel.next();
     }
+
+    pub fn copy_selection(&mut self) {
+        if let Some(message) = self.selected_message() {
+            if let Some(text) = message.message.as_ref() {
+                let text = text.clone();
+                if let Some(clipboard) = self.clipboard.as_mut() {
+                    if let Err(error) = clipboard.set_text(text) {
+                        error!(%error, "failed to copy text to clipboard");
+                    } else {
+                        info!("copied selected text to clipboard");
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Returns an emoji string if `s` is an emoji or if `s` is a GitHub emoji shortcode.
@@ -1328,7 +1350,7 @@ fn notification_text_for_attachments(attachments: &[Attachment]) -> Option<Strin
 
 fn add_emoji_from_sticker(body: &mut Option<String>, sticker: Option<Sticker>) {
     if let Some(Sticker { emoji: Some(e), .. }) = sticker {
-        *body = Some(format!("<{}>", e));
+        *body = Some(format!("<{e}>"));
     }
 }
 

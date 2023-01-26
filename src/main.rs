@@ -276,7 +276,9 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                     }
                 }
                 KeyCode::Down if event.modifiers.contains(KeyModifiers::ALT) => app.on_pgdn(),
+                KeyCode::Char('j') if event.modifiers.contains(KeyModifiers::ALT) => app.on_pgdn(),
                 KeyCode::PageUp => app.on_pgup(),
+                KeyCode::Char('k') if event.modifiers.contains(KeyModifiers::ALT) => app.on_pgup(),
                 KeyCode::PageDown => app.on_pgdn(),
                 KeyCode::Char('f') if event.modifiers.contains(KeyModifiers::ALT) => {
                     app.get_input().move_forward_word();
@@ -304,6 +306,9 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                     } else {
                         app.select_next_channel();
                     }
+                }
+                KeyCode::Char('y') if event.modifiers.contains(KeyModifiers::ALT) => {
+                    app.copy_selection();
                 }
                 KeyCode::Up => {
                     if app.is_select_channel_shown() {

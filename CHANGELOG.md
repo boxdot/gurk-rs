@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+-  Copy selected message to clipboard ([#210])
+
 ### Changed
 
 - Replace search box by channel selection popup (Ctrl+p) ([#203])
@@ -12,6 +16,7 @@
 
 [#203]: https://github.com/boxdot/gurk-rs/pull/203
 [#204]: https://github.com/boxdot/gurk-rs/pull/204
+[#210]: https://github.com/boxdot/gurk-rs/pull/210
 
 ## 0.3.0
 
