@@ -360,7 +360,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     }
 
     let title: String = if let Some(writing_people) = writing_people {
-        format!("Messages {}", writing_people)
+        format!("Messages {writing_people}")
     } else {
         "Messages".to_string()
     };
@@ -489,7 +489,7 @@ fn display_message(
         .as_ref()
         .and_then(|quote| displayed_quote(names, quote));
     if let Some(quote_text) = quote_text.as_ref() {
-        let quote_prefix = format!("{}> ", prefix);
+        let quote_prefix = format!("{prefix}> ");
         let quote_wrap_opts = textwrap::Options::new(width.saturating_sub(2))
             .initial_indent(&quote_prefix)
             .subsequent_indent(&quote_prefix);
@@ -538,7 +538,7 @@ fn display_message(
     if spans.len() > height {
         // span is too big to be shown fully
         spans.resize(height - 1, Spans::from(""));
-        spans.push(Spans::from(format!("{}[...]", prefix)));
+        spans.push(Spans::from(format!("{prefix}[...]")));
     }
     Some(ListItem::new(Text::from(spans)))
 }

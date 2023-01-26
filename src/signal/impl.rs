@@ -86,15 +86,15 @@ impl SignalManager for PresageManager {
 
         let date = Utc::now().to_rfc3339();
         let filename = match attachment_pointer.content_type.as_deref() {
-            Some("image/jpeg") => format!("signal-{}.jpg", date),
-            Some("image/gif") => format!("signal-{}.gif", date),
-            Some("image/png") => format!("signal-{}.png", date),
+            Some("image/jpeg") => format!("signal-{date}.jpg"),
+            Some("image/gif") => format!("signal-{date}.gif"),
+            Some("image/png") => format!("signal-{date}.png"),
             Some(mimetype) => {
                 warn!("unsupported attachment mimetype: {}", mimetype);
-                format!("signal-{}", date)
+                format!("signal-{date}")
             }
             None => {
-                format!("signal-{}", date)
+                format!("signal-{date}")
             }
         };
 

@@ -937,7 +937,7 @@ impl App {
 
         if is_added && channel_id != ChannelId::User(self.user_id) {
             // Notification
-            let mut notification = format!("reacted {}", emoji);
+            let mut notification = format!("reacted {emoji}");
             if let Some(text) = message.message.as_ref() {
                 notification.push_str(" to: ");
                 notification.push_str(text);
@@ -949,7 +949,7 @@ impl App {
 
             let sender_name = self.name_by_id(sender_uuid);
             let summary = if let ChannelId::Group(_) = channel_id {
-                Cow::from(format!("{} in {}", sender_name, channel_name))
+                Cow::from(format!("{sender_name} in {channel_name}"))
             } else {
                 Cow::from(sender_name)
             };
@@ -1354,7 +1354,7 @@ fn notification_text_for_attachments(attachments: &[Attachment]) -> Option<Strin
 
 fn add_emoji_from_sticker(body: &mut Option<String>, sticker: Option<Sticker>) {
     if let Some(Sticker { emoji: Some(e), .. }) = sticker {
-        *body = Some(format!("<{}>", e));
+        *body = Some(format!("<{e}>"));
     }
 }
 
