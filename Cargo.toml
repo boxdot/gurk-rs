@@ -32,7 +32,7 @@ presage = { git = "https://github.com/whisperfish/presage", rev = "faef707" }
 
 anyhow = "1.0.66"
 async-trait = "0.1.58"
-chrono = { version = "0.4.22", features = ["serde"] }
+chrono = { version = "0.4.22", default-features = false, features = ["serde"] }
 crossterm = { version = "0.25.0", features = ["event-stream"] }
 derivative = "2.2.0"
 dirs = "4.0.0"
