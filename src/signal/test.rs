@@ -127,7 +127,7 @@ impl SignalManager for SignalManagerMock {
         Ok(None)
     }
 
-    async fn receive_messages(&self) -> anyhow::Result<Pin<Box<dyn Stream<Item = Content>>>> {
+    async fn receive_messages(&mut self) -> anyhow::Result<Pin<Box<dyn Stream<Item = Content>>>> {
         Ok(Box::pin(tokio_stream::empty()))
     }
 

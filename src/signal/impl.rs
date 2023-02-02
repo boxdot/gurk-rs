@@ -289,7 +289,7 @@ impl SignalManager for PresageManager {
         Ok(self.manager.get_contact_by_id(id)?)
     }
 
-    async fn receive_messages(&self) -> anyhow::Result<Pin<Box<dyn Stream<Item = Content>>>> {
+    async fn receive_messages(&mut self) -> anyhow::Result<Pin<Box<dyn Stream<Item = Content>>>> {
         Ok(Box::pin(self.manager.receive_messages().await?))
     }
 }
