@@ -1,7 +1,6 @@
 use std::fs::OpenOptions;
 use std::io::BufWriter;
 
-use anyhow::anyhow;
 use presage::prelude::proto;
 use presage::prelude::{Content, Metadata, ServiceAddress};
 use prost::Message;
@@ -21,6 +20,7 @@ struct MetadataDef {
     sender_device: u32,
     timestamp: u64,
     needs_receipt: bool,
+    unidentified_sender: bool,
 }
 
 impl From<Metadata> for MetadataDef {
@@ -30,6 +30,7 @@ impl From<Metadata> for MetadataDef {
             sender_device: metadata.sender_device,
             timestamp: metadata.timestamp,
             needs_receipt: metadata.needs_receipt,
+            unidentified_sender: metadata.unidentified_sender,
         }
     }
 }
@@ -51,8 +52,7 @@ impl TryFrom<ContentBase64> for Content {
     fn try_from(content: ContentBase64) -> Result<Self, Self::Error> {
         let content_bytes = base64::decode(&content.content_proto_base64)?;
         let content_proto = proto::Content::decode(&*content_bytes)?;
-        Self::from_proto(content_proto, content.metadata)
-            .ok_or_else(|| anyhow!("invalid content proto"))
+        Ok(Self::from_proto(content_proto, content.metadata)?)
     }
 }
 

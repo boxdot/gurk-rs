@@ -1754,7 +1754,7 @@ dependencies = [
 [[package]]
 name = "libsignal-service"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/libsignal-service-rs?rev=0e851d867a33e74008335a4174da8a8c47faba33#0e851d867a33e74008335a4174da8a8c47faba33"
+source = "git+https://github.com/whisperfish/libsignal-service-rs?rev=ddccf7431d7fe848ef8fbed487fc0d33fe385b23#ddccf7431d7fe848ef8fbed487fc0d33fe385b23"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -1787,7 +1787,7 @@ dependencies = [
 [[package]]
 name = "libsignal-service-hyper"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/libsignal-service-rs?rev=0e851d867a33e74008335a4174da8a8c47faba33#0e851d867a33e74008335a4174da8a8c47faba33"
+source = "git+https://github.com/whisperfish/libsignal-service-rs?rev=ddccf7431d7fe848ef8fbed487fc0d33fe385b23#ddccf7431d7fe848ef8fbed487fc0d33fe385b23"
 dependencies = [
  "async-trait",
  "async-tungstenite",
@@ -2533,8 +2533,8 @@ checksum = "eb9f9e6e233e5c4a35559a617bf40a4ec447db2e84c20b55a6f83167b7e57872"
 
 [[package]]
 name = "presage"
-version = "0.4.0"
-source = "git+https://github.com/whisperfish/presage?rev=faef707#faef7072b4b6d37971e7411bc3bba8a8a6c24517"
+version = "0.4.1-dev"
+source = "git+https://github.com/whisperfish/presage?rev=d1d72ab#d1d72ab825762c53524cc46ac24bb5aff9f8e6d0"
 dependencies = [
  "async-trait",
  "base64 0.12.3",
@@ -2546,6 +2546,7 @@ dependencies = [
  "libsignal-service-hyper",
  "log",
  "matrix-sdk-store-encryption",
+ "parking_lot 0.11.2",
  "prost 0.10.4",
  "prost-build 0.10.4",
  "rand 0.7.3",
@@ -2554,6 +2555,7 @@ dependencies = [
  "sha2 0.10.6",
  "sled",
  "thiserror",
+ "tokio",
  "url",
 ]
 

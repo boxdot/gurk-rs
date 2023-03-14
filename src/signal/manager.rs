@@ -56,7 +56,7 @@ pub trait SignalManager {
     /// This usually happens shortly after the latter method is called.
     fn contact_by_id(&self, id: Uuid) -> anyhow::Result<Option<Contact>>;
 
-    async fn receive_messages(&self) -> anyhow::Result<Pin<Box<dyn Stream<Item = Content>>>>;
+    async fn receive_messages(&mut self) -> anyhow::Result<Pin<Box<dyn Stream<Item = Content>>>>;
 }
 
 pub struct ResolvedGroup {

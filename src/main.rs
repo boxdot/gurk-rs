@@ -92,7 +92,7 @@ pub enum Event {
 }
 
 async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
-    let (signal_manager, config) = signal::ensure_linked_device(relink).await?;
+    let (mut signal_manager, config) = signal::ensure_linked_device(relink).await?;
 
     let storage = JsonStorage::new(&config.data_path, config::fallback_data_path().as_deref())?;
     let mut app = App::try_new(config, signal_manager.clone_boxed(), Box::new(storage))?;
