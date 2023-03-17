@@ -970,16 +970,19 @@ mod tests {
         let show_receipt = ShowReceipt::from_msg(&msg, USER_ID, true);
         let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, show_receipt);
 
-        let expected = ListItem::new(Text::from(vec![Spans(vec![
-            Span::styled("  ", Style::default().fg(Color::Yellow)),
-            Span::styled(
-                display_time(msg.arrived_at),
-                Style::default().fg(Color::Yellow),
-            ),
-            Span::styled("boxdot", Style::default().fg(Color::Green)),
-            Span::raw(": "),
-            Span::raw("Mention @boxdot and even more @boxdot. End"),
-        ])]));
+        let expected = ListItem::new(Text::from(vec![
+            Spans(vec![
+                Span::styled("  ", Style::default().fg(Color::Yellow)),
+                Span::styled(
+                    display_time(msg.arrived_at),
+                    Style::default().fg(Color::Yellow),
+                ),
+                Span::styled("boxdot", Style::default().fg(Color::Green)),
+                Span::raw(": "),
+                Span::raw("Mention @boxdot  and even more @boxdot ."),
+            ]),
+            Spans(vec![Span::raw("                  End")]),
+        ]));
         assert_eq!(rendered, Some(expected));
     }
 }
