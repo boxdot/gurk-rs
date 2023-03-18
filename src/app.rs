@@ -11,7 +11,7 @@ use crate::util::{self, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX};
 
 use anyhow::{anyhow, bail, Context as _};
 use arboard::Clipboard;
-use chrono::{Duration, Utc};
+use chrono::Utc;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use itertools::Itertools;
 use notify_rust::Notification;
@@ -35,9 +35,11 @@ use std::cmp::Reverse;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::path::Path;
+use std::time::Duration;
 
 /// Amount of time to skip contacts sync after the last sync
 const CONTACTS_SYNC_DEADLINE_SEC: i64 = 60 * 60; // 1h
+const CONTACTS_SYNC_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub struct App {
     pub config: Config,
@@ -1278,11 +1280,15 @@ impl App {
         let metadata = self.storage.metadata();
         let do_sync = metadata
             .contacts_sync_request_at
-            .map(|dt| dt + Duration::seconds(CONTACTS_SYNC_DEADLINE_SEC) < now)
+            .map(|dt| dt + chrono::Duration::seconds(CONTACTS_SYNC_DEADLINE_SEC) < now)
             .unwrap_or(true);
         if do_sync {
             info!("requesting contact sync");
-            self.signal_manager.request_contacts_sync().await?;
+            tokio::time::timeout(
+                CONTACTS_SYNC_TIMEOUT,
+                self.signal_manager.request_contacts_sync(),
+            )
+            .await??;
             let mut metadata = metadata.into_owned();
             metadata.contacts_sync_request_at = Some(now);
             self.storage.store_metadata(metadata);
