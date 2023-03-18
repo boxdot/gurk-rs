@@ -1,6 +1,6 @@
 use crate::channels::SelectChannel;
 use crate::config::Config;
-use crate::data::{Channel, ChannelId, Message, TypingAction, TypingSet};
+use crate::data::{BodyRange, Channel, ChannelId, Message, TypingAction, TypingSet};
 use crate::input::Input;
 use crate::receipt::{Receipt, ReceiptEvent, ReceiptHandler};
 use crate::signal::{
@@ -440,6 +440,7 @@ impl App {
                                     mut body,
                                     attachments: attachment_pointers,
                                     sticker,
+                                    body_ranges,
                                     ..
                                 }),
                             ..
@@ -451,7 +452,9 @@ impl App {
                 let attachments = self.save_attachments(attachment_pointers).await;
                 add_emoji_from_sticker(&mut body, sticker);
 
-                let message = Message::new(user_id, body, timestamp, attachments);
+                let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
+
+                let message = Message::new(user_id, body, body_ranges, timestamp, attachments);
                 (channel_idx, message)
             }
             // Direct/group message by us from a different device
@@ -477,6 +480,7 @@ impl App {
                                     quote,
                                     attachments: attachment_pointers,
                                     sticker,
+                                    body_ranges,
                                     ..
                                 }),
                             ..
@@ -514,9 +518,10 @@ impl App {
                 add_emoji_from_sticker(&mut body, sticker);
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let attachments = self.save_attachments(attachment_pointers).await;
+                let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
                 let message = Message {
                     quote,
-                    ..Message::new(user_id, body, timestamp, attachments)
+                    ..Message::new(user_id, body, body_ranges, timestamp, attachments)
                 };
 
                 (channel_idx, message)
@@ -538,6 +543,7 @@ impl App {
                     quote,
                     attachments: attachment_pointers,
                     sticker,
+                    body_ranges,
                     ..
                 }),
             ) => {
@@ -594,9 +600,10 @@ impl App {
                 self.add_receipt_event(ReceiptEvent::new(uuid, timestamp, Receipt::Delivered));
 
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
+                let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
                 let message = Message {
                     quote,
-                    ..Message::new(uuid, body, timestamp, attachments)
+                    ..Message::new(uuid, body, body_ranges, timestamp, attachments)
                 };
 
                 if message.is_empty() {
@@ -1395,6 +1402,7 @@ mod tests {
                 attachments: Default::default(),
                 reactions: Default::default(),
                 receipt: Default::default(),
+                body_ranges: Default::default(),
             },
         );
 

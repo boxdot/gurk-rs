@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use anyhow::anyhow;
-use presage::prelude::proto::data_message::Quote;
+use presage::prelude::proto::data_message::{self, Quote};
 use presage::prelude::{GroupMasterKey, GroupSecretParams};
 use serde::{Deserialize, Serialize};
 use tracing::error;
@@ -128,12 +128,57 @@ pub struct Message {
     pub reactions: Vec<(Uuid, String)>,
     #[serde(default)]
     pub receipt: Receipt,
+    #[serde(default)]
+    pub(crate) body_ranges: Vec<BodyRange>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct BodyRange {
+    pub(crate) start: u16,
+    pub(crate) end: u16,
+    pub(crate) value: AssociatedValue,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) enum AssociatedValue {
+    MentionUuid(Uuid),
+}
+
+impl From<&BodyRange> for data_message::BodyRange {
+    fn from(range: &BodyRange) -> Self {
+        match range.value {
+            AssociatedValue::MentionUuid(id) => Self {
+                start: Some(range.start.into()),
+                length: Some((range.end - range.start).into()),
+                associated_value: Some(data_message::body_range::AssociatedValue::MentionUuid(
+                    id.to_string(),
+                )),
+            },
+        }
+    }
+}
+
+impl BodyRange {
+    pub(crate) fn from_proto(proto: data_message::BodyRange) -> Option<Self> {
+        let value = match proto.associated_value? {
+            data_message::body_range::AssociatedValue::MentionUuid(uuid) => {
+                let uuid = uuid.parse().ok()?;
+                AssociatedValue::MentionUuid(uuid)
+            }
+        };
+        Some(Self {
+            start: proto.start?.try_into().ok()?,
+            end: (proto.start? + proto.length?).try_into().ok()?,
+            value,
+        })
+    }
 }
 
 impl Message {
-    pub fn new(
+    pub(crate) fn new(
         from_id: Uuid,
         message: Option<String>,
+        body_ranges: impl IntoIterator<Item = BodyRange>,
         arrived_at: u64,
         attachments: Vec<Attachment>,
     ) -> Self {
@@ -145,6 +190,7 @@ impl Message {
             attachments,
             reactions: Default::default(),
             receipt: Receipt::Sent,
+            body_ranges: body_ranges.into_iter().collect(),
         }
     }
 
@@ -157,6 +203,11 @@ impl Message {
             attachments: Default::default(),
             reactions: Default::default(),
             receipt: Receipt::Sent,
+            body_ranges: quote
+                .body_ranges
+                .into_iter()
+                .filter_map(BodyRange::from_proto)
+                .collect(),
         })
     }
 

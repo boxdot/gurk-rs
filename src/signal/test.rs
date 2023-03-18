@@ -103,6 +103,7 @@ impl SignalManager for SignalManagerMock {
             reactions: Default::default(),
             // TODO make sure the message sending procedure did not fail
             receipt: Receipt::Sent,
+            body_ranges: Default::default(),
         };
         self.sent_messages.borrow_mut().push(message.clone());
         message

@@ -16,7 +16,7 @@ use uuid::Uuid;
 use crate::app::App;
 use crate::channels::SelectChannel;
 use crate::cursor::Cursor;
-use crate::data::Message;
+use crate::data::{AssociatedValue, Message};
 use crate::receipt::{Receipt, ReceiptEvent};
 use crate::shortcuts::{ShortCut, SHORTCUTS};
 use crate::storage::MessageId;
@@ -474,7 +474,8 @@ fn display_message(
         .subsequent_indent(prefix);
 
     // collect message text
-    let mut text = msg.message.clone().unwrap_or_default();
+    let text = msg.message.clone().unwrap_or_default();
+    let mut text = replace_mentions(msg, names, text);
     add_attachments(msg, &mut text);
     if text.is_empty() {
         return None; // no text => nothing to render
@@ -541,6 +542,32 @@ fn display_message(
         spans.push(Spans::from(format!("{prefix}[...]")));
     }
     Some(ListItem::new(Text::from(spans)))
+}
+
+fn replace_mentions(msg: &Message, names: &NameResolver, text: String) -> String {
+    if msg.body_ranges.is_empty() {
+        return text;
+    }
+
+    let ac = aho_corasick::AhoCorasickBuilder::new()
+        .build(std::iter::repeat("￼").take(msg.body_ranges.len()));
+    let mut buf = String::with_capacity(text.len());
+    let mut ranges = msg.body_ranges.iter();
+    ac.replace_all_with(&text, &mut buf, |_, _, dst| {
+        // TODO: check ranges?
+        if let Some(range) = ranges.next() {
+            let (name, _color) = match range.value {
+                AssociatedValue::MentionUuid(id) => names.resolve(id),
+            };
+            dst.push('@');
+            dst.push_str(&name);
+            true
+        } else {
+            false
+        }
+    });
+
+    buf
 }
 
 fn display_date_line(
@@ -668,7 +695,8 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
 
 fn displayed_quote(names: &NameResolver, quote: &Message) -> Option<String> {
     let (name, _) = names.resolve(quote.from_id);
-    Some(format!("({}) {}", name, quote.message.as_ref()?))
+    let text = format!("({}) {}", name, quote.message.as_ref()?);
+    Some(replace_mentions(quote, names, text))
 }
 
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
@@ -699,6 +727,7 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 
 #[cfg(test)]
 mod tests {
+    use crate::data::{AssociatedValue, BodyRange};
     use crate::signal::Attachment;
 
     use super::*;
@@ -729,9 +758,10 @@ mod tests {
             message: None,
             arrived_at: 1642334397421,
             quote: None,
-            attachments: vec![],
-            reactions: vec![],
+            attachments: Default::default(),
+            reactions: Default::default(),
             receipt: Receipt::Sent,
+            body_ranges: Default::default(),
         }
     }
 
@@ -912,6 +942,47 @@ mod tests {
             Span::raw(": "),
             Span::raw("Hello, World!"),
         ])]));
+        assert_eq!(rendered, Some(expected));
+    }
+
+    #[test]
+    fn test_display_mention() {
+        let user_id = Uuid::from_u128(1);
+        let names = NameResolver::single_user(user_id, "boxdot".to_string(), Color::Green);
+        let msg = Message {
+            from_id: user_id,
+            message: Some("Mention ￼  and even more ￼ . End".into()),
+            receipt: Receipt::Read,
+            body_ranges: vec![
+                BodyRange {
+                    start: 8,
+                    end: 9,
+                    value: AssociatedValue::MentionUuid(user_id),
+                },
+                BodyRange {
+                    start: 25,
+                    end: 26,
+                    value: AssociatedValue::MentionUuid(user_id),
+                },
+            ],
+            ..test_message()
+        };
+        let show_receipt = ShowReceipt::from_msg(&msg, USER_ID, true);
+        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, show_receipt);
+
+        let expected = ListItem::new(Text::from(vec![
+            Spans(vec![
+                Span::styled("  ", Style::default().fg(Color::Yellow)),
+                Span::styled(
+                    display_time(msg.arrived_at),
+                    Style::default().fg(Color::Yellow),
+                ),
+                Span::styled("boxdot", Style::default().fg(Color::Green)),
+                Span::raw(": "),
+                Span::raw("Mention @boxdot  and even more @boxdot ."),
+            ]),
+            Spans(vec![Span::raw("                  End")]),
+        ]));
         assert_eq!(rendered, Some(expected));
     }
 }
