@@ -144,6 +144,7 @@ impl SignalManager for PresageManager {
             id: Some(message.arrived_at),
             author_uuid: Some(message.from_id.to_string()),
             text: message.message.clone(),
+            body_ranges: message.body_ranges.iter().map(From::from).collect(),
             ..Default::default()
         });
         let quote_message = quote.clone().and_then(Message::from_quote).map(Box::new);
@@ -213,6 +214,7 @@ impl SignalManager for PresageManager {
             attachments: Default::default(),
             reactions: Default::default(),
             receipt: Receipt::Sent,
+            body_ranges: Default::default(),
         }
     }
 

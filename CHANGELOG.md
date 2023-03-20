@@ -4,7 +4,8 @@
 
 ### Added
 
--  Copy selected message to clipboard ([#210])
+- Copy selected message to clipboard ([#210])
+- Implement storing and rendering of mentions ([#215, #136])
 
 ### Changed
 
@@ -18,6 +19,8 @@
 [#203]: https://github.com/boxdot/gurk-rs/pull/203
 [#204]: https://github.com/boxdot/gurk-rs/pull/204
 [#210]: https://github.com/boxdot/gurk-rs/pull/210
+[#136]: https://github.com/boxdot/gurk-rs/pull/136
+[#215]: https://github.com/boxdot/gurk-rs/pull/215
 [#216]: https://github.com/boxdot/gurk-rs/pull/216
 
 ## 0.3.0

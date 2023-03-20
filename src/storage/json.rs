@@ -333,6 +333,7 @@ mod tests {
                 attachments: Default::default(),
                 reactions: Default::default(),
                 receipt: Default::default(),
+                body_ranges: Default::default(),
             }],
             unread_messages: 1,
             typing: Some(TypingSet::SingleTyping(false)),
@@ -349,6 +350,7 @@ mod tests {
                 attachments: Default::default(),
                 reactions: Default::default(),
                 receipt: Default::default(),
+                body_ranges: Default::default(),
             }],
             unread_messages: 2,
             typing: Some(TypingSet::GroupTyping(Default::default())),
@@ -496,6 +498,7 @@ mod tests {
                 attachments: Default::default(),
                 reactions: Default::default(),
                 receipt: Default::default(),
+                body_ranges: Default::default(),
             },
         );
 
