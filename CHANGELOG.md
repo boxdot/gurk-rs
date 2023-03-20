@@ -14,12 +14,14 @@
 ### Fixed
 
 - Do not create log file when logging is disabled ([#204])
+- Fix blocking contacts sync ([#216])
 
 [#203]: https://github.com/boxdot/gurk-rs/pull/203
 [#204]: https://github.com/boxdot/gurk-rs/pull/204
 [#210]: https://github.com/boxdot/gurk-rs/pull/210
 [#136]: https://github.com/boxdot/gurk-rs/pull/136
 [#215]: https://github.com/boxdot/gurk-rs/pull/215
+[#216]: https://github.com/boxdot/gurk-rs/pull/216
 
 ## 0.3.0
 
