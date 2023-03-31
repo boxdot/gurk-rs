@@ -555,16 +555,16 @@ fn replace_mentions(msg: &Message, names: &NameResolver, text: String) -> String
     let mut ranges = msg.body_ranges.iter();
     ac.replace_all_with(&text, &mut buf, |_, _, dst| {
         // TODO: check ranges?
-        if let Some(range) = ranges.next() {
+        for range in &mut ranges {
             let (name, _color) = match range.value {
                 AssociatedValue::MentionUuid(id) => names.resolve(id),
+                AssociatedValue::Style(_) => continue, // not supported yet
             };
             dst.push('@');
             dst.push_str(&name);
-            true
-        } else {
-            false
+            return true;
         }
+        false
     });
 
     buf
