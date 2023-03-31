@@ -3,8 +3,8 @@
 use std::collections::HashSet;
 
 use anyhow::anyhow;
-use presage::prelude::proto::data_message::{self, Quote};
-use presage::prelude::{GroupMasterKey, GroupSecretParams};
+use presage::prelude::proto::data_message::Quote;
+use presage::prelude::{proto, GroupMasterKey, GroupSecretParams};
 use serde::{Deserialize, Serialize};
 use tracing::error;
 use uuid::Uuid;
@@ -142,29 +142,74 @@ pub(crate) struct BodyRange {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum AssociatedValue {
     MentionUuid(Uuid),
+    Style(Style),
 }
 
-impl From<&BodyRange> for data_message::BodyRange {
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) enum Style {
+    #[default]
+    None,
+    Bold,
+    Italic,
+    Spoiler,
+    Strikethrough,
+    Monospace,
+}
+
+impl Style {
+    fn from_proto(value: proto::body_range::Style) -> Self {
+        match value {
+            proto::body_range::Style::None => Self::None,
+            proto::body_range::Style::Bold => Self::Bold,
+            proto::body_range::Style::Italic => Self::Italic,
+            proto::body_range::Style::Spoiler => Self::Spoiler,
+            proto::body_range::Style::Strikethrough => Self::Strikethrough,
+            proto::body_range::Style::Monospace => Self::Monospace,
+        }
+    }
+
+    fn to_proto(&self) -> proto::body_range::Style {
+        match self {
+            Style::None => proto::body_range::Style::None,
+            Style::Bold => proto::body_range::Style::Bold,
+            Style::Italic => proto::body_range::Style::Italic,
+            Style::Spoiler => proto::body_range::Style::Spoiler,
+            Style::Strikethrough => proto::body_range::Style::Strikethrough,
+            Style::Monospace => proto::body_range::Style::Monospace,
+        }
+    }
+}
+
+impl From<&BodyRange> for proto::BodyRange {
     fn from(range: &BodyRange) -> Self {
-        match range.value {
-            AssociatedValue::MentionUuid(id) => Self {
-                start: Some(range.start.into()),
-                length: Some((range.end - range.start).into()),
-                associated_value: Some(data_message::body_range::AssociatedValue::MentionUuid(
-                    id.to_string(),
-                )),
-            },
+        let associtated_value = match &range.value {
+            AssociatedValue::MentionUuid(id) => {
+                proto::body_range::AssociatedValue::MentionUuid(id.to_string())
+            }
+            AssociatedValue::Style(style) => {
+                proto::body_range::AssociatedValue::Style(style.to_proto().into())
+            }
+        };
+        Self {
+            start: Some(range.start.into()),
+            length: Some((range.end - range.start).into()),
+            associated_value: Some(associtated_value),
         }
     }
 }
 
 impl BodyRange {
-    pub(crate) fn from_proto(proto: data_message::BodyRange) -> Option<Self> {
+    pub(crate) fn from_proto(proto: proto::BodyRange) -> Option<Self> {
         let value = match proto.associated_value? {
-            data_message::body_range::AssociatedValue::MentionUuid(uuid) => {
+            proto::body_range::AssociatedValue::MentionUuid(uuid) => {
                 let uuid = uuid.parse().ok()?;
                 AssociatedValue::MentionUuid(uuid)
             }
+            proto::body_range::AssociatedValue::Style(style) => AssociatedValue::Style(
+                proto::body_range::Style::from_i32(style)
+                    .map(Style::from_proto)
+                    .unwrap_or_default(),
+            ),
         };
         Some(Self {
             start: proto.start?.try_into().ok()?,

@@ -6,11 +6,12 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use chrono::Utc;
 use gh_emoji::Replacer;
+use presage::libsignal_service::prelude::ProfileKey;
 use presage::prelude::content::Reaction;
 use presage::prelude::proto::data_message::Quote;
 use presage::prelude::proto::{AttachmentPointer, ReceiptMessage};
 use presage::prelude::{
-    AttachmentSpec, Contact, Content, ContentBody, DataMessage, GroupContextV2, GroupMasterKey,
+    AttachmentSpec, Contact, Content, ContentBody, DataMessage, GroupContextV2,
 };
 use presage::{Registered, SledStore};
 use tokio_stream::Stream;
@@ -21,7 +22,7 @@ use crate::data::{Channel, ChannelId, GroupData, Message};
 use crate::receipt::Receipt;
 use crate::util::utc_now_timestamp_msec;
 
-use super::{Attachment, GroupMasterKeyBytes, ProfileKey, ResolvedGroup, SignalManager};
+use super::{Attachment, GroupMasterKeyBytes, ProfileKeyBytes, ResolvedGroup, SignalManager};
 
 pub(super) struct PresageManager {
     manager: presage::Manager<SledStore, Registered>,
@@ -51,8 +52,7 @@ impl SignalManager for PresageManager {
         &mut self,
         master_key_bytes: GroupMasterKeyBytes,
     ) -> anyhow::Result<ResolvedGroup> {
-        let master_key = GroupMasterKey::new(master_key_bytes);
-        let decrypted_group = self.manager.get_group_v2(master_key).await?;
+        let decrypted_group = self.manager.group(&master_key_bytes)?.unwrap();
 
         let mut members = Vec::with_capacity(decrypted_group.members.len());
         let mut profile_keys = Vec::with_capacity(decrypted_group.members.len());
@@ -65,7 +65,7 @@ impl SignalManager for PresageManager {
         let group_data = GroupData {
             master_key_bytes,
             members,
-            revision: decrypted_group.version,
+            revision: decrypted_group.revision,
         };
 
         Ok(ResolvedGroup {
@@ -172,23 +172,19 @@ impl SignalManager for PresageManager {
             ChannelId::Group(_) => {
                 if let Some(group_data) = channel.group_data.as_ref() {
                     let mut manager = self.manager.clone();
-                    let self_uuid = self.user_id();
 
+                    let master_key_bytes = group_data.master_key_bytes.to_vec();
                     data_message.group_v2 = Some(GroupContextV2 {
-                        master_key: Some(group_data.master_key_bytes.to_vec()),
+                        master_key: Some(master_key_bytes.clone()),
                         revision: Some(group_data.revision),
                         ..Default::default()
                     });
 
-                    let recipients = group_data.members.clone().into_iter();
-
                     tokio::task::spawn_local(async move {
                         upload_attachments(&manager, attachments, &mut data_message).await;
 
-                        let recipients =
-                            recipients.filter(|uuid| *uuid != self_uuid).map(Into::into);
                         if let Err(e) = manager
-                            .send_message_to_group(recipients, data_message, timestamp)
+                            .send_message_to_group(&master_key_bytes, data_message, timestamp)
                             .await
                         {
                             // TODO: Proper error handling
@@ -246,20 +242,17 @@ impl SignalManager for PresageManager {
             }
             (ChannelId::Group(_), Some(group_data)) => {
                 let mut manager = self.manager.clone();
-                let self_uuid = self.user_id();
 
+                let master_key_bytes = group_data.master_key_bytes.to_vec();
                 data_message.group_v2 = Some(GroupContextV2 {
-                    master_key: Some(group_data.master_key_bytes.to_vec()),
+                    master_key: Some(master_key_bytes.clone()),
                     revision: Some(group_data.revision),
                     ..Default::default()
                 });
 
-                let recipients = group_data.members.clone().into_iter();
-
                 tokio::task::spawn_local(async move {
-                    let recipients = recipients.filter(|uuid| *uuid != self_uuid).map(Into::into);
                     if let Err(e) = manager
-                        .send_message_to_group(recipients, data_message, timestamp)
+                        .send_message_to_group(&master_key_bytes, data_message, timestamp)
                         .await
                     {
                         // TODO: Proper error handling
@@ -273,8 +266,16 @@ impl SignalManager for PresageManager {
         }
     }
 
-    async fn resolve_name_from_profile(&self, id: Uuid, profile_key: ProfileKey) -> Option<String> {
-        match self.manager.retrieve_profile_by_uuid(id, profile_key).await {
+    async fn resolve_name_from_profile(
+        &mut self,
+        id: Uuid,
+        profile_key: ProfileKeyBytes,
+    ) -> Option<String> {
+        match self
+            .manager
+            .retrieve_profile_by_uuid(id, ProfileKey::create(profile_key))
+            .await
+        {
             Ok(profile) => Some(profile.name?.given_name),
             Err(e) => {
                 error!("failed to retrieve user profile: {}", e);
@@ -288,7 +289,7 @@ impl SignalManager for PresageManager {
     }
 
     fn contact_by_id(&self, id: Uuid) -> anyhow::Result<Option<Contact>> {
-        Ok(self.manager.get_contact_by_id(id)?)
+        Ok(self.manager.contact_by_id(&id)?)
     }
 
     async fn receive_messages(&mut self) -> anyhow::Result<Pin<Box<dyn Stream<Item = Content>>>> {

@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use chrono::{DateTime, Utc};
 use clap::Parser;
 use crossterm::{
     event::{
@@ -88,6 +89,7 @@ pub enum Event {
     Message(Content),
     Resize { cols: u16, rows: u16 },
     Quit(Option<anyhow::Error>),
+    ContactSynced(DateTime<Utc>),
     Tick,
 }
 
@@ -97,7 +99,9 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
     let storage = JsonStorage::new(&config.data_path, config::fallback_data_path().as_deref())?;
     let mut app = App::try_new(config, signal_manager.clone_boxed(), Box::new(storage))?;
 
-    app.request_contacts_sync().await?;
+    // sync task can be only spawned after we start to listen to message, because it relies on
+    // message sender to be running
+    let mut contact_sync_task = app.request_contacts_sync();
 
     enable_raw_mode()?;
     let _raw_mode_guard = scopeguard::guard((), |_| {
@@ -154,6 +158,21 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                     }
                 }
             };
+
+            if let Some(task) = contact_sync_task.take() {
+                let inner_tx = inner_tx.clone();
+                tokio::task::spawn_local(async move {
+                    match task.await {
+                        Ok(at) => inner_tx
+                            .send(Event::ContactSynced(at))
+                            .await
+                            .expect("logic error: events channel closed"),
+                        Err(error) => {
+                            error!(%error, "failed to sync contacts");
+                        }
+                    }
+                });
+            }
 
             while let Some(message) = messages.next().await {
                 inner_tx
@@ -353,6 +372,12 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                     res = Err(e);
                 };
                 break;
+            }
+            Some(Event::ContactSynced(at)) => {
+                let mut metadata = app.storage.metadata().into_owned();
+                metadata.contacts_sync_request_at.replace(at);
+                app.storage.store_metadata(metadata);
+                info!(%at, "synced contacts");
             }
             None => {
                 break;

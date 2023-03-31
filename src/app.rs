@@ -4,14 +4,15 @@ use crate::data::{BodyRange, Channel, ChannelId, Message, TypingAction, TypingSe
 use crate::input::Input;
 use crate::receipt::{Receipt, ReceiptEvent, ReceiptHandler};
 use crate::signal::{
-    Attachment, GroupIdentifierBytes, GroupMasterKeyBytes, ProfileKey, ResolvedGroup, SignalManager,
+    Attachment, GroupIdentifierBytes, GroupMasterKeyBytes, ProfileKeyBytes, ResolvedGroup,
+    SignalManager,
 };
 use crate::storage::{MessageId, Storage};
 use crate::util::{self, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX};
 
 use anyhow::{anyhow, bail, Context as _};
 use arboard::Clipboard;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use itertools::Itertools;
 use notify_rust::Notification;
@@ -34,12 +35,13 @@ use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
+use std::future::Future;
 use std::path::Path;
 use std::time::Duration;
 
 /// Amount of time to skip contacts sync after the last sync
-const CONTACTS_SYNC_DEADLINE_SEC: i64 = 60 * 60; // 1h
-const CONTACTS_SYNC_TIMEOUT: Duration = Duration::from_secs(10);
+const CONTACTS_SYNC_DEADLINE_SEC: i64 = 60 * 60 * 24; // 1 day
+const CONTACTS_SYNC_TIMEOUT: Duration = Duration::from_secs(20);
 
 pub struct App {
     pub config: Config,
@@ -464,8 +466,7 @@ impl App {
                 Metadata {
                     sender:
                         ServiceAddress {
-                            uuid: Some(sender_uuid),
-                            ..
+                            uuid: sender_uuid, ..
                         },
                     ..
                 },
@@ -531,10 +532,7 @@ impl App {
             // Incoming direct/group message
             (
                 Metadata {
-                    sender:
-                        ServiceAddress {
-                            uuid: Some(uuid), ..
-                        },
+                    sender: ServiceAddress { uuid, .. },
                     ..
                 },
                 ContentBody::DataMessage(DataMessage {
@@ -619,8 +617,7 @@ impl App {
                 Metadata {
                     sender:
                         ServiceAddress {
-                            uuid: Some(sender_uuid),
-                            ..
+                            uuid: sender_uuid, ..
                         },
                     ..
                 },
@@ -681,8 +678,7 @@ impl App {
                 Metadata {
                     sender:
                         ServiceAddress {
-                            uuid: Some(sender_uuid),
-                            ..
+                            uuid: sender_uuid, ..
                         },
                     ..
                 },
@@ -728,8 +724,7 @@ impl App {
                 Metadata {
                     sender:
                         ServiceAddress {
-                            uuid: Some(sender_uuid),
-                            ..
+                            uuid: sender_uuid, ..
                         },
                     ..
                 },
@@ -747,8 +742,7 @@ impl App {
                 Metadata {
                     sender:
                         ServiceAddress {
-                            uuid: Some(sender_uuid),
-                            ..
+                            uuid: sender_uuid, ..
                         },
                     ..
                 },
@@ -1050,7 +1044,7 @@ impl App {
         }
     }
 
-    async fn ensure_user_is_known(&mut self, uuid: Uuid, profile_key: ProfileKey) {
+    async fn ensure_user_is_known(&mut self, uuid: Uuid, profile_key: ProfileKeyBytes) {
         // is_known <=>
         //   * in names, or
         //   * is not a phone numbers, or
@@ -1067,8 +1061,7 @@ impl App {
                 .ok()
                 .flatten()
                 .and_then(|c| {
-                    c.address
-                        .phonenumber
+                    c.phone_number
                         .map(|p| p.format().mode(Mode::E164).to_string())
                 })
             {
@@ -1090,7 +1083,7 @@ impl App {
 
     async fn ensure_users_are_known(
         &mut self,
-        users_with_keys: impl Iterator<Item = (Uuid, ProfileKey)>,
+        users_with_keys: impl Iterator<Item = (Uuid, ProfileKeyBytes)>,
     ) {
         // TODO: Run in parallel
         for (uuid, profile_key) in users_with_keys {
@@ -1282,25 +1275,25 @@ impl App {
         self.display_help
     }
 
-    pub async fn request_contacts_sync(&mut self) -> anyhow::Result<()> {
+    pub fn request_contacts_sync(
+        &self,
+    ) -> Option<impl Future<Output = anyhow::Result<DateTime<Utc>>> + 'static> {
         let now = Utc::now();
         let metadata = self.storage.metadata();
         let do_sync = metadata
             .contacts_sync_request_at
             .map(|dt| dt + chrono::Duration::seconds(CONTACTS_SYNC_DEADLINE_SEC) < now)
             .unwrap_or(true);
-        if do_sync {
-            info!("requesting contact sync");
+        let signal_manager = self.signal_manager.clone_boxed();
+        do_sync.then_some(async move {
+            info!(timeout =? CONTACTS_SYNC_TIMEOUT, "requesting contact sync");
             tokio::time::timeout(
                 CONTACTS_SYNC_TIMEOUT,
-                self.signal_manager.request_contacts_sync(),
+                signal_manager.request_contacts_sync(),
             )
             .await??;
-            let mut metadata = metadata.into_owned();
-            metadata.contacts_sync_request_at = Some(now);
-            self.storage.store_metadata(metadata);
-        }
-        Ok(())
+            Ok(Utc::now())
+        })
     }
 
     pub fn is_select_channel_shown(&self) -> bool {

@@ -16,7 +16,7 @@ const PROFILE_KEY_LEN: usize = 32;
 const GROUP_MASTER_KEY_LEN: usize = 32;
 const GROUP_IDENTIFIER_LEN: usize = 32;
 
-pub type ProfileKey = [u8; PROFILE_KEY_LEN];
+pub type ProfileKeyBytes = [u8; PROFILE_KEY_LEN];
 pub type GroupMasterKeyBytes = [u8; GROUP_MASTER_KEY_LEN];
 pub type GroupIdentifierBytes = [u8; GROUP_IDENTIFIER_LEN];
 
@@ -63,7 +63,7 @@ pub async fn ensure_linked_device(
     println!("Linking new device with device name: {device_name}");
 
     let (tx, rx) = futures_channel::oneshot::channel();
-    let (manager, _) = tokio::try_join!(
+    let (mut manager, _) = tokio::try_join!(
         async move {
             presage::Manager::link_secondary_device(
                 store,
