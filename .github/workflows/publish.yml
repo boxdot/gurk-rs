@@ -57,7 +57,7 @@ jobs:
 
   dist-x86_64-unknown-linux-musl:
     name: dist (x86_64-unknown-linux-musl)
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     container:
       image: rust:alpine
       volumes:
@@ -203,7 +203,7 @@ jobs:
 
   publish:
     name: publish
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     needs:
       - dist-changelog
       - dist-x86_64-unknown-linux-gnu
