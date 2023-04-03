@@ -1349,7 +1349,7 @@ dependencies = [
 
 [[package]]
 name = "gurk"
-version = "0.4.0-dev"
+version = "0.4.0"
 dependencies = [
  "aho-corasick",
  "anyhow",
