@@ -4,7 +4,7 @@ pub mod test;
 
 use anyhow::{bail, Context as _};
 use presage::prelude::SignalServers;
-use presage::SledStore;
+use presage_store_sled::{MigrationConflictStrategy, SledStore};
 
 use crate::config::{self, Config};
 
@@ -36,7 +36,7 @@ pub async fn ensure_linked_device(
         .as_ref()
         .map(|c| c.signal_db_path.clone())
         .unwrap_or_else(config::default_signal_db_path);
-    let store = SledStore::open(db_path, presage::MigrationConflictStrategy::BackupAndDrop)?;
+    let store = SledStore::open(db_path, MigrationConflictStrategy::BackupAndDrop)?;
 
     if !relink {
         if let Some(config) = config.clone() {
