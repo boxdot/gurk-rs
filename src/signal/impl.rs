@@ -13,7 +13,8 @@ use presage::prelude::proto::{AttachmentPointer, ReceiptMessage};
 use presage::prelude::{
     AttachmentSpec, Contact, Content, ContentBody, DataMessage, GroupContextV2,
 };
-use presage::{Registered, SledStore};
+use presage::Registered;
+use presage_store_sled::SledStore;
 use tokio_stream::Stream;
 use tracing::{error, warn};
 use uuid::Uuid;
@@ -30,7 +31,7 @@ pub(super) struct PresageManager {
 }
 
 impl PresageManager {
-    pub(super) fn new(manager: presage::Manager<presage::SledStore, Registered>) -> Self {
+    pub(super) fn new(manager: presage::Manager<SledStore, Registered>) -> Self {
         Self {
             manager,
             emoji_replacer: Replacer::new(),
@@ -298,7 +299,7 @@ impl SignalManager for PresageManager {
 }
 
 async fn upload_attachments(
-    manager: &presage::Manager<presage::SledStore, Registered>,
+    manager: &presage::Manager<SledStore, Registered>,
     attachments: Vec<(AttachmentSpec, Vec<u8>)>,
     data_message: &mut DataMessage,
 ) {
