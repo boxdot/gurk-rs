@@ -15,6 +15,7 @@ use presage::prelude::{
 };
 use presage::Registered;
 use presage_store_sled::SledStore;
+use tokio::sync::oneshot;
 use tokio_stream::Stream;
 use tracing::{error, warn};
 use uuid::Uuid;
@@ -110,7 +111,7 @@ impl SignalManager for PresageManager {
         })
     }
 
-    fn send_receipt(&self, _sender_uuid: Uuid, timestamps: Vec<u64>, receipt: Receipt) {
+    fn send_receipt(&self, sender_uuid: Uuid, timestamps: Vec<u64>, receipt: Receipt) {
         let now_timestamp = utc_now_timestamp_msec();
         let data_message = ReceiptMessage {
             r#type: Some(receipt.to_i32()),
@@ -120,11 +121,8 @@ impl SignalManager for PresageManager {
         let mut manager = self.manager.clone();
         tokio::task::spawn_local(async move {
             let body = ContentBody::ReceiptMessage(data_message);
-            if let Err(e) = manager
-                .send_message(_sender_uuid, body, now_timestamp)
-                .await
-            {
-                error!("Failed to send message to {}: {}", _sender_uuid, e);
+            if let Err(error) = manager.send_message(sender_uuid, body, now_timestamp).await {
+                error!(%error, %sender_uuid, "failed to send receipt");
             }
         });
     }
@@ -135,7 +133,7 @@ impl SignalManager for PresageManager {
         text: String,
         quote_message: Option<&Message>,
         attachments: Vec<(AttachmentSpec, Vec<u8>)>,
-    ) -> Message {
+    ) -> (Message, oneshot::Receiver<anyhow::Result<()>>) {
         let mut message: String = self.emoji_replacer.replace_all(&text).into_owned();
         let has_attachments = !attachments.is_empty();
 
@@ -157,17 +155,25 @@ impl SignalManager for PresageManager {
             ..Default::default()
         };
 
+        let (response_tx, response) = oneshot::channel();
         match channel.id {
             ChannelId::User(uuid) => {
                 let mut manager = self.manager.clone();
                 tokio::task::spawn_local(async move {
-                    upload_attachments(&manager, attachments, &mut data_message).await;
-
-                    let body = ContentBody::DataMessage(data_message);
-                    if let Err(e) = manager.send_message(uuid, body, timestamp).await {
-                        // TODO: Proper error handling
-                        error!("Failed to send message to {}: {}", uuid, e);
+                    if let Err(error) =
+                        upload_attachments(&manager, attachments, &mut data_message).await
+                    {
+                        error!(%error, "failed to upload attachments");
+                        let _ = response_tx.send(Err(error));
+                        return;
                     }
+                    let body = ContentBody::DataMessage(data_message);
+                    if let Err(error) = manager.send_message(uuid, body, timestamp).await {
+                        error!(dest =% uuid, %error, "failed to send message");
+                        let _ = response_tx.send(Err(error.into()));
+                        return;
+                    }
+                    let _ = response_tx.send(Ok(()));
                 });
             }
             ChannelId::Group(_) => {
@@ -182,15 +188,22 @@ impl SignalManager for PresageManager {
                     });
 
                     tokio::task::spawn_local(async move {
-                        upload_attachments(&manager, attachments, &mut data_message).await;
-
-                        if let Err(e) = manager
+                        if let Err(error) =
+                            upload_attachments(&manager, attachments, &mut data_message).await
+                        {
+                            error!(%error, "failed to upload attachments");
+                            let _ = response_tx.send(Err(error));
+                            return;
+                        }
+                        if let Err(error) = manager
                             .send_message_to_group(&master_key_bytes, data_message, timestamp)
                             .await
                         {
-                            // TODO: Proper error handling
-                            error!("Failed to send group message: {}", e);
+                            error!(%error, "failed to send group message");
+                            let _ = response_tx.send(Err(error.into()));
+                            return;
                         }
+                        let _ = response_tx.send(Ok(()));
                     });
                 } else {
                     error!("cannot send to broken channel without group data");
@@ -203,7 +216,7 @@ impl SignalManager for PresageManager {
             message = "<attachment>".to_string();
         }
 
-        Message {
+        let message = Message {
             from_id: self.user_id(),
             message: Some(message),
             arrived_at: timestamp,
@@ -212,7 +225,9 @@ impl SignalManager for PresageManager {
             reactions: Default::default(),
             receipt: Receipt::Sent,
             body_ranges: Default::default(),
-        }
+            send_failed: Default::default(),
+        };
+        (message, response)
     }
 
     fn send_reaction(&self, channel: &Channel, message: &Message, emoji: String, remove: bool) {
@@ -302,21 +317,16 @@ async fn upload_attachments(
     manager: &presage::Manager<SledStore, Registered>,
     attachments: Vec<(AttachmentSpec, Vec<u8>)>,
     data_message: &mut DataMessage,
-) {
-    match manager.upload_attachments(attachments).await {
-        Ok(attachment_pointers) => {
-            data_message.attachments = attachment_pointers
-                .into_iter()
-                .filter_map(|res| {
-                    if let Err(e) = res.as_ref() {
-                        error!("failed to upload attachment: {}", e);
-                    }
-                    res.ok()
-                })
-                .collect();
-        }
-        Err(e) => {
-            error!("failed to upload attachments: {}", e);
-        }
-    }
+) -> anyhow::Result<()> {
+    let attachment_pointers = manager.upload_attachments(attachments).await?;
+    data_message.attachments = attachment_pointers
+        .into_iter()
+        .filter_map(|res| {
+            if let Err(e) = res.as_ref() {
+                error!("failed to upload attachment: {}", e);
+            }
+            res.ok()
+        })
+        .collect();
+    Ok(())
 }

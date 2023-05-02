@@ -530,11 +530,21 @@ fn display_message(
                         Span::from(line.strip_prefix(prefix).unwrap().to_string()),
                     ]
                 } else {
-                    vec![Span::from(line.to_string())]
+                    vec![Span::from(line.into_owned())]
                 };
                 Spans::from(res)
             }),
     );
+
+    if let Some(reason) = msg.send_failed.as_deref() {
+        let error = format!("[Could no send: {reason}]");
+        let error_style = Style::default().fg(Color::Red);
+        spans.extend(
+            textwrap::wrap(&error, &wrap_opts)
+                .into_iter()
+                .map(|line| Span::styled(line.into_owned(), error_style).into()),
+        );
+    }
 
     if spans.len() > height {
         // span is too big to be shown fully
@@ -762,6 +772,7 @@ mod tests {
             reactions: Default::default(),
             receipt: Receipt::Sent,
             body_ranges: Default::default(),
+            send_failed: Default::default(),
         }
     }
 

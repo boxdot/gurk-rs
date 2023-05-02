@@ -26,7 +26,7 @@ fn get_version() -> Result<Version> {
         .map_err(|_| anyhow!("missing GITHUB_REF; not running in GitHub actions?"))?;
     github_ref
         .strip_prefix("refs/tags/v")
-        .map(|s| Version::parse(s))
+        .map(Version::parse)
         .transpose()?
         .ok_or_else(|| {
             anyhow!(
@@ -37,7 +37,7 @@ fn get_version() -> Result<Version> {
 }
 
 fn extract_section(changelog: &str, version: Version) -> Result<&str> {
-    let parser = Parser::new(&changelog);
+    let parser = Parser::new(changelog);
     let h2 = parser.into_offset_iter().filter_map(|(event, range)| {
         if let Event::Start(Tag::Heading(HeadingLevel::H2, _, _)) = event {
             Some(range)

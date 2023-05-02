@@ -7,6 +7,7 @@ use presage::libsignal_service::prelude::AttachmentIdentifier;
 use presage::prelude::proto::data_message::Quote;
 use presage::prelude::proto::AttachmentPointer;
 use presage::prelude::{AttachmentSpec, Contact, Content};
+use tokio::sync::oneshot;
 use tokio_stream::Stream;
 use uuid::Uuid;
 
@@ -84,7 +85,7 @@ impl SignalManager for SignalManagerMock {
         text: String,
         quote_message: Option<&Message>,
         _attachments: Vec<(AttachmentSpec, Vec<u8>)>,
-    ) -> Message {
+    ) -> (Message, oneshot::Receiver<anyhow::Result<()>>) {
         let message: String = self.emoji_replacer.replace_all(&text).into_owned();
         let timestamp = utc_now_timestamp_msec();
         let quote = quote_message.map(|message| Quote {
@@ -101,12 +102,14 @@ impl SignalManager for SignalManagerMock {
             quote: quote_message,
             attachments: Default::default(),
             reactions: Default::default(),
-            // TODO make sure the message sending procedure did not fail
             receipt: Receipt::Sent,
             body_ranges: Default::default(),
+            send_failed: Default::default(),
         };
         self.sent_messages.borrow_mut().push(message.clone());
-        message
+        let (tx, rx) = oneshot::channel();
+        let _ = tx.send(Ok(()));
+        (message, rx)
     }
 
     fn send_reaction(&self, _channel: &Channel, _message: &Message, _emoji: String, _remove: bool) {
