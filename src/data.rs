@@ -130,6 +130,8 @@ pub struct Message {
     pub receipt: Receipt,
     #[serde(default)]
     pub(crate) body_ranges: Vec<BodyRange>,
+    #[serde(skip)]
+    pub(crate) send_failed: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -236,6 +238,7 @@ impl Message {
             reactions: Default::default(),
             receipt: Receipt::Sent,
             body_ranges: body_ranges.into_iter().collect(),
+            send_failed: Default::default(),
         }
     }
 
@@ -253,6 +256,7 @@ impl Message {
                 .into_iter()
                 .filter_map(BodyRange::from_proto)
                 .collect(),
+            send_failed: Default::default(),
         })
     }
 

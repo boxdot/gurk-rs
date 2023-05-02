@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use presage::prelude::proto::AttachmentPointer;
 use presage::prelude::{AttachmentSpec, Contact, Content};
 use serde::{Deserialize, Serialize};
+use tokio::sync::oneshot;
 use tokio_stream::Stream;
 use uuid::Uuid;
 
@@ -40,7 +41,7 @@ pub trait SignalManager {
         text: String,
         quote_message: Option<&Message>,
         attachments: Vec<(AttachmentSpec, Vec<u8>)>,
-    ) -> Message;
+    ) -> (Message, oneshot::Receiver<anyhow::Result<()>>);
 
     fn send_reaction(&self, channel: &Channel, message: &Message, emoji: String, remove: bool);
 

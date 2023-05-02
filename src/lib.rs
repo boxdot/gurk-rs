@@ -7,6 +7,7 @@ pub mod cursor;
 pub mod data;
 #[cfg(feature = "dev")]
 pub mod dev;
+pub mod event;
 pub mod input;
 pub mod receipt;
 pub mod shortcuts;

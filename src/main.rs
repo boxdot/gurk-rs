@@ -16,6 +16,7 @@ use crossterm::{
 };
 use gurk::{config, signal, ui};
 use presage::prelude::Content;
+use tokio::select;
 use tokio_stream::StreamExt;
 use tracing::{error, info, metadata::LevelFilter};
 use tui::{backend::CrosstermBackend, Terminal};
@@ -91,13 +92,15 @@ pub enum Event {
     Quit(Option<anyhow::Error>),
     ContactSynced(DateTime<Utc>),
     Tick,
+    AppEvent(gurk::event::Event),
 }
 
 async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
     let (mut signal_manager, config) = signal::ensure_linked_device(relink).await?;
 
     let storage = JsonStorage::new(&config.data_path, config::fallback_data_path().as_deref())?;
-    let mut app = App::try_new(config, signal_manager.clone_boxed(), Box::new(storage))?;
+    let (mut app, mut app_events) =
+        App::try_new(config, signal_manager.clone_boxed(), Box::new(storage))?;
 
     // sync task can be only spawned after we start to listen to message, because it relies on
     // message sender to be running
@@ -180,7 +183,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                     .await
                     .expect("logic error: events channel closed")
             }
-            info!("messages channel disconnected. trying to reconnect.")
+            error!("messages channel disconnected. trying to reconnect.")
         }
     });
 
@@ -228,7 +231,12 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
             last_render_at = Instant::now();
         }
 
-        match rx.recv().await {
+        let event = select! {
+            v = rx.recv() => v,
+            v = app_events.recv() => v.map(Event::AppEvent),
+        };
+
+        match event {
             Some(Event::Tick) => {
                 app.step_receipts();
             }
@@ -357,7 +365,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                 KeyCode::Char('k') if event.modifiers.contains(KeyModifiers::CONTROL) => {
                     app.get_input().on_delete_suffix();
                 }
-                _ => app.on_key(event)?,
+                _ => app.on_key(event).await?,
             },
             Some(Event::Message(content)) => {
                 if let Err(e) = app.on_message(content).await {
@@ -378,6 +386,11 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                 metadata.contacts_sync_request_at.replace(at);
                 app.storage.store_metadata(metadata);
                 info!(%at, "synced contacts");
+            }
+            Some(Event::AppEvent(event)) => {
+                if let Err(error) = app.handle_event(event) {
+                    error!(%error, "failed to handle app event");
+                }
             }
             None => {
                 break;

@@ -1,6 +1,7 @@
 use crate::channels::SelectChannel;
 use crate::config::Config;
 use crate::data::{BodyRange, Channel, ChannelId, Message, TypingAction, TypingSet};
+use crate::event::Event;
 use crate::input::Input;
 use crate::receipt::{Receipt, ReceiptEvent, ReceiptHandler};
 use crate::signal::{
@@ -28,6 +29,7 @@ use presage::prelude::{
     AttachmentSpec, Content, ServiceAddress,
 };
 use regex_automata::Regex;
+use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
@@ -59,6 +61,7 @@ pub struct App {
     pub is_multiline_input: bool,
     pub(crate) select_channel: SelectChannel,
     clipboard: Option<Clipboard>,
+    event_tx: mpsc::UnboundedSender<Event>,
 }
 
 impl App {
@@ -66,7 +69,7 @@ impl App {
         config: Config,
         signal_manager: Box<dyn SignalManager>,
         storage: Box<dyn Storage>,
-    ) -> anyhow::Result<Self> {
+    ) -> anyhow::Result<(Self, mpsc::UnboundedReceiver<Event>)> {
         let user_id = signal_manager.user_id();
 
         // build index of channels and messages for using them as lists content
@@ -96,7 +99,9 @@ impl App {
             .map_err(|error| warn!(%error, "clipboard disabled"))
             .ok();
 
-        Ok(Self {
+        let (event_tx, event_rx) = mpsc::unbounded_channel();
+
+        let app = Self {
             config,
             signal_manager,
             user_id,
@@ -112,7 +117,9 @@ impl App {
             is_multiline_input: false,
             select_channel: Default::default(),
             clipboard,
-        })
+            event_tx,
+        };
+        Ok((app, event_rx))
     }
 
     pub fn get_input(&mut self) -> &mut Input {
@@ -183,7 +190,7 @@ impl App {
         }
     }
 
-    pub fn on_key(&mut self, key: KeyEvent) -> anyhow::Result<()> {
+    pub async fn on_key(&mut self, key: KeyEvent) -> anyhow::Result<()> {
         match key.code {
             KeyCode::Char('\r') => self.get_input().put_char('\n'),
             KeyCode::Enter => {
@@ -194,7 +201,7 @@ impl App {
                         self.get_input().new_line();
                     } else if !self.input.data.is_empty() {
                         if let Some(idx) = self.channels.state.selected() {
-                            self.send_input(idx)?;
+                            self.send_input(idx);
                         }
                     } else {
                         // input is empty
@@ -349,7 +356,7 @@ impl App {
         self.get_input().take()
     }
 
-    fn send_input(&mut self, channel_idx: usize) -> anyhow::Result<()> {
+    fn send_input(&mut self, channel_idx: usize) {
         let input = self.take_input();
         let (input, attachments) = self.extract_attachments(&input);
         let channel_id = self.channels.items[channel_idx];
@@ -358,9 +365,20 @@ impl App {
             .channel(channel_id)
             .expect("non-existent channel");
         let quote = self.selected_message();
-        let sent_message =
+        let (sent_message, response) =
             self.signal_manager
                 .send_text(&channel, input, quote.as_deref(), attachments);
+
+        let message_id = MessageId::new(channel_id, sent_message.arrived_at);
+        let tx = self.event_tx.clone();
+        tokio::spawn(async move {
+            if let Ok(result) = response.await {
+                tx.send(Event::SentTextResult { message_id, result })
+                    .expect("event sender gone");
+            } else {
+                error!(?message_id, "response for sending message was lost");
+            }
+        });
 
         let sent_message = self.storage.store_message(channel_id, sent_message);
         self.messages
@@ -375,7 +393,6 @@ impl App {
             self.reset_message_selection();
         }
         self.bubble_up_channel(channel_idx);
-        Ok(())
     }
 
     pub fn select_previous_channel(&mut self) {
@@ -1322,6 +1339,23 @@ impl App {
             }
         }
     }
+
+    pub fn handle_event(&mut self, event: Event) -> anyhow::Result<()> {
+        match event {
+            Event::SentTextResult { message_id, result } => {
+                if let Err(error) = result {
+                    let mut message = self
+                        .storage
+                        .message(message_id)
+                        .context("no message")?
+                        .into_owned();
+                    message.send_failed = Some(error.to_string());
+                    self.storage.store_message(message_id.channel_id, message);
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Returns an emoji string if `s` is an emoji or if `s` is a GitHub emoji shortcode.
@@ -1372,7 +1406,11 @@ mod tests {
     use std::cell::RefCell;
     use std::rc::Rc;
 
-    fn test_app() -> (App, Rc<RefCell<Vec<Message>>>) {
+    fn test_app() -> (
+        App,
+        mpsc::UnboundedReceiver<Event>,
+        Rc<RefCell<Vec<Message>>>,
+    ) {
         let signal_manager = SignalManagerMock::new();
         let sent_messages = signal_manager.sent_messages.clone();
 
@@ -1402,6 +1440,7 @@ mod tests {
                 reactions: Default::default(),
                 receipt: Default::default(),
                 body_ranges: Default::default(),
+                send_failed: Default::default(),
             },
         );
 
@@ -1409,7 +1448,7 @@ mod tests {
             name: "Tyler Durden".to_string(),
             phone_number: "+0000000000".to_string(),
         };
-        let mut app = App::try_new(
+        let (mut app, events) = App::try_new(
             Config::with_user(user),
             Box::new(signal_manager),
             Box::new(storage),
@@ -1417,64 +1456,85 @@ mod tests {
         .unwrap();
         app.channels.state.select(Some(0));
 
-        (app, sent_messages)
+        (app, events, sent_messages)
     }
 
-    #[test]
-    fn test_send_input() {
-        let (mut app, sent_messages) = test_app();
+    #[tokio::test]
+    async fn test_send_input() {
+        let (mut app, mut events, sent_messages) = test_app();
         let input = "Hello, World!";
         for c in input.chars() {
             app.get_input().put_char(c);
         }
-        app.send_input(0).unwrap();
+        app.send_input(0);
 
-        let sent = sent_messages.borrow();
-        assert_eq!(sent.len(), 1);
-        assert_eq!(sent[0].message.as_ref().unwrap(), input);
+        assert_eq!(sent_messages.borrow().len(), 1);
+        let msg = sent_messages.borrow()[0].clone();
+        assert_eq!(msg.message.as_ref().unwrap(), input);
 
         let channel_id = app.channels.items[0];
         let channel = app.storage.channel(channel_id).unwrap();
         assert_eq!(channel.unread_messages, 0);
 
         assert_eq!(app.get_input().data, "");
+
+        match events.recv().await.unwrap() {
+            Event::SentTextResult { message_id, result } => {
+                assert_eq!(message_id.arrived_at, msg.arrived_at);
+                assert!(result.is_ok());
+            }
+        }
     }
 
-    #[test]
-    fn test_send_input_with_emoji() {
-        let (mut app, sent_messages) = test_app();
+    #[tokio::test]
+    async fn test_send_input_with_emoji() {
+        let (mut app, mut events, sent_messages) = test_app();
         let input = "👻";
         for c in input.chars() {
             app.get_input().put_char(c);
         }
 
-        app.send_input(0).unwrap();
+        app.send_input(0);
 
-        let sent = sent_messages.borrow();
-        assert_eq!(sent.len(), 1);
-        assert_eq!(sent[0].message.as_ref().unwrap(), input);
+        assert_eq!(sent_messages.borrow().len(), 1);
+        let msg = sent_messages.borrow()[0].clone();
+        assert_eq!(msg.message.as_ref().unwrap(), input);
 
         assert_eq!(app.get_input().data, "");
+
+        match events.recv().await.unwrap() {
+            Event::SentTextResult { message_id, result } => {
+                assert_eq!(message_id.arrived_at, msg.arrived_at);
+                assert!(result.is_ok());
+            }
+        }
     }
 
-    #[test]
-    fn test_send_input_with_emoji_codepoint() {
-        let (mut app, sent_messages) = test_app();
+    #[tokio::test]
+    async fn test_send_input_with_emoji_codepoint() {
+        let (mut app, mut events, sent_messages) = test_app();
         let input = ":thumbsup:";
         for c in input.chars() {
             app.get_input().put_char(c);
         }
 
-        app.send_input(0).unwrap();
+        app.send_input(0);
 
-        let sent = sent_messages.borrow();
-        assert_eq!(sent.len(), 1);
-        assert_eq!(sent[0].message.as_ref().unwrap(), "👍");
+        assert_eq!(sent_messages.borrow().len(), 1);
+        let msg = sent_messages.borrow()[0].clone();
+        assert_eq!(msg.message.as_ref().unwrap(), "👍");
+
+        match events.recv().await.unwrap() {
+            Event::SentTextResult { message_id, result } => {
+                assert_eq!(message_id.arrived_at, msg.arrived_at);
+                assert!(result.is_ok());
+            }
+        }
     }
 
     #[test]
     fn test_add_reaction_with_emoji() {
-        let (mut app, _sent_messages) = test_app();
+        let (mut app, _events, _sent_messages) = test_app();
 
         let channel_id = app.channels.items[0];
         app.messages
@@ -1498,7 +1558,7 @@ mod tests {
 
     #[test]
     fn test_add_reaction_with_emoji_codepoint() {
-        let (mut app, _sent_messages) = test_app();
+        let (mut app, _events, _sent_messages) = test_app();
 
         let channel_id = app.channels.items[0];
         app.messages
@@ -1524,7 +1584,7 @@ mod tests {
 
     #[test]
     fn test_remove_reaction() {
-        let (mut app, _sent_messages) = test_app();
+        let (mut app, _events, _sent_messages) = test_app();
 
         let channel_id = app.channels.items[0];
         app.messages
@@ -1553,7 +1613,7 @@ mod tests {
 
     #[test]
     fn test_add_invalid_reaction() {
-        let (mut app, _sent_messages) = test_app();
+        let (mut app, _events, _sent_messages) = test_app();
         let channel_id = app.channels.items[0];
         app.messages
             .get_mut(&channel_id)
