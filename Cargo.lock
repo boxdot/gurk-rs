@@ -458,9 +458,9 @@ checksum = "17cc5e6b5ab06331c33589842070416baa137e8b0eb912b008cfd4a78ada7919"
 
 [[package]]
 name = "chrono"
-version = "0.4.22"
+version = "0.4.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bfd4d1b31faaa3a89d7934dbded3111da0d2ef28e3ebccdb4f0179f5929d1ef1"
+checksum = "4e3c5919066adf22df73762e50cffcde3a758f2a848b113b586d1f86728b673b"
 dependencies = [
  "iana-time-zone",
  "num-integer",
@@ -1787,7 +1787,7 @@ dependencies = [
 [[package]]
 name = "libsignal-service"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/libsignal-service-rs?rev=f11b2d1#f11b2d1683925ff52b2cfcd86a350405379b0336"
+source = "git+https://github.com/whisperfish/libsignal-service-rs?rev=c2f70ef#c2f70efd88bbebc9b646690a8449c451af619f2c"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -1820,7 +1820,7 @@ dependencies = [
 [[package]]
 name = "libsignal-service-hyper"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/libsignal-service-rs?rev=f11b2d1#f11b2d1683925ff52b2cfcd86a350405379b0336"
+source = "git+https://github.com/whisperfish/libsignal-service-rs?rev=c2f70ef#c2f70efd88bbebc9b646690a8449c451af619f2c"
 dependencies = [
  "async-trait",
  "async-tungstenite",
@@ -2573,7 +2573,7 @@ checksum = "eb9f9e6e233e5c4a35559a617bf40a4ec447db2e84c20b55a6f83167b7e57872"
 [[package]]
 name = "presage"
 version = "0.6.0-dev"
-source = "git+https://github.com/whisperfish/presage?rev=7823d28#7823d28e89606cc44c9042df30c6203750e925ac"
+source = "git+https://github.com/whisperfish/presage?rev=0.5.2#673d30686c8da8df6f45d2e9cf9d2d5eec2651c9"
 dependencies = [
  "base64 0.12.3",
  "futures",
@@ -2592,7 +2592,7 @@ dependencies = [
 [[package]]
 name = "presage-store-sled"
 version = "0.6.0-dev"
-source = "git+https://github.com/whisperfish/presage?rev=7823d28#7823d28e89606cc44c9042df30c6203750e925ac"
+source = "git+https://github.com/whisperfish/presage?rev=0.5.2#673d30686c8da8df6f45d2e9cf9d2d5eec2651c9"
 dependencies = [
  "async-trait",
  "base64 0.12.3",

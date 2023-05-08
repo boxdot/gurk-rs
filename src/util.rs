@@ -94,7 +94,8 @@ impl<T> StatefulList<T> {
 }
 
 pub fn utc_timestamp_msec_to_local(timestamp: u64) -> DateTime<Local> {
-    let dt = NaiveDateTime::from_timestamp(timestamp as i64 / 1000, (timestamp % 1000) as u32);
+    let dt = NaiveDateTime::from_timestamp_opt(timestamp as i64 / 1000, (timestamp % 1000) as u32)
+        .expect("invalid datetime");
     Utc.from_utc_datetime(&dt).with_timezone(&Local)
 }
 
