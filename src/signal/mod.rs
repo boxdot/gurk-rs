@@ -40,7 +40,7 @@ pub async fn ensure_linked_device(
 
     if !relink {
         if let Some(config) = config.clone() {
-            if let Ok(manager) = presage::Manager::load_registered(store.clone()) {
+            if let Ok(manager) = presage::Manager::load_registered(store.clone()).await {
                 // done loading manager from store
                 return Ok((Box::new(PresageManager::new(manager)), config));
             }

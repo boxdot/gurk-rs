@@ -28,8 +28,8 @@ debug = true
 dev = ["prost", "base64"]
 
 [dependencies]
-presage = { git = "https://github.com/whisperfish/presage", rev = "7823d28" }
-presage-store-sled = { git = "https://github.com/whisperfish/presage", rev = "7823d28" }
+presage = { git = "https://github.com/whisperfish/presage", rev = "0.5.2" }
+presage-store-sled = { git = "https://github.com/whisperfish/presage", rev = "0.5.2" }
 
 anyhow = "1.0.66"
 async-trait = "0.1.58"

@@ -47,7 +47,7 @@ impl SignalManager for PresageManager {
     }
 
     fn user_id(&self) -> Uuid {
-        self.manager.uuid()
+        self.manager.state().service_ids.aci
     }
 
     async fn resolve_group(
