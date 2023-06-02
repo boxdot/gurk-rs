@@ -126,7 +126,7 @@ jobs:
           profile: minimal
           override: true
       - name: Install target toolchain
-        run: sudo apt-get install gcc-aarch64-linux-gnu
+        run: sudo apt-get update && sudo apt-get install gcc-aarch64-linux-gnu
       - name: Build
         uses: actions-rs/cargo@v1
         with:
