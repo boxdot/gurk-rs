@@ -2,7 +2,7 @@
 
 use std::pin::Pin;
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::Utc;
 use gh_emoji::Replacer;
@@ -54,7 +54,10 @@ impl SignalManager for PresageManager {
         &mut self,
         master_key_bytes: GroupMasterKeyBytes,
     ) -> anyhow::Result<ResolvedGroup> {
-        let decrypted_group = self.manager.group(&master_key_bytes)?.unwrap();
+        let decrypted_group = self
+            .manager
+            .group(&master_key_bytes)?
+            .context("no group found")?;
 
         let mut members = Vec::with_capacity(decrypted_group.members.len());
         let mut profile_keys = Vec::with_capacity(decrypted_group.members.len());
@@ -105,9 +108,11 @@ impl SignalManager for PresageManager {
 
         Ok(Attachment {
             id: date,
-            content_type: attachment_pointer.content_type.unwrap(),
+            content_type: attachment_pointer
+                .content_type
+                .unwrap_or_else(|| "application/octet-stream".to_owned()),
             filename: filepath,
-            size: attachment_pointer.size.unwrap(),
+            size: attachment_pointer.size.unwrap_or_default(),
         })
     }
 
