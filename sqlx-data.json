@@ -1,6 +1,76 @@
 {
   "db": "SQLite",
-  "13e0ec34cc5a0b49048ea0e125c27c8aeea59e9e71311be4587b3097bbfb2292": {
+  "234d1525bc9a0646e4ab3f79e7edbe5f74fff34c57b2a0ba165fbac575f600e2": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Right": 9
+      }
+    },
+    "query": "\n                REPLACE INTO messages(arrived_at, channel_id, from_id, message, quote, receipt, body_ranges, attachments, reactions)\n                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)\n            "
+  },
+  "77b37f6cb5cb1104e036e3e34f7b9e806622833d616630ebfd70d003bc9654ac": {
+    "describe": {
+      "columns": [
+        {
+          "name": "arrived_at",
+          "ordinal": 0,
+          "type_info": "Int64"
+        },
+        {
+          "name": "from_id: _",
+          "ordinal": 1,
+          "type_info": "Blob"
+        },
+        {
+          "name": "message",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "quote",
+          "ordinal": 3,
+          "type_info": "Int64"
+        },
+        {
+          "name": "receipt: _",
+          "ordinal": 4,
+          "type_info": "Blob"
+        },
+        {
+          "name": "body_ranges: _",
+          "ordinal": 5,
+          "type_info": "Blob"
+        },
+        {
+          "name": "attachments: _",
+          "ordinal": 6,
+          "type_info": "Blob"
+        },
+        {
+          "name": "reactions: _",
+          "ordinal": 7,
+          "type_info": "Blob"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "parameters": {
+        "Right": 1
+      }
+    },
+    "query": "\n                    SELECT\n                        arrived_at,\n                        from_id as \"from_id: _\",\n                        message,\n                        quote,\n                        receipt as \"receipt: _\",\n                        body_ranges AS \"body_ranges: _\",\n                        attachments AS \"attachments: _\",\n                        reactions AS \"reactions: _\"\n                    FROM messages\n                    WHERE channel_id = ?\n                    ORDER BY arrived_at ASC\n                "
+  },
+  "91d45ef1f3eed83def5241fa027573bc217fad6419b52bcad53b899de7fe6cf4": {
     "describe": {
       "columns": [
         {
@@ -24,7 +94,7 @@
           "type_info": "Int64"
         },
         {
-          "name": "group_members",
+          "name": "group_members: _",
           "ordinal": 4,
           "type_info": "Blob"
         }
@@ -40,9 +110,9 @@
         "Right": 1
       }
     },
-    "query": "\n                        SELECT id AS \"id: _\", name, group_master_key, group_revision, group_members\n                        FROM channels\n                        WHERE id = ?\n                    "
+    "query": "\n                        SELECT id AS \"id: _\", name, group_master_key, group_revision, group_members AS \"group_members: _\"\n                        FROM channels\n                        WHERE id = ?\n                    "
   },
-  "3f8ba8d2333db1519703c992319b104e572e3e0ea33ad44a566cda45f2619588": {
+  "9315d74c3c5f63fb9206e1c2c3f63dd9b7f41302cc0d3435e647665b64112bcd": {
     "describe": {
       "columns": [],
       "nullable": [],
@@ -50,9 +120,9 @@
         "Right": 5
       }
     },
-    "query": "\n                REPLACE INTO channels(id, name, group_master_key, group_revision, group_members)\n                VALUES (?, ?, ?, ?, ?)\n            "
+    "query": "\n                    REPLACE INTO channels(id, name, group_master_key, group_revision, group_members)\n                    VALUES (?, ?, ?, ?, ?)\n                "
   },
-  "9bebc4e8f31704f1ba74c3c89f991acf11bb5122471bd07b8a89b4d3e7fa8cbb": {
+  "b7bacc9256317c39f23ed805754917a6c50e61a2b17e6983f330c339cb23d442": {
     "describe": {
       "columns": [
         {
@@ -76,7 +146,7 @@
           "type_info": "Int64"
         },
         {
-          "name": "group_members",
+          "name": "group_members: _",
           "ordinal": 4,
           "type_info": "Blob"
         }
@@ -92,6 +162,66 @@
         "Right": 0
       }
     },
-    "query": "\n                    SELECT id AS \"id: _\", name, group_master_key, group_revision, group_members\n                    FROM channels\n                "
+    "query": "\n                    SELECT id AS \"id: _\", name, group_master_key, group_revision, group_members AS \"group_members: _\"\n                    FROM channels\n                "
+  },
+  "c9f1d161ae895463dd0eee462f9e7cb91c4cfe04d4babe0d4b898b9018a28e94": {
+    "describe": {
+      "columns": [
+        {
+          "name": "arrived_at",
+          "ordinal": 0,
+          "type_info": "Int64"
+        },
+        {
+          "name": "from_id: _",
+          "ordinal": 1,
+          "type_info": "Blob"
+        },
+        {
+          "name": "message",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "quote",
+          "ordinal": 3,
+          "type_info": "Int64"
+        },
+        {
+          "name": "receipt: _",
+          "ordinal": 4,
+          "type_info": "Blob"
+        },
+        {
+          "name": "body_ranges: _",
+          "ordinal": 5,
+          "type_info": "Blob"
+        },
+        {
+          "name": "attachments: _",
+          "ordinal": 6,
+          "type_info": "Blob"
+        },
+        {
+          "name": "reactions: _",
+          "ordinal": 7,
+          "type_info": "Blob"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "parameters": {
+        "Right": 2
+      }
+    },
+    "query": "\n                    SELECT\n                        arrived_at,\n                        from_id as \"from_id: _\",\n                        message,\n                        quote,\n                        receipt as \"receipt: _\",\n                        body_ranges AS \"body_ranges: _\",\n                        attachments AS \"attachments: _\",\n                        reactions AS \"reactions: _\"\n                    FROM messages\n                    WHERE channel_id = ? AND arrived_at = ?\n                    ORDER BY arrived_at ASC\n                "
   }
 }
