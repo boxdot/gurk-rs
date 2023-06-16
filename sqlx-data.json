@@ -1,0 +1,97 @@
+{
+  "db": "SQLite",
+  "13e0ec34cc5a0b49048ea0e125c27c8aeea59e9e71311be4587b3097bbfb2292": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id: _",
+          "ordinal": 0,
+          "type_info": "Blob"
+        },
+        {
+          "name": "name",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "group_master_key",
+          "ordinal": 2,
+          "type_info": "Blob"
+        },
+        {
+          "name": "group_revision",
+          "ordinal": 3,
+          "type_info": "Int64"
+        },
+        {
+          "name": "group_members",
+          "ordinal": 4,
+          "type_info": "Blob"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        true,
+        true,
+        true
+      ],
+      "parameters": {
+        "Right": 1
+      }
+    },
+    "query": "\n                        SELECT id AS \"id: _\", name, group_master_key, group_revision, group_members\n                        FROM channels\n                        WHERE id = ?\n                    "
+  },
+  "3f8ba8d2333db1519703c992319b104e572e3e0ea33ad44a566cda45f2619588": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Right": 5
+      }
+    },
+    "query": "\n                REPLACE INTO channels(id, name, group_master_key, group_revision, group_members)\n                VALUES (?, ?, ?, ?, ?)\n            "
+  },
+  "9bebc4e8f31704f1ba74c3c89f991acf11bb5122471bd07b8a89b4d3e7fa8cbb": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id: _",
+          "ordinal": 0,
+          "type_info": "Blob"
+        },
+        {
+          "name": "name",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "group_master_key",
+          "ordinal": 2,
+          "type_info": "Blob"
+        },
+        {
+          "name": "group_revision",
+          "ordinal": 3,
+          "type_info": "Int64"
+        },
+        {
+          "name": "group_members",
+          "ordinal": 4,
+          "type_info": "Blob"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        true,
+        true,
+        true
+      ],
+      "parameters": {
+        "Right": 0
+      }
+    },
+    "query": "\n                    SELECT id AS \"id: _\", name, group_master_key, group_revision, group_members\n                    FROM channels\n                "
+  }
+}

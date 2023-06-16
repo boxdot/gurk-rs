@@ -65,11 +65,16 @@ futures-channel = "0.3.25"
 qr2term = "0.3.1"
 clap = { version = "4.0.19", features = ["derive"] }
 aho-corasick = "0.7.19"
+sqlx = { version = "0.6.3", features = ["sqlite", "runtime-tokio-rustls", "offline", "uuid"] }
+thiserror = "1.0.40"
+postcard = { version = "1.0.4", features = ["alloc"] }
 
 # dev feature dependencies
 prost = { version = "0.10.4", optional = true }
 base64 = { version = "0.13.1", optional = true }
 arboard = { version = "3.2.0", features = ["wayland-data-control"] }
+rayon = "1.7.0"
+thread_local = "1.1.7"
 
 [dev-dependencies]
 criterion = { version = "0.4", features = ["async_tokio", "html_reports"] }

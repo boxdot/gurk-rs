@@ -17,7 +17,7 @@ pub struct Channel {
     pub id: ChannelId,
     pub name: String,
     pub group_data: Option<GroupData>,
-    pub unread_messages: usize,
+    pub unread_messages: u32,
     pub typing: TypingSet,
 }
 
@@ -25,6 +25,16 @@ pub struct Channel {
 pub enum TypingSet {
     SingleTyping(bool),
     GroupTyping(HashSet<Uuid>),
+}
+
+impl TypingSet {
+    pub fn new(is_group: bool) -> Self {
+        if is_group {
+            Self::GroupTyping(Default::default())
+        } else {
+            Self::SingleTyping(false)
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -74,6 +84,17 @@ impl From<Uuid> for ChannelId {
     }
 }
 
+impl TryFrom<&[u8]> for ChannelId {
+    type Error = UnexpectedGroupBytesLen;
+
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+        bytes
+            .try_into()
+            .map(ChannelId::Group)
+            .map_err(|_| UnexpectedGroupBytesLen(bytes.len()))
+    }
+}
+
 impl PartialEq<Uuid> for ChannelId {
     fn eq(&self, other: &Uuid) -> bool {
         match self {
@@ -82,6 +103,10 @@ impl PartialEq<Uuid> for ChannelId {
         }
     }
 }
+
+#[derive(Debug, thiserror::Error)]
+#[error("unexpected group bytes length: {0}")]
+pub struct UnexpectedGroupBytesLen(usize);
 
 impl ChannelId {
     pub fn from_master_key_bytes(bytes: impl AsRef<[u8]>) -> anyhow::Result<Self> {

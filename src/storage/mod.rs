@@ -1,6 +1,7 @@
 mod forgetful;
 mod json;
 mod memcache;
+mod sql;
 
 use std::borrow::Cow;
 
@@ -12,6 +13,7 @@ use crate::data::{Channel, ChannelId, Message};
 pub use forgetful::ForgetfulStorage;
 pub use json::JsonStorage;
 pub use memcache::MemCache;
+pub use sql::SqliteStorage;
 
 /// Storage of channels, messages, names and metadata.
 ///
@@ -24,7 +26,7 @@ pub use memcache::MemCache;
 /// converted and/or serialized.
 pub trait Storage {
     /// Channels in no particular order
-    fn channels<'s>(&'s self) -> Box<dyn Iterator<Item = Cow<Channel>> + 's>;
+    fn channels(&self) -> Box<dyn Iterator<Item = Cow<Channel>> + '_>;
     /// Gets the channel by id
     fn channel(&self, channel_id: ChannelId) -> Option<Cow<Channel>>;
     /// Stores the given `channel` and returns it back

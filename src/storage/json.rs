@@ -51,7 +51,7 @@ pub struct JsonChannel {
     group_data: Option<GroupData>,
     messages: Vec<Message>,
     #[serde(default)]
-    unread_messages: usize,
+    unread_messages: u32,
     #[serde(skip)]
     typing: Option<TypingSet>,
 }
@@ -64,13 +64,10 @@ impl From<&JsonChannel> for Channel {
             name: channel.name.clone(),
             group_data: channel.group_data.clone(),
             unread_messages: channel.unread_messages,
-            typing: channel.typing.clone().unwrap_or_else(|| {
-                if !is_group {
-                    TypingSet::SingleTyping(false)
-                } else {
-                    TypingSet::GroupTyping(Default::default())
-                }
-            }),
+            typing: channel
+                .typing
+                .clone()
+                .unwrap_or_else(|| TypingSet::new(is_group)),
         }
     }
 }

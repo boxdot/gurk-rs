@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use anyhow::Context;
 use chrono::{DateTime, Utc};
 use clap::Parser;
 use crossterm::{
@@ -22,7 +23,7 @@ use tracing::{error, info, metadata::LevelFilter};
 use tui::{backend::CrosstermBackend, Terminal};
 
 use gurk::app::App;
-use gurk::storage::JsonStorage;
+use gurk::storage::{JsonStorage, SqliteStorage};
 
 const TARGET_FPS: u64 = 144;
 const RECEIPT_TICK_PERIOD: u64 = 144;
@@ -97,6 +98,19 @@ pub enum Event {
 
 async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
     let (mut signal_manager, config) = signal::ensure_linked_device(relink).await?;
+
+    if config.sqlite.enabled {
+        let _storage = SqliteStorage::open(&config.sqlite.url)
+            .await
+            .with_context(|| {
+                format!(
+                    "failed to open sqlite data storage at: {}",
+                    config.sqlite.url
+                )
+            })?;
+
+        anyhow::bail!("rest is not yet implemented");
+    }
 
     let storage = JsonStorage::new(&config.data_path, config::fallback_data_path().as_deref())?;
     let (mut app, mut app_events) =
