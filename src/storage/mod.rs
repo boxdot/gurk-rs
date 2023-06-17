@@ -1,3 +1,4 @@
+mod copy;
 mod forgetful;
 mod json;
 mod memcache;
@@ -10,6 +11,7 @@ use uuid::Uuid;
 
 use crate::data::{Channel, ChannelId, Message};
 
+pub use copy::copy;
 pub use forgetful::ForgetfulStorage;
 pub use json::JsonStorage;
 pub use memcache::MemCache;
@@ -67,6 +69,11 @@ pub trait Storage {
     /// The implementers of this trait, can persist for each store call, if it is efficient enough.
     /// This methods must guarantee that the data is persisted in any case.
     fn save(&mut self);
+
+    /// Returns `true` if this storage does not contains any channels and no names
+    fn is_empty(&self) -> bool {
+        self.channels().next().is_none() && self.names().next().is_none()
+    }
 }
 
 /// A message is identified by its channel and time of arrived in milliseconds

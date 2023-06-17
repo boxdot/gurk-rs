@@ -3,8 +3,10 @@ use std::future::Future;
 use std::time::Instant;
 
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool};
+use sqlx::ConnectOptions;
 use thread_local::ThreadLocal;
 use tokio::runtime::Runtime;
+use tracing::metadata::LevelFilter;
 use tracing::{instrument, trace};
 use uuid::Uuid;
 
@@ -27,9 +29,10 @@ pub struct SqliteStorage {
 impl SqliteStorage {
     pub async fn open(url: &str) -> Result<Self, sqlx::Error> {
         let opts: SqliteConnectOptions = url.parse()?;
-        let opts = opts
+        let mut opts = opts
             .create_if_missing(true)
             .journal_mode(SqliteJournalMode::Wal);
+        opts.disable_statement_logging();
         let pool = SqlitePool::connect_with(opts).await?;
         sqlx::migrate!("src/storage/migrations").run(&pool).await?;
 
