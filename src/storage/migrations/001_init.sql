@@ -8,7 +8,7 @@ CREATE TABLE channels(
 
 CREATE TABLE messages(
     arrived_at INTEGER PRIMARY KEY NOT NULL,
-    channel_id BLOB NOT NULL,  -- uuid or group id
+    channel_id BLOB NOT NULL, -- uuid or group id
     from_id BLOB NOT NULL,
     message TEXT,
     quote INTEGER, -- reference into messages to arrived_at
@@ -24,4 +24,10 @@ ON messages(channel_id);
 CREATE TABLE names(
     id BLOB PRIMARY KEY NOT NULL,
     name TEXT NOT NULL
+);
+
+-- contains a single row
+CREATE TABLE metadata(
+    id INTEGER PRIMARY KEY NOT NULL, -- static id == 0
+    contacts_sync_request_at DATETIME
 );

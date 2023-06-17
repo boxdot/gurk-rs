@@ -1,5 +1,95 @@
 {
   "db": "SQLite",
+  "08cb4774c98769ec01b71e05824b9388c697a6ad39125ced78295b90bfc2d523": {
+    "describe": {
+      "columns": [
+        {
+          "name": "arrived_at",
+          "ordinal": 0,
+          "type_info": "Int64"
+        },
+        {
+          "name": "from_id: _",
+          "ordinal": 1,
+          "type_info": "Blob"
+        },
+        {
+          "name": "message",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "receipt: _",
+          "ordinal": 3,
+          "type_info": "Blob"
+        },
+        {
+          "name": "body_ranges: _",
+          "ordinal": 4,
+          "type_info": "Blob"
+        },
+        {
+          "name": "attachments: _",
+          "ordinal": 5,
+          "type_info": "Blob"
+        },
+        {
+          "name": "reactions: _",
+          "ordinal": 6,
+          "type_info": "Blob"
+        },
+        {
+          "name": "quote_arrived_at: _",
+          "ordinal": 7,
+          "type_info": "Int64"
+        },
+        {
+          "name": "quote_from_id: _",
+          "ordinal": 8,
+          "type_info": "Blob"
+        },
+        {
+          "name": "quote_message",
+          "ordinal": 9,
+          "type_info": "Text"
+        },
+        {
+          "name": "quote_attachments: _",
+          "ordinal": 10,
+          "type_info": "Blob"
+        },
+        {
+          "name": "quote_body_ranges: _",
+          "ordinal": 11,
+          "type_info": "Blob"
+        },
+        {
+          "name": "quote_receipt: _",
+          "ordinal": 12,
+          "type_info": "Blob"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "parameters": {
+        "Right": 2
+      }
+    },
+    "query": "\n                    SELECT\n                        m.arrived_at AS arrived_at,\n                        m.from_id AS \"from_id: _\",\n                        m.message,\n                        m.receipt AS \"receipt: _\",\n                        m.body_ranges AS \"body_ranges: _\",\n                        m.attachments AS \"attachments: _\",\n                        m.reactions AS \"reactions: _\",\n                        q.arrived_at AS \"quote_arrived_at: _\",\n                        q.from_id AS \"quote_from_id: _\",\n                        q.message AS quote_message,\n                        q.attachments AS \"quote_attachments: _\",\n                        q.body_ranges AS \"quote_body_ranges: _\",\n                        q.receipt AS \"quote_receipt: _\"\n                    FROM messages AS m\n                    LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1\n                    WHERE m.channel_id = ?1 AND m.arrived_at = ?2\n                    LIMIT 1\n                "
+  },
   "109385aec54407fcbf6be8f4d7a60e65ef8984a998d666d3a38dcb3f84aca87f": {
     "describe": {
       "columns": [
@@ -52,7 +142,7 @@
     },
     "query": "SELECT name AS \"name: _\" FROM names WHERE id = ?"
   },
-  "77b37f6cb5cb1104e036e3e34f7b9e806622833d616630ebfd70d003bc9654ac": {
+  "5621f642906160cc832a2d158718810230cf12761c28c48a1abdf74e49fbf042": {
     "describe": {
       "columns": [
         {
@@ -71,28 +161,53 @@
           "type_info": "Text"
         },
         {
-          "name": "quote",
-          "ordinal": 3,
-          "type_info": "Int64"
-        },
-        {
           "name": "receipt: _",
-          "ordinal": 4,
+          "ordinal": 3,
           "type_info": "Blob"
         },
         {
           "name": "body_ranges: _",
-          "ordinal": 5,
+          "ordinal": 4,
           "type_info": "Blob"
         },
         {
           "name": "attachments: _",
-          "ordinal": 6,
+          "ordinal": 5,
           "type_info": "Blob"
         },
         {
           "name": "reactions: _",
+          "ordinal": 6,
+          "type_info": "Blob"
+        },
+        {
+          "name": "quote_arrived_at: _",
           "ordinal": 7,
+          "type_info": "Int64"
+        },
+        {
+          "name": "quote_from_id: _",
+          "ordinal": 8,
+          "type_info": "Blob"
+        },
+        {
+          "name": "quote_message",
+          "ordinal": 9,
+          "type_info": "Text"
+        },
+        {
+          "name": "quote_attachments: _",
+          "ordinal": 10,
+          "type_info": "Blob"
+        },
+        {
+          "name": "quote_body_ranges: _",
+          "ordinal": 11,
+          "type_info": "Blob"
+        },
+        {
+          "name": "quote_receipt: _",
+          "ordinal": 12,
           "type_info": "Blob"
         }
       ],
@@ -104,13 +219,28 @@
         true,
         true,
         true,
+        false,
+        true,
+        true,
+        true,
+        true,
         true
       ],
       "parameters": {
         "Right": 1
       }
     },
-    "query": "\n                    SELECT\n                        arrived_at,\n                        from_id as \"from_id: _\",\n                        message,\n                        quote,\n                        receipt as \"receipt: _\",\n                        body_ranges AS \"body_ranges: _\",\n                        attachments AS \"attachments: _\",\n                        reactions AS \"reactions: _\"\n                    FROM messages\n                    WHERE channel_id = ?\n                    ORDER BY arrived_at ASC\n                "
+    "query": "\n                    SELECT\n                        m.arrived_at AS arrived_at,\n                        m.from_id AS \"from_id: _\",\n                        m.message,\n                        m.receipt AS \"receipt: _\",\n                        m.body_ranges AS \"body_ranges: _\",\n                        m.attachments AS \"attachments: _\",\n                        m.reactions AS \"reactions: _\",\n                        q.arrived_at AS \"quote_arrived_at: _\",\n                        q.from_id AS \"quote_from_id: _\",\n                        q.message AS quote_message,\n                        q.attachments AS \"quote_attachments: _\",\n                        q.body_ranges AS \"quote_body_ranges: _\",\n                        q.receipt AS \"quote_receipt: _\"\n                    FROM messages AS m\n                    LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1\n                    WHERE m.channel_id = ?1\n                    ORDER BY m.arrived_at ASC\n                "
+  },
+  "60c1170c461c6d70532cc0ad6e4defd07dd5bb18d76443676ef9cf996b2d6918": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Right": 2
+      }
+    },
+    "query": "REPLACE INTO metadata(id, contacts_sync_request_at) VALUES (?, ?)"
   },
   "91d45ef1f3eed83def5241fa027573bc217fad6419b52bcad53b899de7fe6cf4": {
     "describe": {
@@ -216,64 +346,22 @@
     },
     "query": "\n                    SELECT id AS \"id: _\", name, group_master_key, group_revision, group_members AS \"group_members: _\"\n                    FROM channels\n                "
   },
-  "c9f1d161ae895463dd0eee462f9e7cb91c4cfe04d4babe0d4b898b9018a28e94": {
+  "d96103d707a31a2471befb43dcc1cf4d2bdb4bf9bd132847f23de47457fe5b99": {
     "describe": {
       "columns": [
         {
-          "name": "arrived_at",
+          "name": "contacts_sync_request_at: _",
           "ordinal": 0,
-          "type_info": "Int64"
-        },
-        {
-          "name": "from_id: _",
-          "ordinal": 1,
-          "type_info": "Blob"
-        },
-        {
-          "name": "message",
-          "ordinal": 2,
-          "type_info": "Text"
-        },
-        {
-          "name": "quote",
-          "ordinal": 3,
-          "type_info": "Int64"
-        },
-        {
-          "name": "receipt: _",
-          "ordinal": 4,
-          "type_info": "Blob"
-        },
-        {
-          "name": "body_ranges: _",
-          "ordinal": 5,
-          "type_info": "Blob"
-        },
-        {
-          "name": "attachments: _",
-          "ordinal": 6,
-          "type_info": "Blob"
-        },
-        {
-          "name": "reactions: _",
-          "ordinal": 7,
-          "type_info": "Blob"
+          "type_info": "Datetime"
         }
       ],
       "nullable": [
-        false,
-        false,
-        true,
-        true,
-        true,
-        true,
-        true,
         true
       ],
       "parameters": {
-        "Right": 2
+        "Right": 0
       }
     },
-    "query": "\n                    SELECT\n                        arrived_at,\n                        from_id as \"from_id: _\",\n                        message,\n                        quote,\n                        receipt as \"receipt: _\",\n                        body_ranges AS \"body_ranges: _\",\n                        attachments AS \"attachments: _\",\n                        reactions AS \"reactions: _\"\n                    FROM messages\n                    WHERE channel_id = ? AND arrived_at = ?\n                    ORDER BY arrived_at ASC\n                "
+    "query": "SELECT contacts_sync_request_at AS \"contacts_sync_request_at: _\" FROM metadata WHERE id = 0 LIMIT 1"
   }
 }

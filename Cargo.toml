@@ -65,7 +65,7 @@ futures-channel = "0.3.25"
 qr2term = "0.3.1"
 clap = { version = "4.0.19", features = ["derive"] }
 aho-corasick = "0.7.19"
-sqlx = { version = "0.6.3", features = ["sqlite", "runtime-tokio-rustls", "offline", "uuid"] }
+sqlx = { version = "0.6.3", features = ["sqlite", "runtime-tokio-rustls", "offline", "uuid", "chrono"] }
 thiserror = "1.0.40"
 postcard = { version = "1.0.4", features = ["alloc"] }
 

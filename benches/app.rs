@@ -9,7 +9,7 @@ use presage::prelude::Content;
 use tracing::info;
 
 fn test_app() -> App {
-    App::try_new(
+    let (app, _) = App::try_new(
         Config {
             notifications: false,
             ..Config::with_user(User {
@@ -20,7 +20,8 @@ fn test_app() -> App {
         Box::new(SignalManagerMock::new()),
         Box::new(MemCache::new(ForgetfulStorage)),
     )
-    .unwrap()
+    .unwrap();
+    app
 }
 
 pub fn bench_on_message(c: &mut Criterion) {

@@ -16,6 +16,8 @@ use crate::storage::{MessageId, Metadata, Storage};
 use super::encoding::BlobData;
 use super::util::ResultExt as _;
 
+const METADATA_ID: i64 = 0;
+
 pub struct SqliteStorage {
     pool: SqlitePool,
     thread: rayon::ThreadPool,
@@ -107,15 +109,20 @@ impl SqlChannel {
     }
 }
 
-pub struct SqlMessage {
+struct SqlMessage {
     from_id: Uuid,
     message: Option<String>,
     arrived_at: i64,
-    quote: Option<i64>,
     attachments: Option<BlobData<Vec<Attachment>>>,
     reactions: Option<BlobData<Vec<(Uuid, String)>>>,
     receipt: Option<BlobData<Receipt>>,
     body_ranges: Option<BlobData<Vec<BodyRange>>>,
+    quote_arrived_at: Option<i64>,
+    quote_from_id: Option<Uuid>,
+    quote_message: Option<String>,
+    quote_attachments: Option<BlobData<Vec<Attachment>>>,
+    quote_body_ranges: Option<BlobData<Vec<BodyRange>>>,
+    quote_receipt: Option<BlobData<Receipt>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -130,19 +137,46 @@ impl SqlMessage {
             from_id,
             message,
             arrived_at,
-            quote,
             attachments,
             reactions,
             receipt,
             body_ranges,
+            quote_arrived_at,
+            quote_from_id,
+            quote_message,
+            quote_attachments,
+            quote_body_ranges,
+            quote_receipt,
         } = self;
+
+        let quote = quote_arrived_at
+            .zip(quote_from_id)
+            .and_then(|(arrived_at, from_id)| {
+                let mut quote = Message::new(
+                    from_id,
+                    quote_message,
+                    quote_body_ranges
+                        .map(BlobData::into_inner)
+                        .unwrap_or_default(),
+                    arrived_at
+                        .try_into()
+                        .map_err(|_| MessageConvertError::InvalidTimestamp)
+                        .ok_logged()?,
+                    quote_attachments
+                        .map(BlobData::into_inner)
+                        .unwrap_or_default(),
+                );
+                quote.receipt = quote_receipt.map(BlobData::into_inner).unwrap_or_default();
+                Some(quote)
+            });
+
         Ok(Message {
             from_id,
             message,
             arrived_at: arrived_at
                 .try_into()
                 .map_err(|_| MessageConvertError::InvalidTimestamp)?,
-            quote: None, // TODO
+            quote: quote.map(Box::new),
             attachments: attachments.map(BlobData::into_inner).unwrap_or_default(),
             reactions: reactions.map(BlobData::into_inner).unwrap_or_default(),
             receipt: receipt.map(BlobData::into_inner).unwrap_or_default(),
@@ -249,17 +283,23 @@ impl Storage for SqliteStorage {
                 SqlMessage,
                 r#"
                     SELECT
-                        arrived_at,
-                        from_id as "from_id: _",
-                        message,
-                        quote,
-                        receipt as "receipt: _",
-                        body_ranges AS "body_ranges: _",
-                        attachments AS "attachments: _",
-                        reactions AS "reactions: _"
-                    FROM messages
-                    WHERE channel_id = ?
-                    ORDER BY arrived_at ASC
+                        m.arrived_at AS arrived_at,
+                        m.from_id AS "from_id: _",
+                        m.message,
+                        m.receipt AS "receipt: _",
+                        m.body_ranges AS "body_ranges: _",
+                        m.attachments AS "attachments: _",
+                        m.reactions AS "reactions: _",
+                        q.arrived_at AS "quote_arrived_at: _",
+                        q.from_id AS "quote_from_id: _",
+                        q.message AS quote_message,
+                        q.attachments AS "quote_attachments: _",
+                        q.body_ranges AS "quote_body_ranges: _",
+                        q.receipt AS "quote_receipt: _"
+                    FROM messages AS m
+                    LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1
+                    WHERE m.channel_id = ?1
+                    ORDER BY m.arrived_at ASC
                 "#,
                 channel_id
             )
@@ -286,17 +326,23 @@ impl Storage for SqliteStorage {
                 SqlMessage,
                 r#"
                     SELECT
-                        arrived_at,
-                        from_id as "from_id: _",
-                        message,
-                        quote,
-                        receipt as "receipt: _",
-                        body_ranges AS "body_ranges: _",
-                        attachments AS "attachments: _",
-                        reactions AS "reactions: _"
-                    FROM messages
-                    WHERE channel_id = ? AND arrived_at = ?
-                    ORDER BY arrived_at ASC
+                        m.arrived_at AS arrived_at,
+                        m.from_id AS "from_id: _",
+                        m.message,
+                        m.receipt AS "receipt: _",
+                        m.body_ranges AS "body_ranges: _",
+                        m.attachments AS "attachments: _",
+                        m.reactions AS "reactions: _",
+                        q.arrived_at AS "quote_arrived_at: _",
+                        q.from_id AS "quote_from_id: _",
+                        q.message AS quote_message,
+                        q.attachments AS "quote_attachments: _",
+                        q.body_ranges AS "quote_body_ranges: _",
+                        q.receipt AS "quote_receipt: _"
+                    FROM messages AS m
+                    LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1
+                    WHERE m.channel_id = ?1 AND m.arrived_at = ?2
+                    LIMIT 1
                 "#,
                 channel_id,
                 arrived_at
@@ -390,11 +436,27 @@ impl Storage for SqliteStorage {
     }
 
     fn metadata(&self) -> Cow<Metadata> {
-        todo!()
+        let metadata = self.execute(
+            sqlx::query_as!(
+                Metadata,
+                r#"SELECT contacts_sync_request_at AS "contacts_sync_request_at: _" FROM metadata WHERE id = 0 LIMIT 1"#,
+            )
+            .fetch_optional(&self.pool),
+        );
+        Cow::Owned(metadata.ok_logged().flatten().unwrap_or_default())
     }
 
-    fn store_metadata(&mut self, _metadata: Metadata) -> Cow<Metadata> {
-        todo!()
+    fn store_metadata(&mut self, metadata: Metadata) -> Cow<Metadata> {
+        self.execute(
+            sqlx::query!(
+                "REPLACE INTO metadata(id, contacts_sync_request_at) VALUES (?, ?)",
+                METADATA_ID,
+                metadata.contacts_sync_request_at,
+            )
+            .execute(&self.pool),
+        )
+        .ok_logged();
+        Cow::Owned(metadata)
     }
 
     fn save(&mut self) {}
@@ -402,6 +464,7 @@ impl Storage for SqliteStorage {
 
 #[cfg(test)]
 mod tests {
+    use chrono::Utc;
     use uuid::uuid;
 
     use super::*;
@@ -525,21 +588,43 @@ mod tests {
     async fn test_sqlite_storage_store_new_message() {
         let _ = tracing_subscriber::fmt::try_init();
         let mut storage = fixtures().await;
-        let id: Uuid = "966960e0-a8cd-43f1-ac7a-2c986dd470cd".parse().unwrap();
+
+        let id: Uuid = uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd");
+
+        // store quote
+        let quote_arrived_at = 1664832050000;
+        let quote = storage
+            .message(MessageId::new(id.into(), quote_arrived_at))
+            .unwrap()
+            .into_owned();
+
+        // store message
         let arrived_at = 1664832050001;
         assert_eq!(storage.message(MessageId::new(id.into(), arrived_at)), None);
-
+        let attachments = vec![Attachment {
+            id: "some_attachment".to_owned(),
+            content_type: "image/png".to_owned(),
+            filename: "example.png".into(),
+            size: 42,
+        }];
+        let reactions = vec![(id, "+1".to_owned())];
+        let receipt = Receipt::Read;
+        let body_ranges = vec![BodyRange {
+            start: 0,
+            end: 1,
+            value: crate::data::AssociatedValue::MentionUuid(id),
+        }];
         let stored_message = storage.store_message(
             id.into(),
             Message {
                 from_id: id,
                 message: Some("new msg".to_string()),
                 arrived_at,
-                quote: Default::default(),
-                attachments: Default::default(),
-                reactions: Default::default(),
-                receipt: Default::default(),
-                body_ranges: Default::default(),
+                quote: Some(Box::new(quote.clone())),
+                attachments: attachments.clone(),
+                reactions: reactions.clone(),
+                receipt,
+                body_ranges: body_ranges.clone(),
                 send_failed: Default::default(),
             },
         );
@@ -551,6 +636,11 @@ mod tests {
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[1].arrived_at, arrived_at);
         assert_eq!(messages[1].message.as_deref(), Some("new msg"));
+        assert_eq!(messages[1].quote.as_deref(), Some(&quote));
+        assert_eq!(messages[1].attachments, attachments);
+        assert_eq!(messages[1].reactions, reactions);
+        assert_eq!(messages[1].receipt, receipt);
+        assert_eq!(messages[1].body_ranges, body_ranges);
     }
 
     #[tokio::test]
@@ -570,5 +660,23 @@ mod tests {
         assert_eq!(storage.name(id1).unwrap(), "ellie");
         assert_eq!(storage.name(id2).unwrap(), "joel");
         assert_eq!(storage.name(id3).unwrap(), "abby");
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_storage_metadata() {
+        let _ = tracing_subscriber::fmt::try_init();
+        let mut storage = fixtures().await;
+        assert_eq!(storage.metadata().contacts_sync_request_at, None);
+
+        let dt = Utc::now();
+        assert_eq!(
+            storage
+                .store_metadata(Metadata {
+                    contacts_sync_request_at: Some(dt)
+                })
+                .contacts_sync_request_at,
+            Some(dt)
+        );
+        assert_eq!(storage.metadata().contacts_sync_request_at, Some(dt));
     }
 }
