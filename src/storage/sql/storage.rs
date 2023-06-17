@@ -6,7 +6,6 @@ use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool};
 use sqlx::ConnectOptions;
 use thread_local::ThreadLocal;
 use tokio::runtime::Runtime;
-use tracing::metadata::LevelFilter;
 use tracing::{instrument, trace};
 use uuid::Uuid;
 
