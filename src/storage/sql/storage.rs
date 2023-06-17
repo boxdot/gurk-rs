@@ -160,6 +160,11 @@ enum ChannelConvertError {
     Revision,
 }
 
+struct SqlName {
+    id: Uuid,
+    name: String,
+}
+
 impl Storage for SqliteStorage {
     fn channels<'s>(&'s self) -> Box<dyn Iterator<Item = Cow<Channel>> + 's> {
         let channels = self.execute(
@@ -342,16 +347,46 @@ impl Storage for SqliteStorage {
         Cow::Owned(message)
     }
 
-    fn names<'s>(&'s self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + 's> {
-        todo!()
+    fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + '_> {
+        let names = self.execute(
+            sqlx::query_as!(
+                SqlName,
+                r#"SELECT id AS "id: _", name AS "name: _" FROM names"#
+            )
+            .fetch_all(&self.pool),
+        );
+        let names = names
+            .ok_logged()
+            .into_iter()
+            .flatten()
+            .map(|SqlName { id, name }| (id, Cow::Owned(name)));
+        Box::new(names)
     }
 
-    fn name(&self, _id: Uuid) -> Option<Cow<str>> {
-        todo!()
+    fn name(&self, id: Uuid) -> Option<Cow<str>> {
+        struct SqlName {
+            name: String,
+        }
+        let name = self.execute(
+            sqlx::query_as!(
+                SqlName,
+                r#"SELECT name AS "name: _" FROM names WHERE id = ?"#,
+                id
+            )
+            .fetch_optional(&self.pool),
+        );
+        name.ok_logged()?
+            .map(|SqlName { name }| name)
+            .map(Cow::Owned)
     }
 
-    fn store_name(&mut self, _id: Uuid, _name: String) -> Cow<str> {
-        todo!()
+    fn store_name(&mut self, id: Uuid, name: String) -> Cow<str> {
+        self.execute(
+            sqlx::query!("REPLACE INTO names(id, name) VALUES (?, ?)", id, name)
+                .execute(&self.pool),
+        )
+        .ok_logged();
+        Cow::Owned(name)
     }
 
     fn metadata(&self) -> Cow<Metadata> {
@@ -373,6 +408,7 @@ mod tests {
 
     async fn fixtures() -> SqliteStorage {
         let mut storage = SqliteStorage::open("sqlite::memory:").await.unwrap();
+
         let user_channel = ChannelId::User(uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd"));
         storage.store_channel(Channel {
             id: user_channel,
@@ -395,6 +431,7 @@ mod tests {
                 send_failed: Default::default(),
             },
         );
+
         let group_channel = ChannelId::Group([
             52, 49, 52, 57, 98, 57, 54, 56, 54, 56, 48, 55, 102, 100, 98, 52, 97, 56, 99, 57, 53,
             100, 57, 98, 53, 52, 49, 51, 98, 98, 99, 100,
@@ -420,6 +457,16 @@ mod tests {
                 send_failed: Default::default(),
             },
         );
+
+        storage.store_name(
+            uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd"),
+            "ellie".to_owned(),
+        );
+        storage.store_name(
+            uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a"),
+            "joel".to_owned(),
+        );
+
         storage
     }
 
@@ -504,5 +551,24 @@ mod tests {
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[1].arrived_at, arrived_at);
         assert_eq!(messages[1].message.as_deref(), Some("new msg"));
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_storage_names() {
+        let _ = tracing_subscriber::fmt::try_init();
+        let mut storage = fixtures().await;
+        let id1 = uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd");
+        let id2 = uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a");
+        let id3 = uuid!("91a6315b-027c-44ce-bacb-4d5cf012ba8c");
+
+        assert_eq!(storage.names().count(), 2);
+        assert_eq!(storage.name(id1).unwrap(), "ellie");
+        assert_eq!(storage.name(id2).unwrap(), "joel");
+
+        assert_eq!(storage.store_name(id3, "abby".to_string()), "abby");
+        assert_eq!(storage.names().count(), 3);
+        assert_eq!(storage.name(id1).unwrap(), "ellie");
+        assert_eq!(storage.name(id2).unwrap(), "joel");
+        assert_eq!(storage.name(id3).unwrap(), "abby");
     }
 }

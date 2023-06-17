@@ -20,3 +20,8 @@ CREATE TABLE messages(
 
 CREATE INDEX idx_messages_channel_id
 ON messages(channel_id);
+
+CREATE TABLE names(
+    id BLOB PRIMARY KEY NOT NULL,
+    name TEXT NOT NULL
+);

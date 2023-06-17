@@ -1,5 +1,29 @@
 {
   "db": "SQLite",
+  "109385aec54407fcbf6be8f4d7a60e65ef8984a998d666d3a38dcb3f84aca87f": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id: _",
+          "ordinal": 0,
+          "type_info": "Blob"
+        },
+        {
+          "name": "name: _",
+          "ordinal": 1,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        false,
+        false
+      ],
+      "parameters": {
+        "Right": 0
+      }
+    },
+    "query": "SELECT id AS \"id: _\", name AS \"name: _\" FROM names"
+  },
   "234d1525bc9a0646e4ab3f79e7edbe5f74fff34c57b2a0ba165fbac575f600e2": {
     "describe": {
       "columns": [],
@@ -9,6 +33,24 @@
       }
     },
     "query": "\n                REPLACE INTO messages(arrived_at, channel_id, from_id, message, quote, receipt, body_ranges, attachments, reactions)\n                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)\n            "
+  },
+  "378472d9cd2d440bdd6abefd078e69b5c66c22e8d686f3d93a7571ebdc1da300": {
+    "describe": {
+      "columns": [
+        {
+          "name": "name: _",
+          "ordinal": 0,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Right": 1
+      }
+    },
+    "query": "SELECT name AS \"name: _\" FROM names WHERE id = ?"
   },
   "77b37f6cb5cb1104e036e3e34f7b9e806622833d616630ebfd70d003bc9654ac": {
     "describe": {
@@ -121,6 +163,16 @@
       }
     },
     "query": "\n                    REPLACE INTO channels(id, name, group_master_key, group_revision, group_members)\n                    VALUES (?, ?, ?, ?, ?)\n                "
+  },
+  "ab8ef2978d3c2ae1da379383555d3acf894f368d8fafe70e49dab829e6fe7812": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Right": 2
+      }
+    },
+    "query": "REPLACE INTO names(id, name) VALUES (?, ?)"
   },
   "b7bacc9256317c39f23ed805754917a6c50e61a2b17e6983f330c339cb23d442": {
     "describe": {
