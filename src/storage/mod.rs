@@ -1,6 +1,8 @@
+mod copy;
 mod forgetful;
 mod json;
 mod memcache;
+mod sql;
 
 use std::borrow::Cow;
 
@@ -9,9 +11,11 @@ use uuid::Uuid;
 
 use crate::data::{Channel, ChannelId, Message};
 
+pub use copy::copy;
 pub use forgetful::ForgetfulStorage;
 pub use json::JsonStorage;
 pub use memcache::MemCache;
+pub use sql::SqliteStorage;
 
 /// Storage of channels, messages, names and metadata.
 ///
@@ -24,17 +28,17 @@ pub use memcache::MemCache;
 /// converted and/or serialized.
 pub trait Storage {
     /// Channels in no particular order
-    fn channels<'s>(&'s self) -> Box<dyn Iterator<Item = Cow<Channel>> + 's>;
+    fn channels(&self) -> Box<dyn Iterator<Item = Cow<Channel>> + '_>;
     /// Gets the channel by id
     fn channel(&self, channel_id: ChannelId) -> Option<Cow<Channel>>;
     /// Stores the given `channel` and returns it back
     fn store_channel(&mut self, channel: Channel) -> Cow<Channel>;
 
     /// Messages sorted by arrived_at in ascending order
-    fn messages<'s>(
-        &'s self,
+    fn messages(
+        &self,
         channel_id: ChannelId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + 's>;
+    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_>;
     /// Gets the message by id
     fn message(&self, message_id: MessageId) -> Option<Cow<Message>>;
     /// Stores the message for the given `channel_id` and returns it back
@@ -44,7 +48,7 @@ pub trait Storage {
     fn store_message(&mut self, channel_id: ChannelId, message: Message) -> Cow<Message>;
 
     /// Names of contacts
-    fn names<'s>(&'s self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + 's>;
+    fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + '_>;
     /// Gets the name for the given contact `id`
     fn name(&self, id: Uuid) -> Option<Cow<str>>;
     /// Stores a name for the given contact `id`
@@ -65,6 +69,11 @@ pub trait Storage {
     /// The implementers of this trait, can persist for each store call, if it is efficient enough.
     /// This methods must guarantee that the data is persisted in any case.
     fn save(&mut self);
+
+    /// Returns `true` if this storage does not contains any channels and no names
+    fn is_empty(&self) -> bool {
+        self.channels().next().is_none() && self.names().next().is_none()
+    }
 }
 
 /// A message is identified by its channel and time of arrived in milliseconds
@@ -90,4 +99,5 @@ pub struct Metadata {
     ///
     /// Used to amortize calls to the backend.
     pub contacts_sync_request_at: Option<DateTime<Utc>>,
+    pub fully_migrated: Option<bool>,
 }

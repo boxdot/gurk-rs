@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use anyhow::Context;
 use chrono::{DateTime, Utc};
 use clap::Parser;
 use crossterm::{
@@ -22,7 +23,7 @@ use tracing::{error, info, metadata::LevelFilter};
 use tui::{backend::CrosstermBackend, Terminal};
 
 use gurk::app::App;
-use gurk::storage::JsonStorage;
+use gurk::storage::{JsonStorage, MemCache, SqliteStorage, Storage};
 
 const TARGET_FPS: u64 = 144;
 const RECEIPT_TICK_PERIOD: u64 = 144;
@@ -46,7 +47,7 @@ struct Args {
     dump_messages: bool,
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
@@ -98,9 +99,37 @@ pub enum Event {
 async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
     let (mut signal_manager, config) = signal::ensure_linked_device(relink).await?;
 
-    let storage = JsonStorage::new(&config.data_path, config::fallback_data_path().as_deref())?;
-    let (mut app, mut app_events) =
-        App::try_new(config, signal_manager.clone_boxed(), Box::new(storage))?;
+    let storage: Box<dyn Storage> = if config.sqlite.enabled {
+        let mut sqlite_storage = SqliteStorage::open(&config.sqlite.url).with_context(|| {
+            format!(
+                "failed to open sqlite data storage at: {}",
+                config.sqlite.url
+            )
+        })?;
+        if sqlite_storage.is_empty() || !(sqlite_storage.metadata().fully_migrated.unwrap_or(false))
+        {
+            if let Ok(json_storage) =
+                JsonStorage::new(&config.data_path, config::fallback_data_path().as_deref())
+            {
+                println!(
+                    "converting JSON storage to SQLite storage at {}",
+                    config.sqlite.url
+                );
+                let stats = sqlite_storage.copy_from(&json_storage).await?;
+                let mut metadata = sqlite_storage.metadata().into_owned();
+                metadata.fully_migrated = Some(true);
+                sqlite_storage.store_metadata(metadata);
+                info!(?stats, "converted");
+            }
+        }
+        Box::new(MemCache::new(sqlite_storage))
+    } else {
+        let json_storage =
+            JsonStorage::new(&config.data_path, config::fallback_data_path().as_deref())?;
+        Box::new(json_storage)
+    };
+
+    let (mut app, mut app_events) = App::try_new(config, signal_manager.clone_boxed(), storage)?;
 
     // sync task can be only spawned after we start to listen to message, because it relies on
     // message sender to be running

@@ -51,7 +51,7 @@ pub struct JsonChannel {
     group_data: Option<GroupData>,
     messages: Vec<Message>,
     #[serde(default)]
-    unread_messages: usize,
+    unread_messages: u32,
     #[serde(skip)]
     typing: Option<TypingSet>,
 }
@@ -64,13 +64,10 @@ impl From<&JsonChannel> for Channel {
             name: channel.name.clone(),
             group_data: channel.group_data.clone(),
             unread_messages: channel.unread_messages,
-            typing: channel.typing.clone().unwrap_or_else(|| {
-                if !is_group {
-                    TypingSet::SingleTyping(false)
-                } else {
-                    TypingSet::GroupTyping(Default::default())
-                }
-            }),
+            typing: channel
+                .typing
+                .clone()
+                .unwrap_or_else(|| TypingSet::new(is_group)),
         }
     }
 }
@@ -290,11 +287,16 @@ impl Storage for JsonStorage {
     fn metadata(&self) -> Cow<Metadata> {
         Cow::Owned(Metadata {
             contacts_sync_request_at: self.data.contacts_sync_request_at,
+            fully_migrated: None,
         })
     }
 
     fn store_metadata(&mut self, metadata: Metadata) -> Cow<Metadata> {
-        self.data.contacts_sync_request_at = metadata.contacts_sync_request_at;
+        let Metadata {
+            contacts_sync_request_at,
+            fully_migrated: _unsupported_in_json,
+        } = metadata;
+        self.data.contacts_sync_request_at = contacts_sync_request_at;
         self.is_dirty = true;
         Cow::Owned(metadata)
     }
@@ -544,7 +546,8 @@ mod tests {
         assert_eq!(
             storage
                 .store_metadata(Metadata {
-                    contacts_sync_request_at: Some(dt)
+                    contacts_sync_request_at: Some(dt),
+                    fully_migrated: None,
                 })
                 .contacts_sync_request_at,
             Some(dt)

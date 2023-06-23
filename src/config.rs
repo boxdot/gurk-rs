@@ -26,6 +26,8 @@ pub struct Config {
     #[cfg(feature = "dev")]
     #[serde(default, skip_serializing_if = "DeveloperConfig::is_default")]
     pub developer: DeveloperConfig,
+    #[serde(default)]
+    pub sqlite: SqliteConfig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -62,6 +64,7 @@ impl Config {
             notifications: true,
             #[cfg(feature = "dev")]
             developer: Default::default(),
+            sqlite: Default::default(),
         }
     }
 
@@ -121,6 +124,19 @@ impl Config {
         fs::create_dir_all(parent_dir).unwrap();
         fs::write(path, content)?;
         Ok(())
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Eq, Clone, Serialize, Deserialize)]
+pub struct SqliteConfig {
+    pub enabled: bool,
+    #[serde(default = "SqliteConfig::default_db_url")]
+    pub url: String,
+}
+
+impl SqliteConfig {
+    pub fn default_db_url() -> String {
+        default_data_dir().join("gurk.sqlite").display().to_string()
     }
 }
 

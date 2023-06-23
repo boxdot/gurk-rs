@@ -351,7 +351,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     items = items.split_off(first_idx);
 
     // add unread messages line
-    let unread_messages = channel.unread_messages;
+    let unread_messages = channel.unread_messages as usize;
     if unread_messages > 0 && unread_messages < items.len() {
         let new_message_line = "-".repeat(prefix_width)
             + "new messages"
