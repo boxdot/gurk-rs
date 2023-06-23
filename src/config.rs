@@ -136,10 +136,7 @@ pub struct SqliteConfig {
 
 impl SqliteConfig {
     pub fn default_db_url() -> String {
-        format!(
-            "sqlite:{}",
-            default_data_dir().join("gurk.sqlite").display()
-        )
+        default_data_dir().join("gurk.sqlite").display().to_string()
     }
 }
 

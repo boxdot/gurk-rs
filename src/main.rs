@@ -15,7 +15,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use gurk::{config, signal, storage, ui};
+use gurk::{config, signal, ui};
 use presage::prelude::Content;
 use tokio::select;
 use tokio_stream::StreamExt;
@@ -47,7 +47,7 @@ struct Args {
     dump_messages: bool,
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
@@ -100,23 +100,29 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
     let (mut signal_manager, config) = signal::ensure_linked_device(relink).await?;
 
     let storage: Box<dyn Storage> = if config.sqlite.enabled {
-        let mut sql_storage = SqliteStorage::open(&config.sqlite.url)
-            .await
-            .with_context(|| {
-                format!(
-                    "failed to open sqlite data storage at: {}",
+        let mut sqlite_storage = SqliteStorage::open(&config.sqlite.url).with_context(|| {
+            format!(
+                "failed to open sqlite data storage at: {}",
+                config.sqlite.url
+            )
+        })?;
+        if sqlite_storage.is_empty() || !(sqlite_storage.metadata().fully_migrated.unwrap_or(false))
+        {
+            if let Ok(json_storage) =
+                JsonStorage::new(&config.data_path, config::fallback_data_path().as_deref())
+            {
+                println!(
+                    "converting JSON storage to SQLite storage at {}",
                     config.sqlite.url
-                )
-            })?;
-        if sql_storage.is_empty() {
-            let json_storage =
-                JsonStorage::new(&config.data_path, config::fallback_data_path().as_deref())?;
-            info!("converting JSON storage to SQLite storage");
-            let stats = storage::copy(&json_storage, &mut sql_storage);
-            info!(?stats, "converted");
+                );
+                let stats = sqlite_storage.copy_from(&json_storage).await?;
+                let mut metadata = sqlite_storage.metadata().into_owned();
+                metadata.fully_migrated = Some(true);
+                sqlite_storage.store_metadata(metadata);
+                info!(?stats, "converted");
+            }
         }
-
-        Box::new(MemCache::new(sql_storage))
+        Box::new(MemCache::new(sqlite_storage))
     } else {
         let json_storage =
             JsonStorage::new(&config.data_path, config::fallback_data_path().as_deref())?;

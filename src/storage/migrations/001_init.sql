@@ -1,4 +1,4 @@
-CREATE TABLE channels(
+CREATE TABLE channels (
     id BLOB PRIMARY KEY NOT NULL, -- uuid or group id
     name TEXT NOT NULL,
     group_master_key BLOB,
@@ -6,7 +6,7 @@ CREATE TABLE channels(
     group_members BLOB -- encoded Vec<Uuid>
 );
 
-CREATE TABLE messages(
+CREATE TABLE messages (
     arrived_at INTEGER PRIMARY KEY NOT NULL,
     channel_id BLOB NOT NULL, -- uuid or group id
     from_id BLOB NOT NULL,
@@ -19,15 +19,16 @@ CREATE TABLE messages(
 );
 
 CREATE INDEX idx_messages_channel_id
-ON messages(channel_id);
+ON messages (channel_id);
 
-CREATE TABLE names(
+CREATE TABLE names (
     id BLOB PRIMARY KEY NOT NULL,
     name TEXT NOT NULL
 );
 
 -- contains a single row
-CREATE TABLE metadata(
+CREATE TABLE metadata (
     id INTEGER PRIMARY KEY NOT NULL, -- static id == 0
-    contacts_sync_request_at DATETIME
+    contacts_sync_request_at DATETIME,
+    fully_migrated BOOLEAN
 );

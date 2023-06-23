@@ -99,4 +99,5 @@ pub struct Metadata {
     ///
     /// Used to amortize calls to the backend.
     pub contacts_sync_request_at: Option<DateTime<Utc>>,
+    pub fully_migrated: Option<bool>,
 }

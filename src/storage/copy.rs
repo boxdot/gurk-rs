@@ -7,7 +7,7 @@ pub struct Stats {
     pub names: usize,
 }
 
-pub fn copy(from: &impl Storage, to: &mut impl Storage) -> Stats {
+pub fn copy(from: &dyn Storage, to: &mut dyn Storage) -> Stats {
     let mut stats = Stats::default();
 
     to.store_metadata(from.metadata().into_owned());

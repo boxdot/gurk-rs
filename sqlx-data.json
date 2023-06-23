@@ -124,6 +124,30 @@
     },
     "query": "\n                REPLACE INTO messages(arrived_at, channel_id, from_id, message, quote, receipt, body_ranges, attachments, reactions)\n                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)\n            "
   },
+  "2bc76ef53084496ad0751b92391b0cfea8098a9c509887d20a0706bd2f339ead": {
+    "describe": {
+      "columns": [
+        {
+          "name": "contacts_sync_request_at: _",
+          "ordinal": 0,
+          "type_info": "Datetime"
+        },
+        {
+          "name": "fully_migrated: _",
+          "ordinal": 1,
+          "type_info": "Bool"
+        }
+      ],
+      "nullable": [
+        true,
+        true
+      ],
+      "parameters": {
+        "Right": 0
+      }
+    },
+    "query": "\n                        SELECT\n                            contacts_sync_request_at AS \"contacts_sync_request_at: _\",\n                            fully_migrated AS \"fully_migrated: _\"\n                        FROM metadata WHERE id = 0 LIMIT 1\n                    "
+  },
   "378472d9cd2d440bdd6abefd078e69b5c66c22e8d686f3d93a7571ebdc1da300": {
     "describe": {
       "columns": [
@@ -232,16 +256,6 @@
     },
     "query": "\n                    SELECT\n                        m.arrived_at AS arrived_at,\n                        m.from_id AS \"from_id: _\",\n                        m.message,\n                        m.receipt AS \"receipt: _\",\n                        m.body_ranges AS \"body_ranges: _\",\n                        m.attachments AS \"attachments: _\",\n                        m.reactions AS \"reactions: _\",\n                        q.arrived_at AS \"quote_arrived_at: _\",\n                        q.from_id AS \"quote_from_id: _\",\n                        q.message AS quote_message,\n                        q.attachments AS \"quote_attachments: _\",\n                        q.body_ranges AS \"quote_body_ranges: _\",\n                        q.receipt AS \"quote_receipt: _\"\n                    FROM messages AS m\n                    LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1\n                    WHERE m.channel_id = ?1\n                    ORDER BY m.arrived_at ASC\n                "
   },
-  "60c1170c461c6d70532cc0ad6e4defd07dd5bb18d76443676ef9cf996b2d6918": {
-    "describe": {
-      "columns": [],
-      "nullable": [],
-      "parameters": {
-        "Right": 2
-      }
-    },
-    "query": "REPLACE INTO metadata(id, contacts_sync_request_at) VALUES (?, ?)"
-  },
   "91d45ef1f3eed83def5241fa027573bc217fad6419b52bcad53b899de7fe6cf4": {
     "describe": {
       "columns": [
@@ -294,6 +308,16 @@
     },
     "query": "\n                    REPLACE INTO channels(id, name, group_master_key, group_revision, group_members)\n                    VALUES (?, ?, ?, ?, ?)\n                "
   },
+  "a1a737371687f60cd621a7b98595800311558c2e3348569360be83898e8fc8e6": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Right": 3
+      }
+    },
+    "query": "REPLACE INTO metadata(id, contacts_sync_request_at, fully_migrated)\n                     VALUES (?, ?, ?)"
+  },
   "ab8ef2978d3c2ae1da379383555d3acf894f368d8fafe70e49dab829e6fe7812": {
     "describe": {
       "columns": [],
@@ -345,23 +369,5 @@
       }
     },
     "query": "\n                    SELECT id AS \"id: _\", name, group_master_key, group_revision, group_members AS \"group_members: _\"\n                    FROM channels\n                "
-  },
-  "d96103d707a31a2471befb43dcc1cf4d2bdb4bf9bd132847f23de47457fe5b99": {
-    "describe": {
-      "columns": [
-        {
-          "name": "contacts_sync_request_at: _",
-          "ordinal": 0,
-          "type_info": "Datetime"
-        }
-      ],
-      "nullable": [
-        true
-      ],
-      "parameters": {
-        "Right": 0
-      }
-    },
-    "query": "SELECT contacts_sync_request_at AS \"contacts_sync_request_at: _\" FROM metadata WHERE id = 0 LIMIT 1"
   }
 }

@@ -1,9 +1,12 @@
 use std::borrow::Cow;
+use std::cell::Cell;
 use std::future::Future;
+use std::marker::PhantomData;
+use std::pin::Pin;
 use std::time::Instant;
 
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool};
-use sqlx::ConnectOptions;
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
+use sqlx::{ConnectOptions, Connection, SqliteConnection};
 use thread_local::ThreadLocal;
 use tokio::runtime::Runtime;
 use tracing::{instrument, trace};
@@ -12,6 +15,7 @@ use uuid::Uuid;
 use crate::data::{BodyRange, Channel, ChannelId, GroupData, Message, TypingSet};
 use crate::receipt::Receipt;
 use crate::signal::Attachment;
+use crate::storage::copy::{self, Stats};
 use crate::storage::{MessageId, Metadata, Storage};
 
 use super::encoding::BlobData;
@@ -20,44 +24,128 @@ use super::util::ResultExt as _;
 const METADATA_ID: i64 = 0;
 
 pub struct SqliteStorage {
-    pool: SqlitePool,
+    opts: SqliteConnectOptions,
     thread: rayon::ThreadPool,
-    local_rt: ThreadLocal<Runtime>,
+    thread_local: ThreadLocal<ThreadLocalResource>,
+}
+
+struct ThreadLocalResource {
+    rt: Runtime,
+    conn_cell: Cell<Option<SqliteConnection>>,
+}
+
+struct ExecuteContext<'ctx, 'env: 'ctx> {
+    conn: &'ctx mut SqliteConnection,
+    _env: PhantomData<&'env ()>,
+}
+
+impl<'ctx, 'env: 'ctx> ExecuteContext<'ctx, 'env> {
+    fn new(conn: &'ctx mut SqliteConnection) -> Self {
+        Self {
+            conn,
+            _env: PhantomData,
+        }
+    }
 }
 
 impl SqliteStorage {
-    pub async fn open(url: &str) -> Result<Self, sqlx::Error> {
+    pub fn open(url: &str) -> sqlx::Result<Self> {
         let opts: SqliteConnectOptions = url.parse()?;
         let mut opts = opts
             .create_if_missing(true)
-            .journal_mode(SqliteJournalMode::Wal);
+            .journal_mode(SqliteJournalMode::Wal)
+            .synchronous(SqliteSynchronous::Full);
         opts.disable_statement_logging();
-        let pool = SqlitePool::connect_with(opts).await?;
-        sqlx::migrate!("src/storage/migrations").run(&pool).await?;
 
         let thread = rayon::ThreadPoolBuilder::new()
             .thread_name(|_| "sqlite-sync".to_owned())
             .num_threads(1)
             .build()
             .unwrap();
+        let thread_local = ThreadLocal::with_capacity(1);
+
+        thread.scope(|_scope| -> sqlx::Result<()> {
+            thread_local.get_or_try(|| -> sqlx::Result<ThreadLocalResource> {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .unwrap();
+                let conn = rt.block_on(async {
+                    let mut conn = SqliteConnection::connect_with(&opts).await?;
+                    sqlx::migrate!("src/storage/migrations")
+                        .run(&mut conn)
+                        .await?;
+                    Ok::<_, sqlx::Error>(conn)
+                })?;
+                Ok(ThreadLocalResource {
+                    rt,
+                    conn_cell: Cell::new(Some(conn)),
+                })
+            })?;
+            Ok(())
+        })?;
+
         Ok(Self {
-            pool,
+            opts,
             thread,
-            local_rt: ThreadLocal::with_capacity(1),
+            thread_local,
         })
     }
 
+    pub async fn copy_from(&mut self, from: &impl Storage) -> Result<Stats, sqlx::Error> {
+        // reconnect without disabled journaling and synchronous mode
+        // otherwise copying the data is really slow
+        let copy_opts = self
+            .opts
+            .clone()
+            .journal_mode(SqliteJournalMode::Off)
+            .synchronous(SqliteSynchronous::Off);
+
+        self.thread.scope(|_scope| {
+            let ThreadLocalResource { rt, conn_cell } =
+                self.thread_local.get().expect("logic error");
+            let conn = conn_cell.take().expect("logic_error");
+            rt.block_on(conn.close())?;
+
+            let copy_conn = rt.block_on(SqliteConnection::connect_with(&copy_opts))?;
+            conn_cell.replace(Some(copy_conn));
+            Ok::<_, sqlx::Error>(())
+        })?;
+
+        let stats = copy::copy(from, self);
+
+        self.thread.scope(|_scope| {
+            let ThreadLocalResource { rt, conn_cell } =
+                self.thread_local.get().expect("logic error");
+            let conn = conn_cell.take().expect("logic error");
+            rt.block_on(conn.close())?;
+
+            let copy_conn = rt.block_on(SqliteConnection::connect_with(&self.opts))?;
+            conn_cell.replace(Some(copy_conn));
+            Ok::<_, sqlx::Error>(())
+        })?;
+
+        Ok(stats)
+    }
+
     #[instrument(level = "trace", skip_all)]
-    fn execute<T: Send>(&self, fut: impl Future<Output = T> + Send) -> T {
+    fn execute<'env, F, T>(&self, task: F) -> T
+    where
+        F: for<'conn> FnOnce(
+                ExecuteContext<'conn, 'env>,
+            ) -> Pin<Box<dyn Future<Output = T> + 'conn>>
+            + Send
+            + 'env,
+        T: Send,
+    {
         let now = Instant::now();
         let res = self.thread.scope(|_scope| {
-            let rt = self.local_rt.get_or(|| {
-                tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                    .unwrap()
-            });
-            rt.block_on(fut)
+            let ThreadLocalResource { rt, conn_cell } =
+                self.thread_local.get().expect("logic error");
+            let mut conn = conn_cell.take().expect("logic error");
+            let res = rt.block_on(task(ExecuteContext::new(&mut conn)));
+            conn_cell.replace(Some(conn));
+            res
         });
         trace!(elapsed =? now.elapsed(), "sql executed");
         res
@@ -69,7 +157,7 @@ impl Drop for SqliteStorage {
         // drop the runtime on the thread it was created
         // otherwise we might drop it inside another tokio runtime, and tokio does not like it.
         self.thread.scope(|_scope| {
-            self.local_rt.clear();
+            self.thread_local.clear();
         });
     }
 }
@@ -203,15 +291,15 @@ struct SqlName {
 
 impl Storage for SqliteStorage {
     fn channels<'s>(&'s self) -> Box<dyn Iterator<Item = Cow<Channel>> + 's> {
-        let channels = self.execute(
-            sqlx::query_as!(
+        let channels = self.execute(|ctx|
+            Box::pin(sqlx::query_as!(
                 SqlChannel,
                 r#"
                     SELECT id AS "id: _", name, group_master_key, group_revision, group_members AS "group_members: _"
                     FROM channels
                 "#
             )
-            .fetch_all(&self.pool),
+            .fetch_all(ctx.conn))
         );
 
         Box::new(
@@ -226,8 +314,8 @@ impl Storage for SqliteStorage {
     fn channel(&self, channel_id: ChannelId) -> Option<Cow<Channel>> {
         let channel_id = &channel_id;
         let channel = self
-            .execute(
-                sqlx::query_as!(
+            .execute(|ctx|
+                Box::pin(sqlx::query_as!(
                     SqlChannel,
                     r#"
                         SELECT id AS "id: _", name, group_master_key, group_revision, group_members AS "group_members: _"
@@ -236,7 +324,7 @@ impl Storage for SqliteStorage {
                     "#,
                     channel_id
                 )
-                .fetch_optional(&self.pool),
+                .fetch_optional(ctx.conn))
             )
             .ok_logged()?;
         channel?.convert().ok_logged().map(Cow::Owned)
@@ -256,20 +344,22 @@ impl Storage for SqliteStorage {
                 )
             })
             .unwrap_or_default();
-        let inserted = self.execute(
-            sqlx::query!(
-                r#"
+        let inserted = self.execute(|ctx| {
+            Box::pin(
+                sqlx::query!(
+                    r#"
                     REPLACE INTO channels(id, name, group_master_key, group_revision, group_members)
                     VALUES (?, ?, ?, ?, ?)
                 "#,
-                id,
-                name,
-                group_master_key,
-                group_revision,
-                group_members
+                    id,
+                    name,
+                    group_master_key,
+                    group_revision,
+                    group_members
+                )
+                .execute(ctx.conn),
             )
-            .execute(&self.pool),
-        );
+        });
 
         inserted.ok_logged();
         Cow::Owned(channel)
@@ -280,10 +370,11 @@ impl Storage for SqliteStorage {
         channel_id: ChannelId,
     ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_> {
         let channel_id = &channel_id;
-        let messages = self.execute(
-            sqlx::query_as!(
-                SqlMessage,
-                r#"
+        let messages = self.execute(|ctx| {
+            Box::pin(
+                sqlx::query_as!(
+                    SqlMessage,
+                    r#"
                     SELECT
                         m.arrived_at AS arrived_at,
                         m.from_id AS "from_id: _",
@@ -303,10 +394,11 @@ impl Storage for SqliteStorage {
                     WHERE m.channel_id = ?1
                     ORDER BY m.arrived_at ASC
                 "#,
-                channel_id
+                    channel_id
+                )
+                .fetch_all(ctx.conn),
             )
-            .fetch_all(&self.pool),
-        );
+        });
         Box::new(
             messages
                 .ok_logged()
@@ -323,10 +415,11 @@ impl Storage for SqliteStorage {
             .try_into()
             .map_err(|_| MessageConvertError::InvalidTimestamp)
             .ok_logged()?;
-        let message = self.execute(
-            sqlx::query_as!(
-                SqlMessage,
-                r#"
+        let message = self.execute(|ctx| {
+            Box::pin(
+                sqlx::query_as!(
+                    SqlMessage,
+                    r#"
                     SELECT
                         m.arrived_at AS arrived_at,
                         m.from_id AS "from_id: _",
@@ -346,11 +439,12 @@ impl Storage for SqliteStorage {
                     WHERE m.channel_id = ?1 AND m.arrived_at = ?2
                     LIMIT 1
                 "#,
-                channel_id,
-                arrived_at
+                    channel_id,
+                    arrived_at
+                )
+                .fetch_optional(ctx.conn),
             )
-            .fetch_optional(&self.pool),
-        );
+        });
         let message = message.ok_logged()??.convert().ok_logged()?;
         Some(Cow::Owned(message))
     }
@@ -376,7 +470,7 @@ impl Storage for SqliteStorage {
         let body_ranges = BlobData(&message.body_ranges);
         let attachments = BlobData(&message.attachments);
         let reactions = BlobData(&message.reactions);
-        let inserted = self.execute(sqlx::query!(
+        let inserted = self.execute(|ctx| Box::pin(sqlx::query!(
             r#"
                 REPLACE INTO messages(arrived_at, channel_id, from_id, message, quote, receipt, body_ranges, attachments, reactions)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -390,19 +484,21 @@ impl Storage for SqliteStorage {
             body_ranges,
             attachments,
             reactions
-        ).execute(&self.pool));
+        ).execute(ctx.conn)));
         inserted.ok_logged();
         Cow::Owned(message)
     }
 
     fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + '_> {
-        let names = self.execute(
-            sqlx::query_as!(
-                SqlName,
-                r#"SELECT id AS "id: _", name AS "name: _" FROM names"#
+        let names = self.execute(|ctx| {
+            Box::pin(
+                sqlx::query_as!(
+                    SqlName,
+                    r#"SELECT id AS "id: _", name AS "name: _" FROM names"#
+                )
+                .fetch_all(ctx.conn),
             )
-            .fetch_all(&self.pool),
-        );
+        });
         let names = names
             .ok_logged()
             .into_iter()
@@ -415,48 +511,63 @@ impl Storage for SqliteStorage {
         struct SqlName {
             name: String,
         }
-        let name = self.execute(
-            sqlx::query_as!(
-                SqlName,
-                r#"SELECT name AS "name: _" FROM names WHERE id = ?"#,
-                id
+        let name = self.execute(|ctx| {
+            Box::pin(
+                sqlx::query_as!(
+                    SqlName,
+                    r#"SELECT name AS "name: _" FROM names WHERE id = ?"#,
+                    id
+                )
+                .fetch_optional(ctx.conn),
             )
-            .fetch_optional(&self.pool),
-        );
+        });
         name.ok_logged()?
             .map(|SqlName { name }| name)
             .map(Cow::Owned)
     }
 
     fn store_name(&mut self, id: Uuid, name: String) -> Cow<str> {
-        self.execute(
-            sqlx::query!("REPLACE INTO names(id, name) VALUES (?, ?)", id, name)
-                .execute(&self.pool),
-        )
+        self.execute(|ctx| {
+            Box::pin(
+                sqlx::query!("REPLACE INTO names(id, name) VALUES (?, ?)", id, name)
+                    .execute(ctx.conn),
+            )
+        })
         .ok_logged();
         Cow::Owned(name)
     }
 
     fn metadata(&self) -> Cow<Metadata> {
-        let metadata = self.execute(
-            sqlx::query_as!(
-                Metadata,
-                r#"SELECT contacts_sync_request_at AS "contacts_sync_request_at: _" FROM metadata WHERE id = 0 LIMIT 1"#,
+        let metadata = self.execute(|ctx| {
+            Box::pin(
+                sqlx::query_as!(
+                    Metadata,
+                    r#"
+                        SELECT
+                            contacts_sync_request_at AS "contacts_sync_request_at: _",
+                            fully_migrated AS "fully_migrated: _"
+                        FROM metadata WHERE id = 0 LIMIT 1
+                    "#,
+                )
+                .fetch_optional(ctx.conn),
             )
-            .fetch_optional(&self.pool),
-        );
+        });
         Cow::Owned(metadata.ok_logged().flatten().unwrap_or_default())
     }
 
     fn store_metadata(&mut self, metadata: Metadata) -> Cow<Metadata> {
-        self.execute(
-            sqlx::query!(
-                "REPLACE INTO metadata(id, contacts_sync_request_at) VALUES (?, ?)",
-                METADATA_ID,
-                metadata.contacts_sync_request_at,
+        self.execute(|ctx| {
+            Box::pin(
+                sqlx::query!(
+                    "REPLACE INTO metadata(id, contacts_sync_request_at, fully_migrated)
+                     VALUES (?, ?, ?)",
+                    METADATA_ID,
+                    metadata.contacts_sync_request_at,
+                    metadata.fully_migrated
+                )
+                .execute(ctx.conn),
             )
-            .execute(&self.pool),
-        )
+        })
         .ok_logged();
         Cow::Owned(metadata)
     }
@@ -471,8 +582,8 @@ mod tests {
 
     use super::*;
 
-    async fn fixtures() -> SqliteStorage {
-        let mut storage = SqliteStorage::open("sqlite::memory:").await.unwrap();
+    fn fixtures() -> SqliteStorage {
+        let mut storage = SqliteStorage::open("sqlite::memory:").unwrap();
 
         let user_channel = ChannelId::User(uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd"));
         storage.store_channel(Channel {
@@ -535,20 +646,20 @@ mod tests {
         storage
     }
 
-    #[tokio::test]
-    async fn test_sqlite_storage_channels() {
+    #[test]
+    fn test_sqlite_storage_channels() {
         let _ = tracing_subscriber::fmt::try_init();
-        let storage = fixtures().await;
+        let storage = fixtures();
         let channels: Vec<_> = storage.channels().collect();
         assert_eq!(channels.len(), 2);
         assert_eq!(storage.channel(channels[0].id).unwrap().id, channels[0].id);
         assert_eq!(storage.channel(channels[1].id).unwrap().id, channels[1].id);
     }
 
-    #[tokio::test]
-    async fn test_sqlite_storage_messages() {
+    #[test]
+    fn test_sqlite_storage_messages() {
         let _ = tracing_subscriber::fmt::try_init();
-        let storage = fixtures().await;
+        let storage = fixtures();
         let id: Uuid = "966960e0-a8cd-43f1-ac7a-2c986dd470cd".parse().unwrap();
 
         let messages: Vec<_> = storage.messages(id.into()).collect();
@@ -563,10 +674,10 @@ mod tests {
         assert_eq!(message.message.as_deref(), Some("hello"));
     }
 
-    #[tokio::test]
-    async fn test_sqlite_storage_store_existing_message() {
+    #[test]
+    fn test_sqlite_storage_store_existing_message() {
         let _ = tracing_subscriber::fmt::try_init();
-        let mut storage = fixtures().await;
+        let mut storage = fixtures();
         let id: Uuid = "966960e0-a8cd-43f1-ac7a-2c986dd470cd".parse().unwrap();
         let arrived_at = 1664832050000;
         let mut message = storage
@@ -586,10 +697,10 @@ mod tests {
         assert_eq!(messages[0].message.as_deref(), Some("changed"));
     }
 
-    #[tokio::test]
-    async fn test_sqlite_storage_store_new_message() {
+    #[test]
+    fn test_sqlite_storage_store_new_message() {
         let _ = tracing_subscriber::fmt::try_init();
-        let mut storage = fixtures().await;
+        let mut storage = fixtures();
 
         let id: Uuid = uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd");
 
@@ -645,10 +756,10 @@ mod tests {
         assert_eq!(messages[1].body_ranges, body_ranges);
     }
 
-    #[tokio::test]
-    async fn test_sqlite_storage_names() {
+    #[test]
+    fn test_sqlite_storage_names() {
         let _ = tracing_subscriber::fmt::try_init();
-        let mut storage = fixtures().await;
+        let mut storage = fixtures();
         let id1 = uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd");
         let id2 = uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a");
         let id3 = uuid!("91a6315b-027c-44ce-bacb-4d5cf012ba8c");
@@ -664,21 +775,28 @@ mod tests {
         assert_eq!(storage.name(id3).unwrap(), "abby");
     }
 
-    #[tokio::test]
-    async fn test_sqlite_storage_metadata() {
+    #[test]
+    fn test_sqlite_storage_metadata() {
         let _ = tracing_subscriber::fmt::try_init();
-        let mut storage = fixtures().await;
+        let mut storage = fixtures();
         assert_eq!(storage.metadata().contacts_sync_request_at, None);
 
         let dt = Utc::now();
         assert_eq!(
             storage
                 .store_metadata(Metadata {
-                    contacts_sync_request_at: Some(dt)
+                    contacts_sync_request_at: Some(dt),
+                    fully_migrated: Some(true),
                 })
                 .contacts_sync_request_at,
             Some(dt)
         );
-        assert_eq!(storage.metadata().contacts_sync_request_at, Some(dt));
+
+        let Metadata {
+            contacts_sync_request_at,
+            fully_migrated,
+        } = storage.metadata().into_owned();
+        assert_eq!(contacts_sync_request_at, Some(dt));
+        assert_eq!(fully_migrated, Some(true));
     }
 }
