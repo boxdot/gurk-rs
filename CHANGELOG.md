@@ -5,7 +5,8 @@
 ### Added
 
 - Copy selected message to clipboard ([#210])
-- Implement storing and rendering of mentions ([#215, #136])
+- Implement storing and rendering of mentions ([#215], [#136])
+- Sync contacts and groups from signal manager ([#226], [#227])
 
 ### Changed
 
@@ -22,6 +23,8 @@
 [#136]: https://github.com/boxdot/gurk-rs/pull/136
 [#215]: https://github.com/boxdot/gurk-rs/pull/215
 [#216]: https://github.com/boxdot/gurk-rs/pull/216
+[#226]: https://github.com/boxdot/gurk-rs/pull/226
+[#227]: https://github.com/boxdot/gurk-rs/pull/227
 
 ## 0.3.0
 
