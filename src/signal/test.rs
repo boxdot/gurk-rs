@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use async_trait::async_trait;
 use gh_emoji::Replacer;
-use presage::libsignal_service::prelude::AttachmentIdentifier;
+use presage::libsignal_service::prelude::{AttachmentIdentifier, Group};
 use presage::prelude::proto::data_message::Quote;
 use presage::prelude::proto::AttachmentPointer;
 use presage::prelude::{AttachmentSpec, Contact, Content};
@@ -15,7 +15,7 @@ use crate::data::{Channel, GroupData, Message};
 use crate::receipt::Receipt;
 use crate::util::utc_now_timestamp_msec;
 
-use super::{Attachment, ProfileKeyBytes, ResolvedGroup, SignalManager};
+use super::{Attachment, GroupMasterKeyBytes, ProfileKeyBytes, ResolvedGroup, SignalManager};
 
 /// Signal manager mock which does not send any messages.
 pub struct SignalManagerMock {
@@ -141,5 +141,13 @@ impl SignalManager for SignalManagerMock {
             emoji_replacer: Replacer::new(),
             sent_messages: self.sent_messages.clone(),
         })
+    }
+
+    fn contacts(&self) -> Box<dyn Iterator<Item = Contact>> {
+        Box::new(std::iter::empty())
+    }
+
+    fn groups(&self) -> Box<dyn Iterator<Item = (GroupMasterKeyBytes, Group)>> {
+        Box::new(std::iter::empty())
     }
 }
