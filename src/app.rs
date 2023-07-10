@@ -334,6 +334,7 @@ impl App {
             emoji,
             remove,
             false,
+            false,
         );
 
         self.reset_unread_messages();
@@ -681,6 +682,7 @@ impl App {
                     emoji,
                     remove.unwrap_or(false),
                     true,
+                    true,
                 );
                 read.into_iter().for_each(|r| {
                     self.handle_receipt(
@@ -733,6 +735,7 @@ impl App {
                     sender_uuid,
                     emoji,
                     remove.unwrap_or(false),
+                    true,
                     true,
                 );
                 return Ok(());
@@ -807,6 +810,7 @@ impl App {
         if !notification.is_empty() {
             self.notify(from, &notification);
         }
+        self.bell();
     }
 
     pub fn step_receipts(&mut self) {
@@ -929,6 +933,7 @@ impl App {
         emoji: String,
         remove: bool,
         notify: bool,
+        bell: bool,
     ) -> Option<()> {
         let mut message = self
             .storage
@@ -974,6 +979,10 @@ impl App {
 
             if notify {
                 self.notify(&summary, &format!("{summary} {notification}"));
+            }
+
+            if bell {
+                self.bell();
             }
 
             let channel_idx = self
@@ -1221,6 +1230,12 @@ impl App {
             if let Err(e) = Notification::new().summary(summary).body(text).show() {
                 error!("failed to send notification: {}", e);
             }
+        }
+    }
+
+    fn bell(&self) {
+        if self.config.bell {
+            print!("\x07");
         }
     }
 

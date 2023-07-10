@@ -21,6 +21,8 @@ pub struct Config {
     /// Whether to show system notifications on incoming messages
     #[serde(default = "default_true")]
     pub notifications: bool,
+    #[serde(default = "default_true")]
+    pub bell: bool,
     /// User configuration
     pub user: User,
     #[cfg(feature = "dev")]
@@ -62,6 +64,7 @@ impl Config {
             first_name_only: false,
             show_receipts: true,
             notifications: true,
+            bell: true,
             #[cfg(feature = "dev")]
             developer: Default::default(),
             sqlite: Default::default(),
