@@ -88,6 +88,7 @@ pub enum Event {
     Redraw,
     Click(MouseEvent),
     Input(KeyEvent),
+    Paste(String),
     Message(Content),
     Resize { cols: u16, rows: u16 },
     Quit(Option<anyhow::Error>),
@@ -155,6 +156,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                         tx.send(Event::Resize { cols, rows }).await.unwrap()
                     }
                     Ok(CEvent::Mouse(button)) => tx.send(Event::Click(button)).await.unwrap(),
+                    Ok(CEvent::Paste(content)) => tx.send(Event::Paste(content)).await.unwrap(),
                     _ => (),
                 }
             }
@@ -396,6 +398,12 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                 }
                 _ => app.on_key(event).await?,
             },
+            Some(Event::Paste(content)) => {
+                let multi_line_state = app.is_multiline_input;
+                app.is_multiline_input = true;
+                content.chars().for_each(|c| app.get_input().put_char(c));
+                app.is_multiline_input = multi_line_state;
+            }
             Some(Event::Message(content)) => {
                 if let Err(e) = app.on_message(content).await {
                     error!("failed on incoming message: {}", e);
