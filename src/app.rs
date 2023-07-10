@@ -10,11 +10,14 @@ use crate::signal::{
 };
 use crate::storage::{MessageId, Storage};
 use crate::util::{self, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX};
+use std::io::Cursor;
 
 use anyhow::{anyhow, bail, Context as _};
 use arboard::Clipboard;
 use chrono::{DateTime, Utc};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use image::codecs::png::PngEncoder;
+use image::{ImageBuffer, ImageEncoder, Rgba};
 use itertools::Itertools;
 use notify_rust::Notification;
 use phonenumber::Mode;
@@ -1232,22 +1235,50 @@ impl App {
         let attachments = re.find_iter(input.as_bytes()).filter_map(|(start, end)| {
             let path_str = &input[start..end].strip_prefix("file://")?;
 
-            let path = Path::new(path_str);
-            let contents = std::fs::read(path).ok()?;
+            let (contents, content_type, file_name) = if path_str.starts_with(&"clip") {
+                let img = self.clipboard.as_mut()?.get_image().ok()?;
+
+                let png: ImageBuffer<Rgba<_>, _> =
+                    ImageBuffer::from_raw(img.width as _, img.height as _, img.bytes)?;
+
+                let mut bytes = Vec::new();
+                let mut cursor = Cursor::new(&mut bytes);
+                let encoder = PngEncoder::new(&mut cursor);
+
+                let data: Vec<_> = png.into_raw().into_iter().map(|b| b.swap_bytes()).collect();
+                encoder
+                    .write_image(
+                        &data,
+                        img.width as _,
+                        img.height as _,
+                        image::ColorType::Rgba8,
+                    )
+                    .ok()?;
+
+                (
+                    bytes,
+                    "image/png".to_string(),
+                    Some("clipboard.png".to_string()),
+                )
+            } else {
+                let path = Path::new(path_str);
+                let contents = std::fs::read(path).ok()?;
+                let content_type = mime_guess::from_path(path)
+                    .first()
+                    .map(|mime| mime.essence_str().to_string())
+                    .unwrap_or_default();
+                let file_name = path.file_name().map(|f| f.to_string_lossy().into());
+
+                (contents, content_type, file_name)
+            };
 
             clean_input.push_str(input[offset..start].trim_end_matches(""));
             offset = end;
 
-            let content_type = mime_guess::from_path(path)
-                .first()
-                .map(|mime| mime.essence_str().to_string())
-                .unwrap_or_default();
             let spec = AttachmentSpec {
                 content_type,
                 length: contents.len(),
-                file_name: Path::new(path)
-                    .file_name()
-                    .map(|f| f.to_string_lossy().into()),
+                file_name,
                 preview: None,
                 voice_note: None,
                 borderless: None,
