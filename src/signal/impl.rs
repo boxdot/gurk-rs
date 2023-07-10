@@ -160,6 +160,18 @@ impl SignalManager for PresageManager {
             ..Default::default()
         };
 
+        if has_attachments && message.is_empty() {
+            // TODO: Temporary solution until we start rendering attachments
+            message = format!(
+                "<attached: {}>",
+                attachments
+                    .iter()
+                    .map(|(a, _)| a.file_name.clone().unwrap_or(a.content_type.clone()))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+
         let (response_tx, response) = oneshot::channel();
         match channel.id {
             ChannelId::User(uuid) => {
@@ -214,11 +226,6 @@ impl SignalManager for PresageManager {
                     error!("cannot send to broken channel without group data");
                 }
             }
-        }
-
-        if has_attachments && message.is_empty() {
-            // TODO: Temporary solution until we start rendering attachments
-            message = "<attachment>".to_string();
         }
 
         let message = Message {
