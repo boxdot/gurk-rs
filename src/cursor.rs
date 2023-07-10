@@ -124,6 +124,10 @@ impl Cursor {
         }
     }
 
+    pub fn delete_line_backward(&mut self, text: &mut String) {
+        (0..self.col.max(1)).for_each(|_| self.delete_backward(text))
+    }
+
     pub fn delete_word_backward(&mut self, text: &mut String) {
         let end = self.idx;
         self.move_word_left(text);

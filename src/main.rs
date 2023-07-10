@@ -342,6 +342,9 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                 KeyCode::Char('b') if event.modifiers.contains(KeyModifiers::ALT) => {
                     app.get_input().move_back_word();
                 }
+                KeyCode::Char('u') if event.modifiers.contains(KeyModifiers::CONTROL) => {
+                    app.get_input().on_delete_line();
+                }
                 KeyCode::Char('w') if event.modifiers.contains(KeyModifiers::CONTROL) => {
                     app.get_input().on_delete_word();
                 }

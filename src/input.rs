@@ -54,6 +54,10 @@ impl Input {
         self.cursor.delete_backward(&mut self.data);
     }
 
+    pub fn on_delete_line(&mut self) {
+        self.cursor.delete_line_backward(&mut self.data);
+    }
+
     pub fn on_delete_word(&mut self) {
         self.cursor.delete_word_backward(&mut self.data);
     }
