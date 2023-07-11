@@ -27,6 +27,10 @@ pub static SHORTCUTS: &[ShortCut] = &[
         description: "Delete last word.",
     },
     ShortCut {
+        event: "ctrl+u",
+        description: "Delete to the start of the line.",
+    },
+    ShortCut {
         event: "enter, when input box empty in single-line mode",
         description: "Open URL from selected message.",
     },
