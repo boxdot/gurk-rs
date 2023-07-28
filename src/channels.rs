@@ -1,6 +1,6 @@
 use std::cmp::Reverse;
 
-use tui::widgets::ListState;
+use ratatui::widgets::ListState;
 
 use crate::data::ChannelId;
 use crate::input::Input;

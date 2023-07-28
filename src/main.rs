@@ -19,10 +19,10 @@ use gurk::app::App;
 use gurk::storage::{sync_from_signal, JsonStorage, MemCache, SqliteStorage, Storage};
 use gurk::{config, signal, ui};
 use presage::prelude::Content;
+use ratatui::{backend::CrosstermBackend, Terminal};
 use tokio::select;
 use tokio_stream::StreamExt;
 use tracing::{error, info, metadata::LevelFilter};
-use tui::{backend::CrosstermBackend, Terminal};
 
 const TARGET_FPS: u64 = 144;
 const RECEIPT_TICK_PERIOD: u64 = 144;

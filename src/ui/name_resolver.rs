@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use tui::style::Color;
+use ratatui::style::Color;
 use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
 
