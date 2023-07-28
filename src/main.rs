@@ -15,15 +15,14 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use gurk::app::App;
+use gurk::storage::{sync_from_signal, JsonStorage, MemCache, SqliteStorage, Storage};
 use gurk::{config, signal, ui};
 use presage::prelude::Content;
 use tokio::select;
 use tokio_stream::StreamExt;
 use tracing::{error, info, metadata::LevelFilter};
 use tui::{backend::CrosstermBackend, Terminal};
-
-use gurk::app::App;
-use gurk::storage::{JsonStorage, MemCache, SqliteStorage, Storage};
 
 const TARGET_FPS: u64 = 144;
 const RECEIPT_TICK_PERIOD: u64 = 144;
@@ -40,11 +39,6 @@ struct Args {
     /// Relinks the device (helpful when device was unlinked)
     #[clap(long)]
     relink: bool,
-    /// Dump raw messages to `messages.json` in the current working directory
-    ///
-    /// Used for collecting benchmark data
-    #[clap(long)]
-    dump_messages: bool,
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -100,7 +94,7 @@ pub enum Event {
 async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
     let (mut signal_manager, config) = signal::ensure_linked_device(relink).await?;
 
-    let storage: Box<dyn Storage> = if config.sqlite.enabled {
+    let mut storage: Box<dyn Storage> = if config.sqlite.enabled {
         let mut sqlite_storage = SqliteStorage::open(&config.sqlite.url).with_context(|| {
             format!(
                 "failed to open sqlite data storage at: {}",
@@ -130,19 +124,13 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
         Box::new(json_storage)
     };
 
+    sync_from_signal(&*signal_manager, &mut *storage);
+
     let (mut app, mut app_events) = App::try_new(config, signal_manager.clone_boxed(), storage)?;
 
     // sync task can be only spawned after we start to listen to message, because it relies on
     // message sender to be running
     let mut contact_sync_task = app.request_contacts_sync();
-
-    enable_raw_mode()?;
-    let _raw_mode_guard = scopeguard::guard((), |_| {
-        disable_raw_mode().unwrap();
-    });
-
-    let mut stdout = std::io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Event>(100);
     tokio::spawn({
@@ -162,10 +150,6 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
             }
         }
     });
-
-    let backend = CrosstermBackend::new(stdout);
-
-    let mut terminal = Terminal::new(backend)?;
 
     let inner_tx = tx.clone();
     tokio::task::spawn_local(async move {
@@ -218,6 +202,16 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
         }
     });
 
+    enable_raw_mode()?;
+    let _raw_mode_guard = scopeguard::guard((), |_| {
+        disable_raw_mode().unwrap();
+    });
+
+    let mut stdout = std::io::stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
     terminal.clear()?;
 
     let mut res = Ok(()); // result on quit

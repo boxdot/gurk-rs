@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::data::{Channel, ChannelId, Message};
 
-pub use copy::copy;
+pub use copy::{copy, sync_from_signal};
 pub use forgetful::ForgetfulStorage;
 pub use json::JsonStorage;
 pub use memcache::MemCache;

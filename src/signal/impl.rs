@@ -6,7 +6,7 @@ use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::Utc;
 use gh_emoji::Replacer;
-use presage::libsignal_service::prelude::ProfileKey;
+use presage::libsignal_service::prelude::{Group, ProfileKey};
 use presage::prelude::content::Reaction;
 use presage::prelude::proto::data_message::Quote;
 use presage::prelude::proto::{AttachmentPointer, ReceiptMessage};
@@ -322,6 +322,14 @@ impl SignalManager for PresageManager {
 
     async fn receive_messages(&mut self) -> anyhow::Result<Pin<Box<dyn Stream<Item = Content>>>> {
         Ok(Box::pin(self.manager.receive_messages().await?))
+    }
+
+    fn contacts(&self) -> Box<dyn Iterator<Item = Contact>> {
+        Box::new(self.manager.contacts().into_iter().flatten().flatten())
+    }
+
+    fn groups(&self) -> Box<dyn Iterator<Item = (GroupMasterKeyBytes, Group)>> {
+        Box::new(self.manager.groups().into_iter().flatten().flatten())
     }
 }
 

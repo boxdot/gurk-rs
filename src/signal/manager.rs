@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::pin::Pin;
 
 use async_trait::async_trait;
+use presage::libsignal_service::prelude::Group;
 use presage::prelude::proto::AttachmentPointer;
 use presage::prelude::{AttachmentSpec, Contact, Content};
 use serde::{Deserialize, Serialize};
@@ -62,6 +63,9 @@ pub trait SignalManager {
     fn contact_by_id(&self, id: Uuid) -> anyhow::Result<Option<Contact>>;
 
     async fn receive_messages(&mut self) -> anyhow::Result<Pin<Box<dyn Stream<Item = Content>>>>;
+
+    fn contacts(&self) -> Box<dyn Iterator<Item = Contact>>;
+    fn groups(&self) -> Box<dyn Iterator<Item = (GroupMasterKeyBytes, Group)>>;
 }
 
 pub struct ResolvedGroup {
