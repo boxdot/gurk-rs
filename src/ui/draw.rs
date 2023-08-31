@@ -267,7 +267,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     prepare_receipts(app, height);
 
     let Some(&channel_id) = app.channels.selected_item() else {
-        return
+        return;
     };
     let channel = app
         .storage
