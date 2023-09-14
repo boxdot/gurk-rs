@@ -1,4 +1,4 @@
-use tui::layout::Rect;
+use ratatui::layout::Rect;
 
 use super::CHANNEL_VIEW_RATIO;
 

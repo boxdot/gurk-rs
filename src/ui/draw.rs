@@ -4,12 +4,12 @@ use std::fmt;
 
 use chrono::Datelike;
 use itertools::Itertools;
-use tui::backend::Backend;
-use tui::layout::{Constraint, Corner, Direction, Layout, Rect};
-use tui::style::{Color, Style};
-use tui::text::{Span, Spans, Text};
-use tui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph};
-use tui::Frame;
+use ratatui::backend::Backend;
+use ratatui::layout::{Constraint, Corner, Direction, Layout, Rect};
+use ratatui::style::{Color, Style};
+use ratatui::text::{Line, Span, Text};
+use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph};
+use ratatui::Frame;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use uuid::Uuid;
 
@@ -118,7 +118,7 @@ fn draw_channels<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
                 }
                 format!("{}{}", &channel.name[0..end], unread_messages_label)
             };
-            ListItem::new(vec![Spans::from(Span::raw(label))])
+            ListItem::new(vec![Line::from(Span::raw(label))])
         })
         .collect();
     let channels = List::new(channels)
@@ -482,7 +482,7 @@ fn display_message(
     }
     add_reactions(msg, &mut text);
 
-    let mut spans: Vec<Spans> = vec![];
+    let mut spans: Vec<Line> = vec![];
 
     // prepend quote if any
     let quote_text = msg
@@ -510,7 +510,7 @@ fn display_message(
                 } else {
                     vec![Span::styled(line.to_string(), quote_style)]
                 };
-                Spans::from(res)
+                Line::from(res)
             })
             .collect();
     }
@@ -532,7 +532,7 @@ fn display_message(
                 } else {
                     vec![Span::from(line.into_owned())]
                 };
-                Spans::from(res)
+                Line::from(res)
             }),
     );
 
@@ -548,8 +548,8 @@ fn display_message(
 
     if spans.len() > height {
         // span is too big to be shown fully
-        spans.resize(height - 1, Spans::from(""));
-        spans.push(Spans::from(format!("{prefix}[...]")));
+        spans.resize(height - 1, Line::from(""));
+        spans.push(Line::from(format!("{prefix}[...]")));
     }
     Some(ListItem::new(Text::from(spans)))
 }
@@ -689,7 +689,7 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
                         truc.push(Span::from(line.to_string()))
                     };
 
-                    let spans = Spans::from(truc);
+                    let spans = Line::from(truc);
                     res.push(spans);
                 });
 
@@ -786,7 +786,7 @@ mod tests {
         let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, ShowReceipt::Never);
 
         let expected = ListItem::new(Text::from(vec![
-            Spans(vec![
+            Line::from(vec![
                 Span::styled("", Style::default().fg(Color::Yellow)),
                 Span::styled(
                     display_time(msg.arrived_at),
@@ -796,7 +796,7 @@ mod tests {
                 Span::raw(": "),
                 Span::raw("<file:///tmp/gurk/signal-2022-01-"),
             ]),
-            Spans(vec![Span::raw(
+            Line::from(vec![Span::raw(
                 "                  16T11:59:58.405665+00:00.jpg>",
             )]),
         ]));
@@ -814,7 +814,7 @@ mod tests {
         let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, ShowReceipt::Never);
 
         let expected = ListItem::new(Text::from(vec![
-            Spans(vec![
+            Line::from(vec![
                 Span::styled("", Style::default().fg(Color::Yellow)),
                 Span::styled(
                     display_time(msg.arrived_at),
@@ -824,10 +824,10 @@ mod tests {
                 Span::raw(": "),
                 Span::raw("Hello, World!"),
             ]),
-            Spans(vec![Span::raw(
+            Line::from(vec![Span::raw(
                 "                  <file:///tmp/gurk/signal-2022-01-",
             )]),
-            Spans(vec![Span::raw(
+            Line::from(vec![Span::raw(
                 "                  16T11:59:58.405665+00:00.jpg>",
             )]),
         ]));
@@ -845,7 +845,7 @@ mod tests {
         let show_receipt = ShowReceipt::from_msg(&msg, USER_ID, true);
         let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, show_receipt);
 
-        let expected = ListItem::new(Text::from(vec![Spans(vec![
+        let expected = ListItem::new(Text::from(vec![Line::from(vec![
             Span::styled("○ ", Style::default().fg(Color::Yellow)),
             Span::styled(
                 display_time(msg.arrived_at),
@@ -869,7 +869,7 @@ mod tests {
         let show_receipt = ShowReceipt::from_msg(&msg, USER_ID, true);
         let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, show_receipt);
 
-        let expected = ListItem::new(Text::from(vec![Spans(vec![
+        let expected = ListItem::new(Text::from(vec![Line::from(vec![
             Span::styled("◉ ", Style::default().fg(Color::Yellow)),
             Span::styled(
                 display_time(msg.arrived_at),
@@ -893,7 +893,7 @@ mod tests {
         let show_receipt = ShowReceipt::from_msg(&msg, USER_ID, true);
         let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, show_receipt);
 
-        let expected = ListItem::new(Text::from(vec![Spans(vec![
+        let expected = ListItem::new(Text::from(vec![Line::from(vec![
             Span::styled("● ", Style::default().fg(Color::Yellow)),
             Span::styled(
                 display_time(msg.arrived_at),
@@ -917,7 +917,7 @@ mod tests {
         let show_receipt = ShowReceipt::from_msg(&msg, USER_ID, false);
         let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, show_receipt);
 
-        let expected = ListItem::new(Text::from(vec![Spans(vec![
+        let expected = ListItem::new(Text::from(vec![Line::from(vec![
             Span::styled("", Style::default().fg(Color::Yellow)),
             Span::styled(
                 display_time(msg.arrived_at),
@@ -943,7 +943,7 @@ mod tests {
         let show_receipt = ShowReceipt::from_msg(&msg, USER_ID, true);
         let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, show_receipt);
 
-        let expected = ListItem::new(Text::from(vec![Spans(vec![
+        let expected = ListItem::new(Text::from(vec![Line::from(vec![
             Span::styled("  ", Style::default().fg(Color::Yellow)),
             Span::styled(
                 display_time(msg.arrived_at),
@@ -982,7 +982,7 @@ mod tests {
         let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, show_receipt);
 
         let expected = ListItem::new(Text::from(vec![
-            Spans(vec![
+            Line::from(vec![
                 Span::styled("  ", Style::default().fg(Color::Yellow)),
                 Span::styled(
                     display_time(msg.arrived_at),
@@ -992,7 +992,7 @@ mod tests {
                 Span::raw(": "),
                 Span::raw("Mention @boxdot  and even more @boxdot ."),
             ]),
-            Spans(vec![Span::raw("                  End")]),
+            Line::from(vec![Span::raw("                  End")]),
         ]));
         assert_eq!(rendered, Some(expected));
     }
