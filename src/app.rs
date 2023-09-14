@@ -88,8 +88,7 @@ impl App {
         channels.items.sort_unstable_by_key(|channel_id| {
             let last_message_arrived_at = storage
                 .messages(*channel_id)
-                .rev()
-                .next()
+                .next_back()
                 .map(|msg| msg.arrived_at);
             let channel_name = storage
                 .channel(*channel_id)
@@ -335,9 +334,7 @@ impl App {
             arrived_at,
             self.signal_manager.user_id(),
             emoji,
-            remove,
-            false,
-            false,
+            HandleReactionOptions::new().remove(true),
         );
 
         self.reset_unread_messages();
@@ -683,9 +680,10 @@ impl App {
                     target_sent_timestamp,
                     sender_uuid,
                     emoji,
-                    remove.unwrap_or(false),
-                    true,
-                    true,
+                    HandleReactionOptions::new()
+                        .remove(remove.unwrap_or(false))
+                        .notify(true)
+                        .bell(true),
                 );
                 read.into_iter().for_each(|r| {
                     self.handle_receipt(
@@ -737,9 +735,10 @@ impl App {
                     target_sent_timestamp,
                     sender_uuid,
                     emoji,
-                    remove.unwrap_or(false),
-                    true,
-                    true,
+                    HandleReactionOptions::new()
+                        .remove(remove.unwrap_or(false))
+                        .notify(true)
+                        .bell(true),
                 );
                 return Ok(());
             }
@@ -934,9 +933,11 @@ impl App {
         target_sent_timestamp: u64,
         sender_uuid: Uuid,
         emoji: String,
-        remove: bool,
-        notify: bool,
-        bell: bool,
+        HandleReactionOptions {
+            remove,
+            notify,
+            bell,
+        }: HandleReactionOptions,
     ) -> Option<()> {
         let mut message = self
             .storage
@@ -1250,7 +1251,7 @@ impl App {
         let attachments = re.find_iter(input.as_bytes()).filter_map(|(start, end)| {
             let path_str = &input[start..end].strip_prefix("file://")?;
 
-            let (contents, content_type, file_name) = if path_str.starts_with(&"clip") {
+            let (contents, content_type, file_name) = if path_str.starts_with("clip") {
                 let img = self.clipboard.as_mut()?.get_image().ok()?;
 
                 let png: ImageBuffer<Rgba<_>, _> =
@@ -1260,7 +1261,7 @@ impl App {
                 let mut cursor = Cursor::new(&mut bytes);
                 let encoder = PngEncoder::new(&mut cursor);
 
-                let data: Vec<_> = png.into_raw().into_iter().map(|b| b.swap_bytes()).collect();
+                let data: Vec<_> = png.into_raw().iter().map(|b| b.swap_bytes()).collect();
                 encoder
                     .write_image(
                         &data,
@@ -1401,6 +1402,31 @@ impl App {
             }
         }
         Ok(())
+    }
+}
+
+#[derive(Debug, Default)]
+struct HandleReactionOptions {
+    remove: bool,
+    notify: bool,
+    bell: bool,
+}
+
+impl HandleReactionOptions {
+    fn new() -> Self {
+        Default::default()
+    }
+
+    fn remove(self, remove: bool) -> Self {
+        Self { remove, ..self }
+    }
+
+    fn notify(self, notify: bool) -> Self {
+        Self { notify, ..self }
+    }
+
+    fn bell(self, bell: bool) -> Self {
+        Self { bell, ..self }
     }
 }
 
