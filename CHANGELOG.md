@@ -17,6 +17,10 @@
 - Do not create log file when logging is disabled ([#204])
 - Fix blocking contacts sync ([#216])
 
+## Internal
+
+- replace tui with ratatui ([#238])
+
 [#203]: https://github.com/boxdot/gurk-rs/pull/203
 [#204]: https://github.com/boxdot/gurk-rs/pull/204
 [#210]: https://github.com/boxdot/gurk-rs/pull/210
@@ -25,6 +29,7 @@
 [#216]: https://github.com/boxdot/gurk-rs/pull/216
 [#226]: https://github.com/boxdot/gurk-rs/pull/226
 [#227]: https://github.com/boxdot/gurk-rs/pull/227
+[#238]: https://github.com/boxdot/gurk-rs/pull/238
 
 ## 0.3.0
 
