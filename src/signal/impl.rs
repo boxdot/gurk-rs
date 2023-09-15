@@ -2,7 +2,6 @@
 
 use std::pin::Pin;
 
-
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::Utc;
@@ -32,9 +31,7 @@ pub(super) struct PresageManager {
 
 impl PresageManager {
     pub(super) fn new(manager: presage::Manager<SledStore, Registered>) -> Self {
-        Self {
-            manager,
-        }
+        Self { manager }
     }
 }
 
@@ -348,4 +345,3 @@ async fn upload_attachments(
         .collect();
     Ok(())
 }
-
