@@ -1433,12 +1433,11 @@ impl HandleReactionOptions {
 /// Returns an emoji string if `s` is an emoji or if `s` is a GitHub emoji shortcode.
 fn to_emoji(s: &str) -> Option<&str> {
     let s = s.trim();
-    if emoji::lookup_by_glyph::lookup(s).is_some() {
+    if emojis::get(s).is_some() {
         Some(s)
     } else {
         let s = s.strip_prefix(':')?.strip_suffix(':')?;
-        let emoji = gh_emoji::get(s)?;
-        Some(emoji)
+        Some(emojis::get_by_shortcode(s)?.as_str())
     }
 }
 
@@ -1706,5 +1705,14 @@ mod tests {
             .unwrap()
             .reactions;
         assert!(reactions.is_empty());
+    }
+
+    #[test]
+    fn test_to_emoji() {
+        assert_eq!(to_emoji("🚀"), Some("🚀"));
+        assert_eq!(to_emoji("  🚀   "), Some("🚀")); // trimmed
+        assert_eq!(to_emoji(":rocket:"), Some("🚀"));
+        assert_eq!(to_emoji("☝🏿"), Some("☝🏿"));
+        assert_eq!(to_emoji("a"), None);
     }
 }

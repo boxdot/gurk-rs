@@ -2,7 +2,6 @@ use std::pin::Pin;
 use std::{cell::RefCell, rc::Rc};
 
 use async_trait::async_trait;
-use gh_emoji::Replacer;
 use presage::libsignal_service::prelude::{AttachmentIdentifier, Group};
 use presage::prelude::proto::data_message::Quote;
 use presage::prelude::proto::AttachmentPointer;
@@ -20,7 +19,6 @@ use super::{Attachment, GroupMasterKeyBytes, ProfileKeyBytes, ResolvedGroup, Sig
 /// Signal manager mock which does not send any messages.
 pub struct SignalManagerMock {
     user_id: Uuid,
-    emoji_replacer: Replacer,
     pub sent_messages: Rc<RefCell<Vec<Message>>>,
 }
 
@@ -28,7 +26,6 @@ impl SignalManagerMock {
     pub fn new() -> Self {
         Self {
             user_id: Uuid::nil(),
-            emoji_replacer: Replacer::new(),
             sent_messages: Default::default(),
         }
     }
@@ -86,7 +83,7 @@ impl SignalManager for SignalManagerMock {
         quote_message: Option<&Message>,
         _attachments: Vec<(AttachmentSpec, Vec<u8>)>,
     ) -> (Message, oneshot::Receiver<anyhow::Result<()>>) {
-        let message: String = self.emoji_replacer.replace_all(&text).into_owned();
+        let message: String = crate::emoji::replace_shortcodes(&text).into_owned();
         let timestamp = utc_now_timestamp_msec();
         let quote = quote_message.map(|message| Quote {
             id: Some(message.arrived_at),
@@ -138,7 +135,6 @@ impl SignalManager for SignalManagerMock {
     fn clone_boxed(&self) -> Box<dyn SignalManager> {
         Box::new(Self {
             user_id: self.user_id,
-            emoji_replacer: Replacer::new(),
             sent_messages: self.sent_messages.clone(),
         })
     }
