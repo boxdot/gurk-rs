@@ -1,12 +1,38 @@
 # Changelog
 
+## 0.4.1
+
+### Added
+
+- Add ephemeral status to sent messages on errors ([#222])
+- Support bracketed paste ([#229])
+- Add support for Ctrl+U to delete line backwards ([#230])
+- Show attachment names or types ([#231])
+- Add urgent bell support ([#233])
+- Implement sending images directly from clipboard ([#232])
+- Experimental impl of Storage via sqlite ([#225])
+- Sync contacts and groups from signal manager ([#226], [#227])
+
+### Internal
+
+- replace tui with ratatui ([#238])
+
+[#222]: https://github.com/boxdot/gurk-rs/pull/222
+[#225]: https://github.com/boxdot/gurk-rs/pull/225
+[#226]: https://github.com/boxdot/gurk-rs/pull/226
+[#229]: https://github.com/boxdot/gurk-rs/pull/229
+[#230]: https://github.com/boxdot/gurk-rs/pull/230
+[#231]: https://github.com/boxdot/gurk-rs/pull/231
+[#232]: https://github.com/boxdot/gurk-rs/pull/232
+[#233]: https://github.com/boxdot/gurk-rs/pull/233
+[#238]: https://github.com/boxdot/gurk-rs/pull/238
+
 ## 0.4.0
 
 ### Added
 
 - Copy selected message to clipboard ([#210])
 - Implement storing and rendering of mentions ([#215], [#136])
-- Sync contacts and groups from signal manager ([#226], [#227])
 
 ### Changed
 
@@ -17,19 +43,13 @@
 - Do not create log file when logging is disabled ([#204])
 - Fix blocking contacts sync ([#216])
 
-## Internal
-
-- replace tui with ratatui ([#238])
-
+[#136]: https://github.com/boxdot/gurk-rs/pull/136
 [#203]: https://github.com/boxdot/gurk-rs/pull/203
 [#204]: https://github.com/boxdot/gurk-rs/pull/204
 [#210]: https://github.com/boxdot/gurk-rs/pull/210
-[#136]: https://github.com/boxdot/gurk-rs/pull/136
 [#215]: https://github.com/boxdot/gurk-rs/pull/215
 [#216]: https://github.com/boxdot/gurk-rs/pull/216
-[#226]: https://github.com/boxdot/gurk-rs/pull/226
 [#227]: https://github.com/boxdot/gurk-rs/pull/227
-[#238]: https://github.com/boxdot/gurk-rs/pull/238
 
 ## 0.3.0
 
