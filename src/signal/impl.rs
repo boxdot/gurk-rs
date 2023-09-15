@@ -5,7 +5,6 @@ use std::pin::Pin;
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::Utc;
-use gh_emoji::Replacer;
 use presage::libsignal_service::prelude::{Group, ProfileKey};
 use presage::prelude::content::Reaction;
 use presage::prelude::proto::data_message::Quote;
@@ -28,15 +27,11 @@ use super::{Attachment, GroupMasterKeyBytes, ProfileKeyBytes, ResolvedGroup, Sig
 
 pub(super) struct PresageManager {
     manager: presage::Manager<SledStore, Registered>,
-    emoji_replacer: Replacer,
 }
 
 impl PresageManager {
     pub(super) fn new(manager: presage::Manager<SledStore, Registered>) -> Self {
-        Self {
-            manager,
-            emoji_replacer: Replacer::new(),
-        }
+        Self { manager }
     }
 }
 
@@ -139,7 +134,7 @@ impl SignalManager for PresageManager {
         quote_message: Option<&Message>,
         attachments: Vec<(AttachmentSpec, Vec<u8>)>,
     ) -> (Message, oneshot::Receiver<anyhow::Result<()>>) {
-        let mut message: String = self.emoji_replacer.replace_all(&text).into_owned();
+        let mut message: String = crate::emoji::replace_shortcodes(&text).into_owned();
         let has_attachments = !attachments.is_empty();
 
         let timestamp = utc_now_timestamp_msec();
