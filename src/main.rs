@@ -10,7 +10,7 @@ use clap::Parser;
 use crossterm::{
     event::{
         DisableMouseCapture, EnableMouseCapture, Event as CEvent, EventStream, KeyCode, KeyEvent,
-        KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+        KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
     },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -298,7 +298,12 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                 }
                 _ => {}
             },
-            Some(Event::Input(event)) => match event.code {
+            Some(Event::Input(
+                event @ KeyEvent {
+                    kind: KeyEventKind::Press,
+                    ..
+                },
+            )) => match event.code {
                 KeyCode::F(1u8) => {
                     // Toggle help panel
                     app.toggle_help();
@@ -395,6 +400,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                 }
                 _ => app.on_key(event).await?,
             },
+            Some(Event::Input(..)) => {}
             Some(Event::Paste(content)) => {
                 let multi_line_state = app.is_multiline_input;
                 app.is_multiline_input = true;
