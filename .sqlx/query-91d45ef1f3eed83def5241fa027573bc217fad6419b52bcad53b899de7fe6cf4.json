@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                        SELECT id AS \"id: _\", name, group_master_key, group_revision, group_members AS \"group_members: _\"\n                        FROM channels\n                        WHERE id = ?\n                    ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id: _",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "group_master_key",
+        "ordinal": 2,
+        "type_info": "Blob"
+      },
+      {
+        "name": "group_revision",
+        "ordinal": 3,
+        "type_info": "Int64"
+      },
+      {
+        "name": "group_members: _",
+        "ordinal": 4,
+        "type_info": "Blob"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "91d45ef1f3eed83def5241fa027573bc217fad6419b52bcad53b899de7fe6cf4"
+}

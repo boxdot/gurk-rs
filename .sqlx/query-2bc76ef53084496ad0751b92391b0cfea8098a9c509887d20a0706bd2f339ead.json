@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                        SELECT\n                            contacts_sync_request_at AS \"contacts_sync_request_at: _\",\n                            fully_migrated AS \"fully_migrated: _\"\n                        FROM metadata WHERE id = 0 LIMIT 1\n                    ",
+  "describe": {
+    "columns": [
+      {
+        "name": "contacts_sync_request_at: _",
+        "ordinal": 0,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "fully_migrated: _",
+        "ordinal": 1,
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "2bc76ef53084496ad0751b92391b0cfea8098a9c509887d20a0706bd2f339ead"
+}

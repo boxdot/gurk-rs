@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                REPLACE INTO messages(arrived_at, channel_id, from_id, message, quote, receipt, body_ranges, attachments, reactions)\n                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 9
+    },
+    "nullable": []
+  },
+  "hash": "234d1525bc9a0646e4ab3f79e7edbe5f74fff34c57b2a0ba165fbac575f600e2"
+}

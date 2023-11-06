@@ -63,7 +63,7 @@ futures-channel = "0.3.25"
 qr2term = { git = "https://github.com/boxdot/qr2term-rs", rev = "ed8ae7f" }
 clap = { version = "4.0.19", features = ["derive"] }
 aho-corasick = "0.7.19"
-sqlx = { version = "0.6.3", features = ["sqlite", "runtime-tokio-rustls", "offline", "uuid", "chrono"] }
+sqlx = { version = "0.7.2", features = ["sqlite", "runtime-tokio-rustls", "uuid", "chrono"] }
 thiserror = "1.0.40"
 postcard = { version = "1.0.4", features = ["alloc"] }
 emojis = "0.6.1"
