@@ -28,8 +28,8 @@ debug = true
 dev = ["prost", "base64"]
 
 [dependencies]
-presage = { git = "https://github.com/whisperfish/presage", rev = "db46e0d8dbb5e65bb4deeace4ea3502bacb8180f" }
-presage-store-sled = { git = "https://github.com/whisperfish/presage", rev = "db46e0d8dbb5e65bb4deeace4ea3502bacb8180f" }
+presage = { git = "https://github.com/whisperfish/presage", rev = "8abd8ca0" }
+presage-store-sled = { git = "https://github.com/whisperfish/presage", rev = "8abd8ca0" }
 
 anyhow = "1.0.66"
 async-trait = "0.1.58"
@@ -102,4 +102,4 @@ harness = false
 [patch.crates-io]
 # signal-protocol uses a fork of this library via the patch mechanism of cargo.
 # Since it is not transitive, we have to add the patch here explicitly.
-"curve25519-dalek" = { git = 'https://github.com/signalapp/curve25519-dalek', branch = 'lizard2' }
+"curve25519-dalek" = { git = 'https://github.com/signalapp/curve25519-dalek', tag = 'signal-curve25519-4.0.0' }
