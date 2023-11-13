@@ -33,7 +33,7 @@ use presage::prelude::{
 };
 use regex_automata::Regex;
 use tokio::sync::mpsc;
-use tracing::{error, info, warn};
+use tracing::{error, info, trace, warn};
 use uuid::Uuid;
 
 use std::borrow::Cow;
@@ -496,7 +496,7 @@ impl App {
                             message:
                                 Some(DataMessage {
                                     mut body,
-                                    profile_key: Some(profile_key),
+                                    profile_key,
                                     group_v2,
                                     quote,
                                     attachments: attachment_pointers,
@@ -524,6 +524,7 @@ impl App {
                         .context("failed to create group channel")?
                 } else if let Some(destination_uuid) = destination_uuid {
                     let profile_key = profile_key
+                        .context("sync message with destination without profile key")?
                         .try_into()
                         .map_err(|_| anyhow!("invalid profile key"))?;
                     let destination_uuid = Uuid::parse_str(&destination_uuid).unwrap();
@@ -795,7 +796,10 @@ impl App {
                 return Ok(());
             }
 
-            _ => return Ok(()),
+            unhandled => {
+                trace!(?unhandled, "skipping unhandled message");
+                return Ok(());
+            }
         };
 
         self.add_message_to_channel(channel_idx, message);
