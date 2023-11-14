@@ -28,8 +28,8 @@ debug = true
 dev = ["prost", "base64"]
 
 [dependencies]
-presage = { git = "https://github.com/whisperfish/presage", rev = "8abd8ca0" }
-presage-store-sled = { git = "https://github.com/whisperfish/presage", rev = "8abd8ca0" }
+presage = { git = "https://github.com/whisperfish/presage", rev = "de23104" }
+presage-store-sled = { git = "https://github.com/whisperfish/presage", rev = "de23104" }
 
 anyhow = "1.0.66"
 async-trait = "0.1.58"
@@ -90,14 +90,12 @@ name = "app"
 harness = false
 
 # [patch."https://github.com/whisperfish/presage.git"]
-# presage = { path = "../presage" }
-
+# presage = { path = "../presage/presage" }
+# presage-store-sled = { path = "../presage/presage-store-sled" }
+#
 # [patch."https://github.com/whisperfish/libsignal-service-rs"]
 # libsignal-service = { path = "../libsignal-service-rs/libsignal-service" }
 # libsignal-service-hyper = { path = "../libsignal-service-rs/libsignal-service-hyper" }
-
-# [patch."https://github.com/signalapp/libsignal-client"]
-# libsignal-protocol = { path = "../libsignal-client/rust/protocol" }
 
 [patch.crates-io]
 # signal-protocol uses a fork of this library via the patch mechanism of cargo.

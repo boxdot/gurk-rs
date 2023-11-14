@@ -87,7 +87,7 @@ impl SignalManager for SignalManagerMock {
         let timestamp = utc_now_timestamp_msec();
         let quote = quote_message.map(|message| Quote {
             id: Some(message.arrived_at),
-            author_uuid: Some(message.from_id.to_string()),
+            author_aci: Some(message.from_id.to_string()),
             text: message.message.clone(),
             ..Default::default()
         });

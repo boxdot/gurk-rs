@@ -455,7 +455,7 @@ impl App {
                 ContentBody::SynchronizeMessage(SyncMessage {
                     sent:
                         Some(Sent {
-                            destination_uuid: Some(destination_uuid),
+                            destination_service_id: Some(destination_uuid),
                             timestamp: Some(timestamp),
                             message:
                                 Some(DataMessage {
@@ -491,7 +491,7 @@ impl App {
                 ContentBody::SynchronizeMessage(SyncMessage {
                     sent:
                         Some(Sent {
-                            destination_uuid,
+                            destination_service_id: destination_uuid,
                             timestamp: Some(timestamp),
                             message:
                                 Some(DataMessage {
@@ -643,7 +643,7 @@ impl App {
                 ContentBody::SynchronizeMessage(SyncMessage {
                     sent:
                         Some(Sent {
-                            destination_uuid,
+                            destination_service_id: destination_uuid,
                             message:
                                 Some(DataMessage {
                                     body: None,
@@ -652,7 +652,7 @@ impl App {
                                         Some(Reaction {
                                             emoji: Some(emoji),
                                             remove,
-                                            target_author_uuid: Some(target_author_uuid),
+                                            target_author_aci: Some(target_author_uuid),
                                             target_sent_timestamp: Some(target_sent_timestamp),
                                             ..
                                         }),
@@ -688,7 +688,7 @@ impl App {
                 );
                 read.into_iter().for_each(|r| {
                     self.handle_receipt(
-                        Uuid::parse_str(r.sender_uuid.unwrap().as_str()).unwrap(),
+                        Uuid::parse_str(r.sender_aci.unwrap().as_str()).unwrap(),
                         Receipt::Read,
                         vec![r.timestamp.unwrap()],
                     );
@@ -711,7 +711,7 @@ impl App {
                             emoji: Some(emoji),
                             remove,
                             target_sent_timestamp: Some(target_sent_timestamp),
-                            target_author_uuid: Some(target_author_uuid),
+                            target_author_aci: Some(target_author_uuid),
                             ..
                         }),
                     ..
