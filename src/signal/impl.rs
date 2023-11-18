@@ -141,7 +141,7 @@ impl SignalManager for PresageManager {
 
         let quote = quote_message.map(|message| Quote {
             id: Some(message.arrived_at),
-            author_uuid: Some(message.from_id.to_string()),
+            author_aci: Some(message.from_id.to_string()),
             text: message.message.clone(),
             body_ranges: message.body_ranges.iter().map(From::from).collect(),
             ..Default::default()
@@ -246,7 +246,7 @@ impl SignalManager for PresageManager {
             reaction: Some(Reaction {
                 emoji: Some(emoji.clone()),
                 remove: Some(remove),
-                target_author_uuid: Some(target_author_uuid.to_string()),
+                target_author_aci: Some(target_author_uuid.to_string()),
                 target_sent_timestamp: Some(target_sent_timestamp),
             }),
             ..Default::default()

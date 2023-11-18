@@ -211,7 +211,7 @@ impl From<&BodyRange> for proto::BodyRange {
     fn from(range: &BodyRange) -> Self {
         let associtated_value = match &range.value {
             AssociatedValue::MentionUuid(id) => {
-                proto::body_range::AssociatedValue::MentionUuid(id.to_string())
+                proto::body_range::AssociatedValue::MentionAci(id.to_string())
             }
             AssociatedValue::Style(style) => {
                 proto::body_range::AssociatedValue::Style(style.to_proto().into())
@@ -228,7 +228,7 @@ impl From<&BodyRange> for proto::BodyRange {
 impl BodyRange {
     pub(crate) fn from_proto(proto: proto::BodyRange) -> Option<Self> {
         let value = match proto.associated_value? {
-            proto::body_range::AssociatedValue::MentionUuid(uuid) => {
+            proto::body_range::AssociatedValue::MentionAci(uuid) => {
                 let uuid = uuid.parse().ok()?;
                 AssociatedValue::MentionUuid(uuid)
             }
@@ -269,7 +269,7 @@ impl Message {
 
     pub fn from_quote(quote: Quote) -> Option<Message> {
         Some(Message {
-            from_id: quote.author_uuid?.parse().ok()?,
+            from_id: quote.author_aci?.parse().ok()?,
             message: quote.text,
             arrived_at: quote.id?,
             quote: None,

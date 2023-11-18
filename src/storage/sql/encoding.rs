@@ -15,7 +15,7 @@ use super::util::ResultExt;
 
 impl Decode<'_, Sqlite> for ChannelId {
     fn decode(value: SqliteValueRef<'_>) -> Result<Self, BoxDynError> {
-        let bytes: &[u8] = Decode::decode(value)?;
+        let bytes: &[u8] = Decode::<'_, Sqlite>::decode(value)?;
         if let Ok(uuid) = Uuid::from_slice(bytes) {
             Ok(uuid.into())
         } else {
@@ -28,7 +28,7 @@ impl<'q> Encode<'q, Sqlite> for &'q ChannelId {
     fn encode_by_ref(&self, buf: &mut <Sqlite as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
         match self {
             ChannelId::User(uuid) => uuid.encode(buf),
-            ChannelId::Group(bytes) => bytes.encode(buf),
+            ChannelId::Group(bytes) => Encode::<'_, Sqlite>::encode(bytes.as_slice(), buf),
         }
     }
 }
@@ -50,7 +50,7 @@ impl<T> BlobData<T> {
 
 impl<T: DeserializeOwned> Decode<'_, Sqlite> for BlobData<T> {
     fn decode(value: SqliteValueRef<'_>) -> Result<Self, BoxDynError> {
-        let bytes: &[u8] = Decode::decode(value)?;
+        let bytes: &[u8] = Decode::<'_, Sqlite>::decode(value)?;
         Ok(BlobData(postcard::from_bytes(bytes)?))
     }
 }
@@ -58,7 +58,7 @@ impl<T: DeserializeOwned> Decode<'_, Sqlite> for BlobData<T> {
 impl<'q, T: Serialize> Encode<'q, Sqlite> for BlobData<T> {
     fn encode_by_ref(&self, buf: &mut <Sqlite as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
         if let Some(bytes) = postcard::to_allocvec(&self.0).ok_logged() {
-            bytes.encode(buf)
+            Encode::<'_, Sqlite>::encode(bytes, buf)
         } else {
             IsNull::Yes
         }

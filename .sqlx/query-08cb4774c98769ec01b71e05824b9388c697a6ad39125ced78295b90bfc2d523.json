@@ -1,0 +1,92 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                    SELECT\n                        m.arrived_at AS arrived_at,\n                        m.from_id AS \"from_id: _\",\n                        m.message,\n                        m.receipt AS \"receipt: _\",\n                        m.body_ranges AS \"body_ranges: _\",\n                        m.attachments AS \"attachments: _\",\n                        m.reactions AS \"reactions: _\",\n                        q.arrived_at AS \"quote_arrived_at: _\",\n                        q.from_id AS \"quote_from_id: _\",\n                        q.message AS quote_message,\n                        q.attachments AS \"quote_attachments: _\",\n                        q.body_ranges AS \"quote_body_ranges: _\",\n                        q.receipt AS \"quote_receipt: _\"\n                    FROM messages AS m\n                    LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1\n                    WHERE m.channel_id = ?1 AND m.arrived_at = ?2\n                    LIMIT 1\n                ",
+  "describe": {
+    "columns": [
+      {
+        "name": "arrived_at",
+        "ordinal": 0,
+        "type_info": "Int64"
+      },
+      {
+        "name": "from_id: _",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "message",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "receipt: _",
+        "ordinal": 3,
+        "type_info": "Blob"
+      },
+      {
+        "name": "body_ranges: _",
+        "ordinal": 4,
+        "type_info": "Blob"
+      },
+      {
+        "name": "attachments: _",
+        "ordinal": 5,
+        "type_info": "Blob"
+      },
+      {
+        "name": "reactions: _",
+        "ordinal": 6,
+        "type_info": "Blob"
+      },
+      {
+        "name": "quote_arrived_at: _",
+        "ordinal": 7,
+        "type_info": "Int64"
+      },
+      {
+        "name": "quote_from_id: _",
+        "ordinal": 8,
+        "type_info": "Blob"
+      },
+      {
+        "name": "quote_message",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "quote_attachments: _",
+        "ordinal": 10,
+        "type_info": "Blob"
+      },
+      {
+        "name": "quote_body_ranges: _",
+        "ordinal": 11,
+        "type_info": "Blob"
+      },
+      {
+        "name": "quote_receipt: _",
+        "ordinal": 12,
+        "type_info": "Blob"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "08cb4774c98769ec01b71e05824b9388c697a6ad39125ced78295b90bfc2d523"
+}

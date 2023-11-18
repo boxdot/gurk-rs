@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                    REPLACE INTO channels(id, name, group_master_key, group_revision, group_members)\n                    VALUES (?, ?, ?, ?, ?)\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "9315d74c3c5f63fb9206e1c2c3f63dd9b7f41302cc0d3435e647665b64112bcd"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "REPLACE INTO metadata(id, contacts_sync_request_at, fully_migrated)\n                     VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "a1a737371687f60cd621a7b98595800311558c2e3348569360be83898e8fc8e6"
+}

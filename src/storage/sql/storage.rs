@@ -51,11 +51,11 @@ impl<'ctx, 'env: 'ctx> ExecuteContext<'ctx, 'env> {
 impl SqliteStorage {
     pub fn open(url: &str) -> sqlx::Result<Self> {
         let opts: SqliteConnectOptions = url.parse()?;
-        let mut opts = opts
+        let opts = opts
             .create_if_missing(true)
             .journal_mode(SqliteJournalMode::Wal)
-            .synchronous(SqliteSynchronous::Full);
-        opts.disable_statement_logging();
+            .synchronous(SqliteSynchronous::Full)
+            .disable_statement_logging();
 
         let thread = rayon::ThreadPoolBuilder::new()
             .thread_name(|_| "sqlite-sync".to_owned())
@@ -72,9 +72,7 @@ impl SqliteStorage {
                     .unwrap();
                 let conn = rt.block_on(async {
                     let mut conn = SqliteConnection::connect_with(&opts).await?;
-                    sqlx::migrate!("src/storage/migrations")
-                        .run(&mut conn)
-                        .await?;
+                    sqlx::migrate!().run(&mut conn).await?;
                     Ok::<_, sqlx::Error>(conn)
                 })?;
                 Ok(ThreadLocalResource {
