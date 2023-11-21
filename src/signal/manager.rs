@@ -4,9 +4,11 @@ use std::path::PathBuf;
 use std::pin::Pin;
 
 use async_trait::async_trait;
+use presage::libsignal_service::content::Content;
+use presage::libsignal_service::models::Contact;
 use presage::libsignal_service::prelude::Group;
-use presage::prelude::proto::AttachmentPointer;
-use presage::prelude::{AttachmentSpec, Contact, Content};
+use presage::libsignal_service::sender::AttachmentSpec;
+use presage::proto::AttachmentPointer;
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 use tokio_stream::Stream;

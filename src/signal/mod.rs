@@ -3,8 +3,8 @@ mod manager;
 pub mod test;
 
 use anyhow::{bail, Context as _};
-use presage::prelude::SignalServers;
-use presage_store_sled::{MigrationConflictStrategy, SledStore};
+use presage::libsignal_service::configuration::SignalServers;
+use presage_store_sled::{MigrationConflictStrategy, OnNewIdentity, SledStore};
 
 use crate::config::{self, Config};
 
@@ -36,7 +36,11 @@ pub async fn ensure_linked_device(
         .as_ref()
         .map(|c| c.signal_db_path.clone())
         .unwrap_or_else(config::default_signal_db_path);
-    let store = SledStore::open(db_path, MigrationConflictStrategy::BackupAndDrop)?;
+    let store = SledStore::open(
+        db_path,
+        MigrationConflictStrategy::BackupAndDrop,
+        OnNewIdentity::Trust,
+    )?;
 
     if !relink {
         if let Some(config) = config.clone() {
@@ -84,7 +88,7 @@ pub async fn ensure_linked_device(
 
     // get profile
     let phone_number = manager
-        .state()
+        .registration_data()
         .phone_number
         .format()
         .mode(phonenumber::Mode::E164)

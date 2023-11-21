@@ -3,8 +3,9 @@
 use std::collections::HashSet;
 
 use anyhow::anyhow;
-use presage::prelude::proto::data_message::Quote;
-use presage::prelude::{proto, GroupMasterKey, GroupSecretParams};
+use presage::libsignal_service::zkgroup::groups::{GroupMasterKey, GroupSecretParams};
+use presage::proto;
+use presage::proto::data_message::Quote;
 use serde::{Deserialize, Serialize};
 use tracing::error;
 use uuid::Uuid;
