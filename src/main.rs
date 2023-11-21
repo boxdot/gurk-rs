@@ -23,7 +23,7 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use tokio::select;
 use tokio_stream::StreamExt;
 use tracing::debug;
-use tracing::{error, info, metadata::LevelFilter};
+use tracing::{error, info};
 
 const TARGET_FPS: u64 = 144;
 const RECEIPT_TICK_PERIOD: u64 = 144;
@@ -35,8 +35,8 @@ const RECEIPT_BUDGET: Duration = Duration::from_millis(RECEIPT_TICK_PERIOD * 100
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Enables logging to `gurk.log` in the current working directory
-    #[clap(short, long = "verbose", action = clap::ArgAction::Count)]
-    verbosity: u8,
+    #[clap(short, long = "verbose")]
+    verbose: bool,
     /// Relinks the device (helpful when device was unlinked)
     #[clap(long)]
     relink: bool,
@@ -46,16 +46,11 @@ struct Args {
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    let _guard = if args.verbosity > 0 {
+    let _guard = if args.verbose {
         let file_appender = tracing_appender::rolling::never("./", "gurk.log");
         let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
         tracing_subscriber::fmt()
-            .with_max_level(match args.verbosity {
-                0 => LevelFilter::OFF,
-                1 => LevelFilter::INFO,
-                2 => LevelFilter::DEBUG,
-                _ => LevelFilter::TRACE,
-            })
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
             .with_writer(non_blocking)
             .with_ansi(false)
             .init();
