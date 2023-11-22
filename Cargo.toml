@@ -27,12 +27,9 @@ debug = true
 [features]
 dev = ["prost", "base64"]
 
-#[dependencies]
-#presage = { git = "https://github.com/whisperfish/presage", rev = "23c157b" }
-#resage-store-sled = { git = "https://github.com/whisperfish/presage", rev = "23c157b" }
 [dependencies]
-presage = { path = "../presage/presage" }
-presage-store-sled = { path = "../presage/presage-store-sled" }
+presage = { git = "https://github.com/whisperfish/presage", rev = "23c157b" }
+presage-store-sled = { git = "https://github.com/whisperfish/presage", rev = "23c157b" }
 
 anyhow = "1.0.66"
 async-trait = "0.1.58"
@@ -61,7 +58,7 @@ uuid = { version = "1.2", features = ["v4"] }
 whoami = "1.2.3"
 tracing = "0.1.37"
 tracing-appender = "0.2.2"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracing-subscriber = "0.3.16"
 futures-channel = "0.3.25"
 qr2term = { git = "https://github.com/boxdot/qr2term-rs", rev = "ed8ae7f" }
 clap = { version = "4.0.19", features = ["derive"] }
