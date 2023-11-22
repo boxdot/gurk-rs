@@ -1,5 +1,5 @@
 use chrono::{DateTime, Local, NaiveDateTime, TimeZone as _, Utc};
-use presage::prelude::PhoneNumber;
+use phonenumber::PhoneNumber;
 use ratatui::widgets::ListState;
 use regex_automata::Regex;
 use serde::{Deserialize, Serialize};

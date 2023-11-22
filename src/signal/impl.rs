@@ -5,14 +5,14 @@ use std::pin::Pin;
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use chrono::Utc;
+use presage::libsignal_service::content::{Content, ContentBody};
+use presage::libsignal_service::models::Contact;
 use presage::libsignal_service::prelude::{Group, ProfileKey};
-use presage::prelude::content::Reaction;
-use presage::prelude::proto::data_message::Quote;
-use presage::prelude::proto::{AttachmentPointer, ReceiptMessage};
-use presage::prelude::{
-    AttachmentSpec, Contact, Content, ContentBody, DataMessage, GroupContextV2,
-};
-use presage::Registered;
+use presage::libsignal_service::sender::AttachmentSpec;
+use presage::manager::{ReceivingMode, Registered};
+use presage::proto::data_message::{Quote, Reaction};
+use presage::proto::{AttachmentPointer, DataMessage, GroupContextV2, ReceiptMessage};
+use presage::store::ContentsStore;
 use presage_store_sled::SledStore;
 use tokio::sync::oneshot;
 use tokio_stream::Stream;
@@ -42,7 +42,7 @@ impl SignalManager for PresageManager {
     }
 
     fn user_id(&self) -> Uuid {
-        self.manager.state().service_ids.aci
+        self.manager.registration_data().service_ids.aci
     }
 
     async fn resolve_group(
@@ -51,7 +51,8 @@ impl SignalManager for PresageManager {
     ) -> anyhow::Result<ResolvedGroup> {
         let decrypted_group = self
             .manager
-            .group(&master_key_bytes)?
+            .store()
+            .group(master_key_bytes)?
             .context("no group found")?;
 
         let mut members = Vec::with_capacity(decrypted_group.members.len());
@@ -308,23 +309,41 @@ impl SignalManager for PresageManager {
     }
 
     async fn request_contacts_sync(&self) -> anyhow::Result<()> {
-        Ok(self.manager.clone().request_contacts_sync().await?)
+        Ok(self.manager.clone().sync_contacts().await?)
     }
 
     fn contact_by_id(&self, id: Uuid) -> anyhow::Result<Option<Contact>> {
-        Ok(self.manager.contact_by_id(&id)?)
+        Ok(self.manager.store().contact_by_id(&id)?)
     }
 
     async fn receive_messages(&mut self) -> anyhow::Result<Pin<Box<dyn Stream<Item = Content>>>> {
-        Ok(Box::pin(self.manager.receive_messages().await?))
+        Ok(Box::pin(
+            self.manager
+                .receive_messages(ReceivingMode::Forever)
+                .await?,
+        ))
     }
 
     fn contacts(&self) -> Box<dyn Iterator<Item = Contact>> {
-        Box::new(self.manager.contacts().into_iter().flatten().flatten())
+        Box::new(
+            self.manager
+                .store()
+                .contacts()
+                .into_iter()
+                .flatten()
+                .flatten(),
+        )
     }
 
     fn groups(&self) -> Box<dyn Iterator<Item = (GroupMasterKeyBytes, Group)>> {
-        Box::new(self.manager.groups().into_iter().flatten().flatten())
+        Box::new(
+            self.manager
+                .store()
+                .groups()
+                .into_iter()
+                .flatten()
+                .flatten(),
+        )
     }
 }
 

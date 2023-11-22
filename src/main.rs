@@ -18,7 +18,7 @@ use crossterm::{
 use gurk::app::App;
 use gurk::storage::{sync_from_signal, JsonStorage, MemCache, SqliteStorage, Storage};
 use gurk::{config, signal, ui};
-use presage::prelude::Content;
+use presage::libsignal_service::content::Content;
 use ratatui::{backend::CrosstermBackend, Terminal};
 use tokio::select;
 use tokio_stream::StreamExt;

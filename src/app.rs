@@ -21,16 +21,15 @@ use image::{ImageBuffer, ImageEncoder, Rgba};
 use itertools::Itertools;
 use notify_rust::Notification;
 use phonenumber::Mode;
-use presage::prelude::proto::{AttachmentPointer, ReceiptMessage, TypingMessage};
-use presage::prelude::{
-    content::{ContentBody, DataMessage, Metadata, SyncMessage},
-    proto::{
-        data_message::{Reaction, Sticker},
-        sync_message::Sent,
-        GroupContextV2,
-    },
-    AttachmentSpec, Content, ServiceAddress,
+use presage::libsignal_service::content::{Content, ContentBody, Metadata};
+use presage::libsignal_service::sender::AttachmentSpec;
+use presage::libsignal_service::ServiceAddress;
+use presage::proto::{
+    data_message::{Reaction, Sticker},
+    sync_message::Sent,
+    GroupContextV2,
 };
+use presage::proto::{AttachmentPointer, DataMessage, ReceiptMessage, SyncMessage, TypingMessage};
 use regex_automata::Regex;
 use tokio::sync::mpsc;
 use tracing::{error, info, trace, warn};

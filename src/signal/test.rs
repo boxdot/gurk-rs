@@ -2,10 +2,12 @@ use std::pin::Pin;
 use std::{cell::RefCell, rc::Rc};
 
 use async_trait::async_trait;
+use presage::libsignal_service::content::Content;
+use presage::libsignal_service::models::Contact;
 use presage::libsignal_service::prelude::{AttachmentIdentifier, Group};
-use presage::prelude::proto::data_message::Quote;
-use presage::prelude::proto::AttachmentPointer;
-use presage::prelude::{AttachmentSpec, Contact, Content};
+use presage::libsignal_service::sender::AttachmentSpec;
+use presage::proto::data_message::Quote;
+use presage::proto::AttachmentPointer;
 use tokio::sync::oneshot;
 use tokio_stream::Stream;
 use uuid::Uuid;
