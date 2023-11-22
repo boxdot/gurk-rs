@@ -133,7 +133,7 @@ impl ReceiptHandler {
         // over the current session
         self.receipt_set
             .entry(event.uuid)
-            .or_insert_with(ReceiptQueues::new)
+            .or_default()
             .add(event.timestamp, event.receipt_type);
     }
 
