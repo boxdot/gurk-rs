@@ -5,7 +5,7 @@ use gurk::app::App;
 use gurk::config::{Config, User};
 use gurk::signal::test::SignalManagerMock;
 use gurk::storage::{ForgetfulStorage, MemCache};
-use presage::prelude::Content;
+use presage::libsignal_service::content::Content;
 use tracing::info;
 
 fn test_app() -> App {

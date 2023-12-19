@@ -16,6 +16,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use gurk::app::App;
+use gurk::backoff::Backoff;
 use gurk::storage::{sync_from_signal, JsonStorage, MemCache, SqliteStorage, Storage};
 use gurk::{config, signal, ui};
 use presage::libsignal_service::content::Content;
@@ -155,6 +156,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
 
     let inner_tx = tx.clone();
     tokio::task::spawn_local(async move {
+        let mut backoff = Backoff::new();
         loop {
             let mut messages = if !is_online().await {
                 tokio::time::sleep(std::time::Duration::from_secs(10)).await;
@@ -195,12 +197,16 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
             }
 
             while let Some(message) = messages.next().await {
+                backoff.reset();
                 inner_tx
                     .send(Event::Message(message))
                     .await
                     .expect("logic error: events channel closed")
             }
-            error!("messages channel disconnected. trying to reconnect.")
+
+            let after = backoff.get();
+            error!(?after, "messages channel disconnected. trying to reconnect");
+            tokio::time::sleep(after).await;
         }
     });
 
