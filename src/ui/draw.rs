@@ -288,8 +288,20 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     } else {
         messages.rendered.offset
     };
+    let messages_to_render = messages
+        .items
+        .iter()
+        .rev()
+        .skip(offset)
+        .take(height)
+        .copied();
 
-    let names = NameResolver::compute_for_channel(app, &channel);
+    let names = NameResolver::compute(
+        app,
+        messages_to_render
+            .clone()
+            .map(|arrived_at| MessageId::new(channel_id, arrived_at)),
+    );
     let max_username_width = names.max_name_width();
 
     // message display options
@@ -302,21 +314,18 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let prefix = " ".repeat(prefix_width);
 
     // The day of the message at the bottom of the viewport
-    let messages_to_render = messages.items.iter().rev().skip(offset).copied();
     let mut previous_msg_day =
         utc_timestamp_msec_to_local(messages_to_render.clone().next().unwrap_or_default())
             .num_days_from_ce();
 
     let messages_from_offset = messages_to_render
         .flat_map(|arrived_at| {
-            let msg = app
-                .storage
-                .message(MessageId::new(channel_id, arrived_at))
-                .expect("non-existent message");
+            let Some(msg) = app.storage.message(MessageId::new(channel_id, arrived_at)) else {
+                return [None, None];
+            };
             let date_division = display_date_line(msg.arrived_at, &mut previous_msg_day, width);
             let show_receipt = ShowReceipt::from_msg(&msg, app.user_id, app.config.show_receipts);
             let msg = display_message(&names, &msg, &prefix, width, height, show_receipt);
-
             [date_division, msg]
         })
         .flatten();
