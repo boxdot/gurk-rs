@@ -29,8 +29,22 @@ impl<'a> NameResolver<'a> {
                 names_and_colors
                     .entry(message.from_id)
                     .or_insert_with(|| app.name_and_color(message.from_id));
-                if message_id.channel_id.is_user() && message_id.channel_id != app.user_id {
-                    break; // ammortize direct contacts
+                if message_id.channel_id.is_user() {
+                    if message_id.channel_id == app.user_id {
+                        break; // amortize notes channel
+                    } else if message.from_id != app.user_id {
+                        // use different color for our user name
+                        let &(_, contact_color) =
+                            names_and_colors.get(&message.from_id).expect("logic error");
+                        let (_, self_color) =
+                            names_and_colors.get_mut(&app.user_id).expect("logic error");
+                        if self_color == &contact_color {
+                            if let Some(idx) = USER_COLORS.iter().position(|&c| c == *self_color) {
+                                *self_color = USER_COLORS[(idx + 1) % USER_COLORS.len()];
+                            }
+                        }
+                        break; // amortize direct channel
+                    }
                 }
             }
         }
