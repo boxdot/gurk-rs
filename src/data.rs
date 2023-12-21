@@ -120,6 +120,10 @@ impl ChannelId {
         let group_id = secret_params.get_group_identifier();
         Ok(Self::Group(group_id))
     }
+
+    pub(crate) fn is_user(&self) -> bool {
+        matches!(self, ChannelId::User(_))
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
