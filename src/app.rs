@@ -160,7 +160,7 @@ impl App {
     // 2. User id is in presage's signal manager (that is, it is a known contact from our address
     //    book) => use it,
     // 3. User id is in the gurk's user name table (custom name) => use it,
-    // 4. give up with "Unknown User"
+    // 4. give up with UUID as user name
     pub fn name_by_id(&self, id: Uuid) -> String {
         if self.user_id == id {
             // it's me
@@ -174,12 +174,12 @@ impl App {
         {
             // user is known via our contact list
             contact.name
-        } else if let Some(name) = self.storage.name(id) {
+        } else if let Some(name) = self.storage.name(id).filter(|name| !name.is_empty()) {
             // user should be at least known via their profile or phone number
             name.into_owned()
         } else {
             // give up
-            "Unknown User".to_string()
+            id.to_string()
         }
     }
 
@@ -1079,13 +1079,18 @@ impl App {
 
     async fn ensure_user_is_known(&mut self, uuid: Uuid, profile_key: ProfileKeyBytes) {
         // is_known <=>
-        //   * in names, or
-        //   * is not a phone numbers, or
+        //   * in names, and
+        //   * is not empty
+        //   * is not a phone numbers, and
         //   * is not their uuid
         let is_known = self
             .storage
             .name(uuid)
-            .filter(|name| !util::is_phone_number(name) && Uuid::parse_str(name) != Ok(uuid))
+            .filter(|name| {
+                !name.is_empty()
+                    && !util::is_phone_number(name)
+                    && Uuid::parse_str(name) != Ok(uuid)
+            })
             .is_some();
         if !is_known {
             if let Some(name) = self
