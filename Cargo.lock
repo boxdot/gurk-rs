@@ -1755,6 +1755,8 @@ dependencies = [
  "dirs",
  "emojis",
  "futures-channel",
+ "hex",
+ "hex-literal",
  "hostname",
  "image",
  "insta",
@@ -1779,6 +1781,7 @@ dependencies = [
  "scopeguard",
  "serde",
  "serde_json",
+ "sha2",
  "sqlx",
  "tempfile",
  "textwrap",
@@ -1896,6 +1899,12 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
+
+[[package]]
+name = "hex-literal"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fe2267d4ed49bc07b63801559be28c718ea06c4738b7a03c94df7386d2cde46"
 
 [[package]]
 name = "hkdf"
@@ -3141,7 +3150,7 @@ checksum = "94e851c7654eed9e68d7d27164c454961a616cf8c203d500607ef22c737b51bb"
 [[package]]
 name = "presage"
 version = "0.6.0-dev"
-source = "git+https://github.com/whisperfish/presage?rev=2d9a02b#2d9a02b9f5534e2d79811be62ed70a64c75215c8"
+source = "git+https://github.com/whisperfish/presage?rev=6d7003f#6d7003fed1fa0397d42ac257ed49573d01ca6e93"
 dependencies = [
  "base64 0.21.5",
  "futures",
@@ -3152,6 +3161,7 @@ dependencies = [
  "rand",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror",
  "tokio",
  "url",
@@ -3160,7 +3170,7 @@ dependencies = [
 [[package]]
 name = "presage-store-cipher"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/presage?rev=2d9a02b#2d9a02b9f5534e2d79811be62ed70a64c75215c8"
+source = "git+https://github.com/whisperfish/presage?rev=6d7003f#6d7003fed1fa0397d42ac257ed49573d01ca6e93"
 dependencies = [
  "blake3",
  "chacha20poly1305",
@@ -3177,7 +3187,7 @@ dependencies = [
 [[package]]
 name = "presage-store-sled"
 version = "0.6.0-dev"
-source = "git+https://github.com/whisperfish/presage?rev=2d9a02b#2d9a02b9f5534e2d79811be62ed70a64c75215c8"
+source = "git+https://github.com/whisperfish/presage?rev=6d7003f#6d7003fed1fa0397d42ac257ed49573d01ca6e93"
 dependencies = [
  "async-trait",
  "base64 0.12.3",

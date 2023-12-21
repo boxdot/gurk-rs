@@ -1,3 +1,4 @@
+mod attachment;
 mod r#impl;
 mod manager;
 pub mod test;

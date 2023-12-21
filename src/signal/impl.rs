@@ -2,9 +2,8 @@
 
 use std::pin::Pin;
 
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 use async_trait::async_trait;
-use chrono::Utc;
 use presage::libsignal_service::content::{Content, ContentBody};
 use presage::libsignal_service::models::Contact;
 use presage::libsignal_service::prelude::{Group, ProfileKey};
@@ -16,14 +15,16 @@ use presage::store::ContentsStore;
 use presage_store_sled::SledStore;
 use tokio::sync::oneshot;
 use tokio_stream::Stream;
-use tracing::{error, warn};
+use tracing::error;
 use uuid::Uuid;
 
 use crate::data::{Channel, ChannelId, GroupData, Message};
 use crate::receipt::Receipt;
 use crate::util::utc_now_timestamp_msec;
 
-use super::{Attachment, GroupMasterKeyBytes, ProfileKeyBytes, ResolvedGroup, SignalManager};
+use super::{
+    attachment, Attachment, GroupMasterKeyBytes, ProfileKeyBytes, ResolvedGroup, SignalManager,
+};
 
 pub(super) struct PresageManager {
     manager: presage::Manager<SledStore, Registered>,
@@ -80,38 +81,11 @@ impl SignalManager for PresageManager {
         &mut self,
         attachment_pointer: AttachmentPointer,
     ) -> anyhow::Result<Attachment> {
-        let data_dir = dirs::data_dir()
-            .ok_or_else(|| anyhow!("could not find data directory"))?
-            .join("gurk");
         let attachment_data = self.manager.get_attachment(&attachment_pointer).await?;
-
-        let date = Utc::now().to_rfc3339();
-        let filename = match attachment_pointer.content_type.as_deref() {
-            Some("image/jpeg") => format!("signal-{date}.jpg"),
-            Some("image/gif") => format!("signal-{date}.gif"),
-            Some("image/png") => format!("signal-{date}.png"),
-            Some("video/mp4") => format!("signal-{date}.mp4"),
-            Some("application/pdf") => format!("signal-{date}.pdf"),
-            Some(mimetype) => {
-                warn!("unsupported attachment mimetype: {}", mimetype);
-                format!("signal-{date}")
-            }
-            None => {
-                format!("signal-{date}")
-            }
-        };
-
-        let filepath = data_dir.join(filename);
-        std::fs::write(&filepath, attachment_data)?;
-
-        Ok(Attachment {
-            id: date,
-            content_type: attachment_pointer
-                .content_type
-                .unwrap_or_else(|| "application/octet-stream".to_owned()),
-            filename: filepath,
-            size: attachment_pointer.size.unwrap_or_default(),
-        })
+        let data_dir = dirs::data_dir()
+            .context("could not find data directory")?
+            .join("gurk");
+        attachment::save(data_dir, attachment_pointer, attachment_data)
     }
 
     fn send_receipt(&self, sender_uuid: Uuid, timestamps: Vec<u64>, receipt: Receipt) {
