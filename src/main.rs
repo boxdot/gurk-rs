@@ -279,7 +279,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                     let row = event.row;
                     if let Some(channel_idx) =
                         ui::coords_within_channels_view(terminal.get_frame().size(), col, row)
-                            .map(|(_, row)| row as usize)
+                            .map(|(_, row)| usize::from(row) + app.channels.state.offset())
                             .filter(|&idx| idx < app.channels.items.len())
                     {
                         app.channels.state.select(Some(channel_idx));
