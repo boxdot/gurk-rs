@@ -90,6 +90,8 @@ impl SignalManager for PresageManager {
             Some("image/jpeg") => format!("signal-{date}.jpg"),
             Some("image/gif") => format!("signal-{date}.gif"),
             Some("image/png") => format!("signal-{date}.png"),
+            Some("video/mp4") => format!("signal-{date}.mp4"),
+            Some("application/pdf") => format!("signal-{date}.pdf"),
             Some(mimetype) => {
                 warn!("unsupported attachment mimetype: {}", mimetype);
                 format!("signal-{date}")
