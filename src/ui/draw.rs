@@ -782,6 +782,8 @@ mod tests {
             receipt: Receipt::Sent,
             body_ranges: Default::default(),
             send_failed: Default::default(),
+            edit: Default::default(),
+            edited: Default::default(),
         }
     }
 

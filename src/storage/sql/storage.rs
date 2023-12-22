@@ -211,6 +211,8 @@ struct SqlMessage {
     quote_attachments: Option<BlobData<Vec<Attachment>>>,
     quote_body_ranges: Option<BlobData<Vec<BodyRange>>>,
     quote_receipt: Option<BlobData<Receipt>>,
+    edit: Option<i64>,
+    edited: bool,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -235,6 +237,8 @@ impl SqlMessage {
             quote_attachments,
             quote_body_ranges,
             quote_receipt,
+            edit,
+            edited,
         } = self;
 
         let quote = quote_arrived_at
@@ -270,6 +274,12 @@ impl SqlMessage {
             receipt: receipt.map(BlobData::into_inner).unwrap_or_default(),
             body_ranges: body_ranges.map(BlobData::into_inner).unwrap_or_default(),
             send_failed: Default::default(),
+            edit: edit.and_then(|edit| {
+                edit.try_into()
+                    .map_err(|_| MessageConvertError::InvalidTimestamp)
+                    .ok_logged()
+            }),
+            edited,
         })
     }
 }
@@ -374,7 +384,7 @@ impl Storage for SqliteStorage {
                     SqlMessage,
                     r#"
                     SELECT
-                        m.arrived_at AS arrived_at,
+                        m.arrived_at AS "arrived_at!",
                         m.from_id AS "from_id: _",
                         m.message,
                         m.receipt AS "receipt: _",
@@ -386,10 +396,13 @@ impl Storage for SqliteStorage {
                         q.message AS quote_message,
                         q.attachments AS "quote_attachments: _",
                         q.body_ranges AS "quote_body_ranges: _",
-                        q.receipt AS "quote_receipt: _"
+                        q.receipt AS "quote_receipt: _",
+                        NULL AS "edit: _",
+                        (m.arrived_at IS NOT NULL) AS "edited: _"
                     FROM messages AS m
                     LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1
-                    WHERE m.channel_id = ?1
+                    WHERE m.channel_id = ?1 AND m.edit IS NULL
+                    GROUP BY m.arrived_at
                     ORDER BY m.arrived_at ASC
                 "#,
                     channel_id
@@ -419,7 +432,7 @@ impl Storage for SqliteStorage {
                     SqlMessage,
                     r#"
                     SELECT
-                        m.arrived_at AS arrived_at,
+                        m.arrived_at,
                         m.from_id AS "from_id: _",
                         m.message,
                         m.receipt AS "receipt: _",
@@ -431,10 +444,13 @@ impl Storage for SqliteStorage {
                         q.message AS quote_message,
                         q.attachments AS "quote_attachments: _",
                         q.body_ranges AS "quote_body_ranges: _",
-                        q.receipt AS "quote_receipt: _"
+                        q.receipt AS "quote_receipt: _",
+                        m.edit,
+                        false as "edited: _"
                     FROM messages AS m
                     LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1
                     WHERE m.channel_id = ?1 AND m.arrived_at = ?2
+                    GROUP BY m.arrived_at
                     LIMIT 1
                 "#,
                     channel_id,
@@ -468,21 +484,43 @@ impl Storage for SqliteStorage {
         let body_ranges = BlobData(&message.body_ranges);
         let attachments = BlobData(&message.attachments);
         let reactions = BlobData(&message.reactions);
-        let inserted = self.execute(|ctx| Box::pin(sqlx::query!(
-            r#"
-                REPLACE INTO messages(arrived_at, channel_id, from_id, message, quote, receipt, body_ranges, attachments, reactions)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            "#,
-            arrived_at,
-            channel_id,
-            from_id,
-            message_msg,
-            quote,
-            receipt,
-            body_ranges,
-            attachments,
-            reactions
-        ).execute(ctx.conn)));
+        let edit: Option<i64> = message.edit.and_then(|edit| {
+            edit.try_into()
+                .map_err(|_| MessageConvertError::InvalidTimestamp)
+                .ok_logged()
+        });
+        let inserted = self.execute(|ctx| {
+            Box::pin(
+                sqlx::query!(
+                    "
+                    REPLACE INTO messages(
+                        arrived_at,
+                        channel_id,
+                        from_id,
+                        message,
+                        quote,
+                        receipt,
+                        body_ranges,
+                        attachments,
+                        reactions,
+                        edit
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ",
+                    arrived_at,
+                    channel_id,
+                    from_id,
+                    message_msg,
+                    quote,
+                    receipt,
+                    body_ranges,
+                    attachments,
+                    reactions,
+                    edit
+                )
+                .execute(ctx.conn),
+            )
+        });
         inserted.ok_logged();
         Cow::Owned(message)
     }
@@ -603,6 +641,8 @@ mod tests {
                 receipt: Receipt::Nothing,
                 body_ranges: Default::default(),
                 send_failed: Default::default(),
+                edit: Default::default(),
+                edited: Default::default(),
             },
         );
 
@@ -629,6 +669,8 @@ mod tests {
                 receipt: Receipt::Nothing,
                 body_ranges: Default::default(),
                 send_failed: Default::default(),
+                edit: Default::default(),
+                edited: Default::default(),
             },
         );
 
@@ -737,6 +779,8 @@ mod tests {
                 receipt,
                 body_ranges: body_ranges.clone(),
                 send_failed: Default::default(),
+                edit: Default::default(),
+                edited: Default::default(),
             },
         );
 

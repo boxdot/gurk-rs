@@ -337,6 +337,8 @@ mod tests {
                 receipt: Default::default(),
                 body_ranges: Default::default(),
                 send_failed: Default::default(),
+                edit: Default::default(),
+                edited: Default::default(),
             }],
             unread_messages: 1,
             typing: Some(TypingSet::SingleTyping(false)),
@@ -355,6 +357,8 @@ mod tests {
                 receipt: Default::default(),
                 body_ranges: Default::default(),
                 send_failed: Default::default(),
+                edit: Default::default(),
+                edited: Default::default(),
             }],
             unread_messages: 2,
             typing: Some(TypingSet::GroupTyping(Default::default())),
@@ -504,6 +508,8 @@ mod tests {
                 receipt: Default::default(),
                 body_ranges: Default::default(),
                 send_failed: Default::default(),
+                edit: Default::default(),
+                edited: Default::default(),
             },
         );
 

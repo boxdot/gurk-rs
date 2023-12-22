@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                    SELECT\n                        m.arrived_at AS arrived_at,\n                        m.from_id AS \"from_id: _\",\n                        m.message,\n                        m.receipt AS \"receipt: _\",\n                        m.body_ranges AS \"body_ranges: _\",\n                        m.attachments AS \"attachments: _\",\n                        m.reactions AS \"reactions: _\",\n                        q.arrived_at AS \"quote_arrived_at: _\",\n                        q.from_id AS \"quote_from_id: _\",\n                        q.message AS quote_message,\n                        q.attachments AS \"quote_attachments: _\",\n                        q.body_ranges AS \"quote_body_ranges: _\",\n                        q.receipt AS \"quote_receipt: _\"\n                    FROM messages AS m\n                    LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1\n                    WHERE m.channel_id = ?1\n                    ORDER BY m.arrived_at ASC\n                ",
+  "query": "\n                    SELECT\n                        m.arrived_at,\n                        m.from_id AS \"from_id: _\",\n                        m.message,\n                        m.receipt AS \"receipt: _\",\n                        m.body_ranges AS \"body_ranges: _\",\n                        m.attachments AS \"attachments: _\",\n                        m.reactions AS \"reactions: _\",\n                        q.arrived_at AS \"quote_arrived_at: _\",\n                        q.from_id AS \"quote_from_id: _\",\n                        q.message AS quote_message,\n                        q.attachments AS \"quote_attachments: _\",\n                        q.body_ranges AS \"quote_body_ranges: _\",\n                        q.receipt AS \"quote_receipt: _\",\n                        m.edit,\n                        false as \"edited: _\"\n                    FROM messages AS m\n                    LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1\n                    WHERE m.channel_id = ?1 AND m.arrived_at = ?2\n                    GROUP BY m.arrived_at\n                    LIMIT 1\n                ",
   "describe": {
     "columns": [
       {
@@ -67,10 +67,20 @@
         "name": "quote_receipt: _",
         "ordinal": 12,
         "type_info": "Blob"
+      },
+      {
+        "name": "edit",
+        "ordinal": 13,
+        "type_info": "Int64"
+      },
+      {
+        "name": "edited: _",
+        "ordinal": 14,
+        "type_info": "Int"
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 2
     },
     "nullable": [
       false,
@@ -85,8 +95,10 @@
       true,
       true,
       true,
-      true
+      true,
+      true,
+      false
     ]
   },
-  "hash": "5621f642906160cc832a2d158718810230cf12761c28c48a1abdf74e49fbf042"
+  "hash": "07d206dba310ff81c5b44769e9863bc4b4d4af71c23105f9aec2ca83d9f32db5"
 }

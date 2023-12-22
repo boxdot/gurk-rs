@@ -694,6 +694,9 @@ impl App {
                 });
                 return Ok(());
             }
+            (metadata, ContentBody::SynchronizeMessage(sync_message)) => {
+                return self.handle_sync_message(metadata, sync_message);
+            }
             (
                 Metadata {
                     sender:
@@ -796,7 +799,7 @@ impl App {
             }
 
             unhandled => {
-                trace!(?unhandled, "skipping unhandled message");
+                info!(?unhandled, "skipping unhandled message");
                 return Ok(());
             }
         };
@@ -1155,7 +1158,7 @@ impl App {
         }
     }
 
-    async fn ensure_contact_channel_exists(&mut self, uuid: Uuid, name: &str) -> usize {
+    pub(crate) async fn ensure_contact_channel_exists(&mut self, uuid: Uuid, name: &str) -> usize {
         if let Some(channel_idx) = self
             .channels
             .items
@@ -1205,7 +1208,7 @@ impl App {
         self.touch_channel(channel_idx);
     }
 
-    fn touch_channel(&mut self, channel_idx: usize) {
+    pub(crate) fn touch_channel(&mut self, channel_idx: usize) {
         if self.channels.state.selected() != Some(channel_idx) {
             let channel_id = self.channels.items[channel_idx];
             let mut channel = self
@@ -1520,6 +1523,8 @@ mod tests {
                 receipt: Default::default(),
                 body_ranges: Default::default(),
                 send_failed: Default::default(),
+                edit: Default::default(),
+                edited: Default::default(),
             },
         );
 
