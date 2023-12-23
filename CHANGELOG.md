@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.4.2
+
+### Changed
+
+* utilize name offset space better (#258)
+* store attachments under a shorter path (#259)
+
+### Fixed
+
+* duplicate key events on windows (#249)
+* skipping sync group message from other device (#251)
+* message linking (#255)
+
+### Internal
+
+* upgrade signal protocol to 0.32 (#248)
+* upgrade sqlx (#252)
+* Add fibonacci backoff on reconnect (#256)
+* Reconnect websockets when those are closed (#257)
+
+[#248]: https://github.com/boxdot/gurk-rs/pull/248
+[#249]: https://github.com/boxdot/gurk-rs/pull/249
+[#251]: https://github.com/boxdot/gurk-rs/pull/251
+[#252]: https://github.com/boxdot/gurk-rs/pull/252
+[#255]: https://github.com/boxdot/gurk-rs/pull/255
+[#256]: https://github.com/boxdot/gurk-rs/pull/256
+[#257]: https://github.com/boxdot/gurk-rs/pull/257
+[#258]: https://github.com/boxdot/gurk-rs/pull/258
+[#259]: https://github.com/boxdot/gurk-rs/pull/259
+
 ## 0.4.1
 
 ### Added
