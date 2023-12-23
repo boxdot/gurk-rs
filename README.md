@@ -122,7 +122,7 @@ shall be licensed as above, without any additional terms or conditions.
 [`presage`]: https://github.com/whisperfish/presage
 [`src/config.rs`]: https://github.com/boxdot/gurk-rs/blob/master/src/config.rs
 [chat-badge]: https://img.shields.io/badge/chat-on%20signal-brightgreen?logo=signal
-[ci-badge]: https://github.com/boxdot/gurk-rs/workflows/CI/badge.svg
+[ci-badge]: https://github.com/boxdot/gurk-rs/workflows/ci/badge.svg
 [chat-link]: https://signal.group/#CjQKILaqQTWUZks14mPRSn0m0zyU9A-buNMG6haQBmWrxJHeEhCc7HLIwCFZRNDw63MWj-fA
 [config-location]: https://docs.rs/dirs/3.0.2/dirs/fn.config_dir.html
 [Releases]: https://github.com/boxdot/gurk-rs/releases
