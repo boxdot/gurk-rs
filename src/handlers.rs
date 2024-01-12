@@ -2,7 +2,7 @@ use anyhow::Context;
 use presage::libsignal_service::content::Metadata;
 use presage::proto::sync_message::Sent;
 use presage::proto::{DataMessage, EditMessage, SyncMessage};
-use tracing::{info, warn};
+use tracing::warn;
 use uuid::Uuid;
 
 use crate::app::App;
@@ -15,8 +15,6 @@ impl App {
         metadata: Metadata,
         sync_message: SyncMessage,
     ) -> anyhow::Result<()> {
-        info!("###### {sync_message:?}");
-
         let Some(channel_id) = sync_message.channel_id() else {
             warn!("dropping a sync message not attached to a channel");
             return Ok(());
@@ -38,15 +36,17 @@ impl App {
         }) = sync_message.sent
         {
             let from_id = metadata.sender.uuid;
+            // Note: target_sent_timestamp points to the previous edit or the original message
             let edited = self
                 .storage
                 .message(MessageId::new(channel_id, target_sent_timestamp))
                 .context("no message to edit")?;
 
             // get original message
-            let mut original = if let Some(edit) = edited.edit {
+            let mut original = if let Some(arrived_at) = edited.edit {
+                // previous edit => get original message
                 self.storage
-                    .message(MessageId::new(channel_id, edit))
+                    .message(MessageId::new(channel_id, arrived_at))
                     .context("no original edited message")?
                     .into_owned()
             } else {
@@ -62,6 +62,7 @@ impl App {
                 original
             };
 
+            // store the incoming edit
             self.storage.store_message(
                 channel_id,
                 Message {
@@ -71,7 +72,8 @@ impl App {
             );
 
             // override the body of the original message
-            original.message = Some(body);
+            original.message.replace(body);
+            original.edited = true;
             self.storage.store_message(channel_id, original);
 
             let channel_idx = self

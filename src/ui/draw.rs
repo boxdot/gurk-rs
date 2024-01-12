@@ -490,6 +490,7 @@ fn display_message(
         return None; // no text => nothing to render
     }
     add_reactions(msg, &mut text);
+    add_edited(msg, &mut text);
 
     let mut spans: Vec<Line> = vec![];
 
@@ -640,6 +641,12 @@ fn add_reactions(msg: &Message, out: &mut dyn fmt::Write) {
             ),
         )
         .expect("formatting reactions failed");
+    }
+}
+
+fn add_edited(msg: &Message, out: &mut dyn fmt::Write) {
+    if msg.edited {
+        write!(out, " [edited]").expect("formatting edited failed")
     }
 }
 

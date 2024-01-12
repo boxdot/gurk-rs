@@ -1,6 +1,12 @@
--- messages with added field `edit` and foreign key on `channels`
+-- edit points to the original edited message
+--
+-- for a chain of edits original, edit1, edit2, ... each edit points to the arrived_at field of
+-- the message original
 ALTER TABLE messages
-ADD COLUMN edit INTEGER;  -- reference to edited message
+ADD COLUMN edit INTEGER;
+
+ALTER TABLE messages
+ADD COLUMN edited BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE INDEX idx_messages_quote
 ON messages (quote);

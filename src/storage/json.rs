@@ -205,7 +205,13 @@ impl Storage for JsonStorage {
             .iter()
             .find(|ch| ch.id == channel_id)
         {
-            Box::new(channel.messages.iter().map(Cow::Borrowed))
+            Box::new(
+                channel
+                    .messages
+                    .iter()
+                    .filter(|message| message.is_edit())
+                    .map(Cow::Borrowed),
+            )
         } else {
             Box::new(std::iter::empty())
         }

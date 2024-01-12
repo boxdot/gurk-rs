@@ -32,7 +32,7 @@ use presage::proto::{
 use presage::proto::{AttachmentPointer, DataMessage, ReceiptMessage, SyncMessage, TypingMessage};
 use regex_automata::Regex;
 use tokio::sync::mpsc;
-use tracing::{error, info, trace, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use std::borrow::Cow;

@@ -398,11 +398,10 @@ impl Storage for SqliteStorage {
                         q.body_ranges AS "quote_body_ranges: _",
                         q.receipt AS "quote_receipt: _",
                         NULL AS "edit: _",
-                        (m.arrived_at IS NOT NULL) AS "edited: _"
+                        m.edited AS "edited: _"
                     FROM messages AS m
                     LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1
                     WHERE m.channel_id = ?1 AND m.edit IS NULL
-                    GROUP BY m.arrived_at
                     ORDER BY m.arrived_at ASC
                 "#,
                     channel_id
@@ -446,7 +445,7 @@ impl Storage for SqliteStorage {
                         q.body_ranges AS "quote_body_ranges: _",
                         q.receipt AS "quote_receipt: _",
                         m.edit,
-                        false as "edited: _"
+                        m.edited as "edited: _"
                     FROM messages AS m
                     LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1
                     WHERE m.channel_id = ?1 AND m.arrived_at = ?2
@@ -489,6 +488,7 @@ impl Storage for SqliteStorage {
                 .map_err(|_| MessageConvertError::InvalidTimestamp)
                 .ok_logged()
         });
+        let edited: bool = message.edited;
         let inserted = self.execute(|ctx| {
             Box::pin(
                 sqlx::query!(
@@ -503,9 +503,10 @@ impl Storage for SqliteStorage {
                         body_ranges,
                         attachments,
                         reactions,
-                        edit
+                        edit,
+                        edited
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ",
                     arrived_at,
                     channel_id,
@@ -516,7 +517,8 @@ impl Storage for SqliteStorage {
                     body_ranges,
                     attachments,
                     reactions,
-                    edit
+                    edit,
+                    edited
                 )
                 .execute(ctx.conn),
             )

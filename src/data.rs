@@ -162,10 +162,13 @@ pub struct Message {
     pub(crate) body_ranges: Vec<BodyRange>,
     #[serde(skip)]
     pub(crate) send_failed: Option<String>,
-    /// Arrived at of edited message
+    /// Arrived at of the originally edited message
+    ///
+    /// When several edits are done, this is the arrived_at of the very first original message.
     #[serde(default)]
     pub(crate) edit: Option<u64>,
-    #[serde(skip)]
+    /// Whether the message was edited
+    #[serde(default)]
     pub(crate) edited: bool,
 }
 
@@ -184,6 +187,11 @@ impl Message {
             edit: Default::default(),
             edited: Default::default(),
         }
+    }
+
+    /// Returns whether this message is an edit of an another message
+    pub(crate) fn is_edit(&self) -> bool {
+        self.edit.is_some()
     }
 }
 
