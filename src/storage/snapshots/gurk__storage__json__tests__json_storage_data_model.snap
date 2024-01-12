@@ -20,7 +20,9 @@ expression: data
             "attachments": [],
             "reactions": [],
             "receipt": "Nothing",
-            "body_ranges": []
+            "body_ranges": [],
+            "edit": null,
+            "edited": false
           }
         ],
         "unread_messages": 1
@@ -73,7 +75,9 @@ expression: data
             "attachments": [],
             "reactions": [],
             "receipt": "Nothing",
-            "body_ranges": []
+            "body_ranges": [],
+            "edit": null,
+            "edited": false
           }
         ],
         "unread_messages": 2
