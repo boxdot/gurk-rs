@@ -161,10 +161,15 @@ jobs:
           override: true
       - name: Build
         uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --target aarch64-unknown-linux-musl
+      - name: Build and run xtask
+        uses: actions-rs/cargo@v1
         # xtask miscompiles on musl platform without explicit target flag
         with:
           command: run
-          args: -p xtask --target x86_64-unknown-linux-musl -- --help
+          args: -p xtask --target aarch64-unknown-linux-musl -- --help
 
   build-x86_64-apple-darwin:
     name: build (x86_64-apple-darwin)
