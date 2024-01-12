@@ -94,8 +94,16 @@ impl<S: Storage> Storage for MemCache<S> {
 
     fn message(&self, message_id: MessageId) -> Option<Cow<Message>> {
         let messages = self.messages.get(&message_id.channel_id)?;
-        let idx = *self.messages_index.get(&message_id)?;
-        messages.get(idx).map(Cow::Borrowed)
+        let cached = self
+            .messages_index
+            .get(&message_id)
+            .and_then(|&idx| messages.get(idx).map(Cow::Borrowed));
+        if let Some(message) = cached {
+            Some(message)
+        } else {
+            let message = self.storage.message(message_id)?;
+            Some(message)
+        }
     }
 
     fn store_message(&mut self, channel_id: ChannelId, message: Message) -> Cow<Message> {

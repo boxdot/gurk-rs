@@ -205,7 +205,13 @@ impl Storage for JsonStorage {
             .iter()
             .find(|ch| ch.id == channel_id)
         {
-            Box::new(channel.messages.iter().map(Cow::Borrowed))
+            Box::new(
+                channel
+                    .messages
+                    .iter()
+                    .filter(|message| !message.is_edit())
+                    .map(Cow::Borrowed),
+            )
         } else {
             Box::new(std::iter::empty())
         }
@@ -312,7 +318,7 @@ impl Storage for JsonStorage {
 mod tests {
     use chrono::{DateTime, Utc};
     use tempfile::NamedTempFile;
-    use uuid::Uuid;
+    use uuid::{uuid, Uuid};
 
     use crate::data::TypingSet;
 
@@ -320,9 +326,9 @@ mod tests {
 
     #[test]
     fn test_json_storage_data_model() {
-        let user_id1: Uuid = "966960e0-a8cd-43f1-ac7a-2c986dd470cd".parse().unwrap();
-        let user_id2: Uuid = "a955d20f-6b83-4e69-846e-a99b1779ff7a".parse().unwrap();
-        let user_id3: Uuid = "ac9b8aa1-691a-47e1-a566-d3e942945d07".parse().unwrap();
+        let user_id1 = uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd");
+        let user_id2 = uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a");
+        let user_id3 = uuid!("ac9b8aa1-691a-47e1-a566-d3e942945d07");
         let channel1 = JsonChannel {
             id: user_id1.into(),
             name: "direct-channel".to_string(),
@@ -337,6 +343,8 @@ mod tests {
                 receipt: Default::default(),
                 body_ranges: Default::default(),
                 send_failed: Default::default(),
+                edit: Default::default(),
+                edited: Default::default(),
             }],
             unread_messages: 1,
             typing: Some(TypingSet::SingleTyping(false)),
@@ -355,6 +363,8 @@ mod tests {
                 receipt: Default::default(),
                 body_ranges: Default::default(),
                 send_failed: Default::default(),
+                edit: Default::default(),
+                edited: Default::default(),
             }],
             unread_messages: 2,
             typing: Some(TypingSet::GroupTyping(Default::default())),
@@ -404,7 +414,7 @@ mod tests {
     #[test]
     fn test_json_storage_store_existing_channel() {
         let mut storage = json_storage_from_snapshot();
-        let id: Uuid = "966960e0-a8cd-43f1-ac7a-2c986dd470cd".parse().unwrap();
+        let id = uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd");
         let mut channel = storage.channel(id.into()).unwrap().into_owned();
         channel.name = "new name".to_string();
         channel.unread_messages = 23;
@@ -428,7 +438,7 @@ mod tests {
     #[test]
     fn test_json_storage_store_new_channel() {
         let mut storage = json_storage_from_snapshot();
-        let id: Uuid = "e3690a5f-70a4-4a49-8125-ca689adb2d9e".parse().unwrap();
+        let id = uuid!("e3690a5f-70a4-4a49-8125-ca689adb2d9e");
         storage.store_channel(Channel {
             id: id.into(),
             name: "test".to_string(),
@@ -449,37 +459,49 @@ mod tests {
     #[test]
     fn test_json_storage_messages() {
         let storage = json_storage_from_snapshot();
-        let id: Uuid = "966960e0-a8cd-43f1-ac7a-2c986dd470cd".parse().unwrap();
+        let id = uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd").into();
 
-        let messages: Vec<_> = storage.messages(id.into()).collect();
+        let messages: Vec<_> = storage.messages(id).collect();
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].message.as_deref(), Some("hello"));
 
         let arrived_at = messages[0].arrived_at;
-        let message = storage
-            .message(MessageId::new(id.into(), arrived_at))
-            .unwrap();
+        let message = storage.message(MessageId::new(id, arrived_at)).unwrap();
         assert_eq!(message.arrived_at, arrived_at);
         assert_eq!(message.message.as_deref(), Some("hello"));
     }
 
     #[test]
+    fn test_json_storage_messages_edits_not_visible() {
+        let mut storage = json_storage_from_snapshot();
+        let id = uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd").into();
+        storage.store_message(
+            id,
+            Message {
+                edit: Some(23),
+                ..Message::text(Uuid::new_v4(), 42, "hello".to_owned())
+            },
+        );
+        assert_eq!(storage.messages(id).count(), 1);
+    }
+
+    #[test]
     fn test_json_storage_store_existing_message() {
         let mut storage = json_storage_from_snapshot();
-        let id: Uuid = "966960e0-a8cd-43f1-ac7a-2c986dd470cd".parse().unwrap();
+        let id = uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd").into();
         let arrived_at = 1664832050000;
         let mut message = storage
-            .message(MessageId::new(id.into(), arrived_at))
+            .message(MessageId::new(id, arrived_at))
             .unwrap()
             .into_owned();
         message.message = Some("changed".to_string());
 
         let arrived_at = message.arrived_at;
-        let stored_message = storage.store_message(id.into(), message);
+        let stored_message = storage.store_message(id, message);
         assert_eq!(stored_message.arrived_at, arrived_at);
         assert_eq!(stored_message.message.as_deref(), Some("changed"));
 
-        let messages: Vec<_> = storage.messages(id.into()).collect();
+        let messages: Vec<_> = storage.messages(id).collect();
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].arrived_at, arrived_at);
         assert_eq!(messages[0].message.as_deref(), Some("changed"));
@@ -488,7 +510,7 @@ mod tests {
     #[test]
     fn test_json_storage_store_new_message() {
         let mut storage = json_storage_from_snapshot();
-        let id: Uuid = "966960e0-a8cd-43f1-ac7a-2c986dd470cd".parse().unwrap();
+        let id = uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd");
         let arrived_at = 1664832050001;
         assert_eq!(storage.message(MessageId::new(id.into(), arrived_at)), None);
 
@@ -504,6 +526,8 @@ mod tests {
                 receipt: Default::default(),
                 body_ranges: Default::default(),
                 send_failed: Default::default(),
+                edit: Default::default(),
+                edited: Default::default(),
             },
         );
 
@@ -519,9 +543,9 @@ mod tests {
     #[test]
     fn test_json_storage_names() {
         let mut storage = json_storage_from_snapshot();
-        let id1: Uuid = "966960e0-a8cd-43f1-ac7a-2c986dd470cd".parse().unwrap();
-        let id2: Uuid = "a955d20f-6b83-4e69-846e-a99b1779ff7a".parse().unwrap();
-        let id3: Uuid = "91a6315b-027c-44ce-bacb-4d5cf012ba8c".parse().unwrap();
+        let id1 = uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd");
+        let id2 = uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a");
+        let id3 = uuid!("91a6315b-027c-44ce-bacb-4d5cf012ba8c");
 
         assert_eq!(storage.names().count(), 2);
         assert_eq!(storage.name(id1).unwrap(), "ellie");

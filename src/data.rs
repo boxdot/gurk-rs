@@ -162,6 +162,37 @@ pub struct Message {
     pub(crate) body_ranges: Vec<BodyRange>,
     #[serde(skip)]
     pub(crate) send_failed: Option<String>,
+    /// Arrived at of the originally edited message
+    ///
+    /// When several edits are done, this is the arrived_at of the very first original message.
+    #[serde(default)]
+    pub(crate) edit: Option<u64>,
+    /// Whether the message was edited
+    #[serde(default)]
+    pub(crate) edited: bool,
+}
+
+impl Message {
+    pub(crate) fn text(from_id: Uuid, arrived_at: u64, message: String) -> Self {
+        Self {
+            from_id,
+            message: Some(message),
+            arrived_at,
+            quote: Default::default(),
+            attachments: Default::default(),
+            reactions: Default::default(),
+            receipt: Default::default(),
+            body_ranges: Default::default(),
+            send_failed: Default::default(),
+            edit: Default::default(),
+            edited: Default::default(),
+        }
+    }
+
+    /// Returns whether this message is an edit of an another message
+    pub(crate) fn is_edit(&self) -> bool {
+        self.edit.is_some()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -269,6 +300,8 @@ impl Message {
             receipt: Receipt::Sent,
             body_ranges: body_ranges.into_iter().collect(),
             send_failed: Default::default(),
+            edit: Default::default(),
+            edited: Default::default(),
         }
     }
 
@@ -287,6 +320,8 @@ impl Message {
                 .filter_map(BodyRange::from_proto)
                 .collect(),
             send_failed: Default::default(),
+            edit: Default::default(),
+            edited: Default::default(),
         })
     }
 

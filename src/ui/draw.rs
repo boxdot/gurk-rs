@@ -490,6 +490,7 @@ fn display_message(
         return None; // no text => nothing to render
     }
     add_reactions(msg, &mut text);
+    add_edited(msg, &mut text);
 
     let mut spans: Vec<Line> = vec![];
 
@@ -643,6 +644,12 @@ fn add_reactions(msg: &Message, out: &mut dyn fmt::Write) {
     }
 }
 
+fn add_edited(msg: &Message, out: &mut dyn fmt::Write) {
+    if msg.edited {
+        write!(out, " [edited]").expect("formatting edited failed")
+    }
+}
+
 fn draw_help<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let max_event_width = SHORTCUTS
         .iter()
@@ -782,6 +789,8 @@ mod tests {
             receipt: Receipt::Sent,
             body_ranges: Default::default(),
             send_failed: Default::default(),
+            edit: Default::default(),
+            edited: Default::default(),
         }
     }
 

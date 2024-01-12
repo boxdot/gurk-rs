@@ -10,6 +10,7 @@ pub mod data;
 pub mod dev;
 pub(crate) mod emoji;
 pub mod event;
+mod handlers;
 pub mod input;
 pub mod receipt;
 pub mod shortcuts;
