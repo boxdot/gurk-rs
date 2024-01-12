@@ -167,13 +167,13 @@ jobs:
           args: -p xtask --target x86_64-unknown-linux-musl -- --help
 
   build-x86_64-apple-darwin:
-    name: build and test (x86_64-apple-darwin)
+    name: build (x86_64-apple-darwin)
     runs-on: macos-latest
-    env:
-      SELECT_XCODE: /Applications/Xcode_15.0.app
     steps:
       - name: Select XCode version
-        run: sudo xcode-select -s "${SELECT_XCODE}"
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
       - name: Checkout repository
         uses: actions/checkout@v2
         with:
@@ -195,13 +195,13 @@ jobs:
           args: --help
 
   build-test-aarch64-apple-darwin:
-    name: build (aarch64-apple-darwin)
+    name: build and test (aarch64-apple-darwin)
     runs-on: macos-latest
-    env:
-      SELECT_XCODE: /Applications/Xcode_15.0.app
     steps:
       - name: Select XCode version
-        run: sudo xcode-select -s "${SELECT_XCODE}"
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
       - name: Checkout repository
         uses: actions/checkout@v2
         with:
