@@ -2,7 +2,7 @@ use anyhow::Context;
 use presage::libsignal_service::content::Metadata;
 use presage::proto::sync_message::Sent;
 use presage::proto::{DataMessage, EditMessage, SyncMessage};
-use tracing::warn;
+use tracing::debug;
 use uuid::Uuid;
 
 use crate::app::App;
@@ -16,7 +16,7 @@ impl App {
         sync_message: SyncMessage,
     ) -> anyhow::Result<()> {
         let Some(channel_id) = sync_message.channel_id() else {
-            warn!("dropping a sync message not attached to a channel");
+            debug!("dropping a sync message not attached to a channel");
             return Ok(());
         };
 

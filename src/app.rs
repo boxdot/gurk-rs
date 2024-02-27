@@ -12,7 +12,7 @@ use crate::storage::{MessageId, Storage};
 use crate::util::{self, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX};
 use std::io::Cursor;
 
-use anyhow::{anyhow, bail, Context as _};
+use anyhow::{anyhow, Context as _};
 use arboard::Clipboard;
 use chrono::{DateTime, Utc};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -32,7 +32,7 @@ use presage::proto::{
 use presage::proto::{AttachmentPointer, DataMessage, ReceiptMessage, SyncMessage, TypingMessage};
 use regex_automata::Regex;
 use tokio::sync::mpsc;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use std::borrow::Cow;
@@ -526,24 +526,31 @@ impl App {
                         .context("sync message with destination without profile key")?
                         .try_into()
                         .map_err(|_| anyhow!("invalid profile key"))?;
-                    let destination_uuid = Uuid::parse_str(&destination_uuid).unwrap();
+                    let destination_uuid = destination_uuid.parse()?;
                     let name = self.name_by_id(destination_uuid);
                     self.ensure_user_is_known(destination_uuid, profile_key)
                         .await;
                     self.ensure_contact_channel_exists(destination_uuid, &name)
                         .await
                 } else {
-                    bail!("message without a group context and without a destination uuid");
+                    debug!("dropping a sync message not attached to a channel");
+                    return Ok(());
                 };
 
                 add_emoji_from_sticker(&mut body, sticker);
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let attachments = self.save_attachments(attachment_pointers).await;
                 let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
+
                 let message = Message {
                     quote,
                     ..Message::new(user_id, body, body_ranges, timestamp, attachments)
                 };
+
+                if message.is_empty() {
+                    debug!("dropping empty message");
+                    return Ok(());
+                }
 
                 (channel_idx, message)
             }

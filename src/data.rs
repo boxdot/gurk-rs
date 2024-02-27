@@ -172,29 +172,6 @@ pub struct Message {
     pub(crate) edited: bool,
 }
 
-impl Message {
-    pub(crate) fn text(from_id: Uuid, arrived_at: u64, message: String) -> Self {
-        Self {
-            from_id,
-            message: Some(message),
-            arrived_at,
-            quote: Default::default(),
-            attachments: Default::default(),
-            reactions: Default::default(),
-            receipt: Default::default(),
-            body_ranges: Default::default(),
-            send_failed: Default::default(),
-            edit: Default::default(),
-            edited: Default::default(),
-        }
-    }
-
-    /// Returns whether this message is an edit of an another message
-    pub(crate) fn is_edit(&self) -> bool {
-        self.edit.is_some()
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct BodyRange {
     pub(crate) start: u16,
@@ -305,6 +282,22 @@ impl Message {
         }
     }
 
+    pub(crate) fn text(from_id: Uuid, arrived_at: u64, message: String) -> Self {
+        Self {
+            from_id,
+            message: Some(message),
+            arrived_at,
+            quote: Default::default(),
+            attachments: Default::default(),
+            reactions: Default::default(),
+            receipt: Default::default(),
+            body_ranges: Default::default(),
+            send_failed: Default::default(),
+            edit: Default::default(),
+            edited: Default::default(),
+        }
+    }
+
     pub fn from_quote(quote: Quote) -> Option<Message> {
         Some(Message {
             from_id: quote.author_aci?.parse().ok()?,
@@ -325,7 +318,15 @@ impl Message {
         })
     }
 
+    /// Returns whether this message is an edit of an another message
+    pub(crate) fn is_edit(&self) -> bool {
+        self.edit.is_some()
+    }
+
     pub fn is_empty(&self) -> bool {
-        self.message.is_none() && self.attachments.is_empty() && self.reactions.is_empty()
+        self.message.is_none()
+            && self.attachments.is_empty()
+            && self.reactions.is_empty()
+            && self.quote.is_none()
     }
 }
