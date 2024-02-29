@@ -47,6 +47,7 @@ jobs:
         with:
           toolchain: stable
           targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
       - run: cargo build --target ${{ matrix.target }}
       - run: cargo test
         if: ${{ matrix.target == 'x86_64-unknown-linux-gnu' }}
@@ -96,6 +97,7 @@ jobs:
         with:
           toolchain: stable
           targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
       - run: cargo build --target ${{ matrix.target }}
       - run: cargo test
         if: ${{ matrix.target == 'x86_64-apple-darwin' }}
