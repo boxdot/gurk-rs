@@ -103,4 +103,4 @@ harness = false
 [patch.crates-io]
 # signal-protocol uses a fork of this library via the patch mechanism of cargo.
 # Since it is not transitive, we have to add the patch here explicitly.
-"curve25519-dalek" = { git = 'https://github.com/signalapp/curve25519-dalek', tag = 'signal-curve25519-4.0.0' }
+"curve25519-dalek" = { git = 'https://github.com/signalapp/curve25519-dalek', tag = 'signal-curve25519-4.1.1' }

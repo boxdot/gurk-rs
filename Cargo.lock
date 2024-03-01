@@ -1022,46 +1022,19 @@ dependencies = [
 
 [[package]]
 name = "curve25519-dalek"
-version = "4.0.0"
-source = "git+https://github.com/signalapp/curve25519-dalek?tag=signal-curve25519-4.0.0#463e5c7cba32561ffee8a281c4455ff3c25660d4"
-dependencies = [
- "cfg-if",
- "cpufeatures",
- "curve25519-dalek-derive 0.1.0 (git+https://github.com/signalapp/curve25519-dalek?tag=signal-curve25519-4.0.0)",
- "digest",
- "fiat-crypto 0.1.20",
- "platforms",
- "rustc_version",
- "serde",
- "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "curve25519-dalek"
 version = "4.1.1"
 source = "git+https://github.com/signalapp/curve25519-dalek?tag=signal-curve25519-4.1.1#a12ab4e58455bb3dc7cd73a0f9f3443507b2854b"
 dependencies = [
  "cfg-if",
  "cpufeatures",
- "curve25519-dalek-derive 0.1.0 (git+https://github.com/signalapp/curve25519-dalek?tag=signal-curve25519-4.1.1)",
+ "curve25519-dalek-derive",
  "digest",
- "fiat-crypto 0.2.6",
+ "fiat-crypto",
  "platforms",
  "rustc_version",
  "serde",
  "subtle",
  "zeroize",
-]
-
-[[package]]
-name = "curve25519-dalek-derive"
-version = "0.1.0"
-source = "git+https://github.com/signalapp/curve25519-dalek?tag=signal-curve25519-4.0.0#463e5c7cba32561ffee8a281c4455ff3c25660d4"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.52",
 ]
 
 [[package]]
@@ -1400,12 +1373,6 @@ checksum = "4f9bfee30e4dedf0ab8b422f03af778d9612b63f502710fc500a334ebe2de645"
 dependencies = [
  "simd-adler32",
 ]
-
-[[package]]
-name = "fiat-crypto"
-version = "0.1.20"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e825f6987101665dea6ec934c09ec6d721de7bc1bf92248e1d5810c8cd636b77"
 
 [[package]]
 name = "fiat-crypto"
@@ -2261,7 +2228,7 @@ dependencies = [
  "arrayref",
  "async-trait",
  "ctr",
- "curve25519-dalek 4.0.0",
+ "curve25519-dalek",
  "derive-where",
  "displaydoc",
  "hex",
@@ -3066,7 +3033,7 @@ name = "poksho"
 version = "0.7.0"
 source = "git+https://github.com/signalapp/libsignal?tag=v0.40.1#f980fccd8ae72fe21dc202d644b358667d60e2b0"
 dependencies = [
- "curve25519-dalek 4.0.0",
+ "curve25519-dalek",
  "hmac",
  "sha2",
  "subtle",
@@ -5348,7 +5315,7 @@ version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7e468321c81fb07fa7f4c636c3972b9100f0346e5b6a9f2bd0603a52f7ed277"
 dependencies = [
- "curve25519-dalek 4.0.0",
+ "curve25519-dalek",
  "rand_core",
  "serde",
  "zeroize",
@@ -5538,7 +5505,7 @@ name = "zkcredential"
 version = "0.1.0"
 source = "git+https://github.com/signalapp/libsignal?tag=v0.40.1#f980fccd8ae72fe21dc202d644b358667d60e2b0"
 dependencies = [
- "curve25519-dalek 4.0.0",
+ "curve25519-dalek",
  "derive-where",
  "displaydoc",
  "lazy_static",
@@ -5555,7 +5522,7 @@ source = "git+https://github.com/signalapp/libsignal?tag=v0.40.1#f980fccd8ae72fe
 dependencies = [
  "aes-gcm-siv",
  "bincode",
- "curve25519-dalek 4.1.1",
+ "curve25519-dalek",
  "derive-where",
  "displaydoc",
  "hex",
