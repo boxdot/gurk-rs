@@ -48,6 +48,8 @@ jobs:
           toolchain: stable
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
       - run: cargo build --target ${{ matrix.target }}
       - run: cargo test
         if: ${{ matrix.target == 'x86_64-unknown-linux-gnu' }}
@@ -67,13 +69,15 @@ jobs:
         - /usr/local/cargo/registry
     steps:
       - name: system dependencies
-        run: apk add --no-cache musl-dev lld protoc bash clang llvm
+        run: apk add --no-cache musl-dev lld protoc bash clang llvm tar
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
       - run: cargo build --target ${{ matrix.target }}
       - run: cargo test --target ${{ matrix.target }}
         if: ${{ matrix.target == 'x86_64-unknown-linux-musl' }}
@@ -98,6 +102,8 @@ jobs:
           toolchain: stable
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
       - run: cargo build --target ${{ matrix.target }}
       - run: cargo test
         if: ${{ matrix.target == 'x86_64-apple-darwin' }}
