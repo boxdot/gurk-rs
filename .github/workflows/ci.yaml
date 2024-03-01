@@ -97,7 +97,7 @@ jobs:
       - name: xcode
         run: sudo xcode-select -s "${SELECT_XCODE}"
       - name: protoc
-        uses: Arduino/actions/setup-protoc@master
+        uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@v4
