@@ -100,6 +100,10 @@ jobs:
     steps:
       - name: xcode
         run: sudo xcode-select -s "${SELECT_XCODE}"
+      - name: protoc
+        uses: Arduino/actions/setup-protoc@master
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@v4
         with:
           fetch-depth: ${{ env.FETCH_DEPTH }}
