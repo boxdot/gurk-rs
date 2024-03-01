@@ -10,6 +10,7 @@ use crate::signal::{
 };
 use crate::storage::{MessageId, Storage};
 use crate::util::{self, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX};
+use std::cell::Cell;
 use std::io::Cursor;
 
 use anyhow::{anyhow, Context as _};
@@ -64,6 +65,8 @@ pub struct App {
     pub(crate) select_channel: SelectChannel,
     clipboard: Option<Clipboard>,
     event_tx: mpsc::UnboundedSender<Event>,
+    // It is expensive to hit the signal manager contacts storage, so we cache it
+    names_cache: Cell<Option<BTreeMap<Uuid, String>>>,
 }
 
 impl App {
@@ -119,6 +122,7 @@ impl App {
             select_channel: Default::default(),
             clipboard,
             event_tx,
+            names_cache: Default::default(),
         };
         Ok((app, event_rx))
     }
@@ -164,23 +168,39 @@ impl App {
     pub fn name_by_id(&self, id: Uuid) -> String {
         if self.user_id == id {
             // it's me
-            self.config.user.name.clone()
-        } else if let Some(contact) = self
-            .signal_manager
-            .contact_by_id(id)
-            .ok()
-            .flatten()
-            .filter(|contact| !contact.name.is_empty())
-        {
-            // user is known via our contact list
-            contact.name
-        } else if let Some(name) = self.storage.name(id).filter(|name| !name.is_empty()) {
-            // user should be at least known via their profile or phone number
-            name.into_owned()
-        } else {
+            return self.config.user.name.clone();
+        };
+        self.name_by_id_cached(id, |id| {
+            if let Some(name) = self
+                .signal_manager
+                .contact_by_id(id)
+                .ok()
+                .flatten()
+                .map(|contact| contact.name)
+                .filter(|name| !name.trim().is_empty())
+            {
+                return name;
+            }
+            if let Some(name) = self.storage.name(id).filter(|name| !name.trim().is_empty()) {
+                // user should be at least known via their profile or phone number
+                return name.into_owned();
+            }
             // give up
             id.to_string()
-        }
+        })
+    }
+
+    fn name_by_id_cached(&self, id: Uuid, on_miss: impl FnOnce(Uuid) -> String) -> String {
+        let mut cache = self.names_cache.take().unwrap_or_default();
+        let name = if let Some(name) = cache.get(&id).cloned() {
+            name
+        } else {
+            let name = on_miss(id);
+            cache.insert(id, name.clone());
+            name
+        };
+        self.names_cache.replace(Some(cache));
+        name
     }
 
     pub fn channel_name<'a>(&self, channel: &'a Channel) -> Cow<'a, str> {
@@ -436,7 +456,7 @@ impl App {
     }
 
     pub async fn on_message(&mut self, content: Content) -> anyhow::Result<()> {
-        // tracing::debug!("incoming: {:#?}", content);
+        tracing::debug!("incoming: {:#?}", content);
 
         #[cfg(feature = "dev")]
         if self.config.developer.dump_raw_messages {
