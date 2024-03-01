@@ -456,7 +456,7 @@ impl App {
     }
 
     pub async fn on_message(&mut self, content: Content) -> anyhow::Result<()> {
-        tracing::debug!("incoming: {:#?}", content);
+        // tracing::debug!("incoming: {:#?}", content);
 
         #[cfg(feature = "dev")]
         if self.config.developer.dump_raw_messages {
