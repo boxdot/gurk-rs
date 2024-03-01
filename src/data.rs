@@ -246,7 +246,7 @@ impl BodyRange {
                 AssociatedValue::MentionUuid(uuid)
             }
             proto::body_range::AssociatedValue::Style(style) => AssociatedValue::Style(
-                proto::body_range::Style::try_from(style)
+                proto::body_range::Style::from_i32(style)
                     .map(Style::from_proto)
                     .unwrap_or_default(),
             ),
