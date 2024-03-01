@@ -69,7 +69,7 @@ jobs:
         - /usr/local/cargo/registry
     steps:
       - name: system dependencies
-        run: apk add --no-cache musl-dev lld protoc bash clang llvm tar
+        run: apk add --no-cache tar musl-dev lld protoc bash clang llvm
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@v1
         with:
