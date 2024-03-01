@@ -6,224 +6,106 @@ env:
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
   RUSTUP_MAX_RETRIES: 10
-  FETCH_DEPTH: 0
 
 jobs:
   rustfmt:
     name: rustfmt
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: ${{ env.FETCH_DEPTH }}
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
-          profile: minimal
           components: rustfmt
-          override: true
-      - name: Check format
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: -- --check
+      - run: cargo fmt -- --check
 
   clippy:
     name: clippy
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: ${{ env.FETCH_DEPTH }}
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+      - name: system dependencies
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
-          profile: minimal
           components: clippy
-          override: true
-      - name: Clippy
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --locked
+      - run: cargo clippy --locked
 
-  build-test-x86_64-unknown-linux-gnu:
-    name: build and test (x86_64-unknown-linux-gnu)
+  build-gnu:
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - aarch64-unknown-linux-gnu
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: ${{ env.FETCH_DEPTH }}
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+      - name: system dependencies
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler gcc-aarch64-linux-gnu
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
-          profile: minimal
-      - name: Build
-        uses: actions-rs/cargo@v1
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
         with:
-          command: build
-      - name: Test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-      - name: Build and run xtask
-        uses: actions-rs/cargo@v1
-        with:
-          command: xtask
-          args: --help
+          key: ${{ matrix.target }}
+      - run: cargo build --target ${{ matrix.target }}
+      - run: cargo test
+        if: ${{ matrix.target == 'x86_64-unknown-linux-gnu' }}
+      - run: cargo xtask --help
+        if: ${{ matrix.target == 'x86_64-unknown-linux-gnu' }}
 
-  build-x86_64-unknown-linux-musl:
-    name: build (x86_64-unknown-linux-musl)
+  build-musl:
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-musl
+          - aarch64-unknown-linux-musl
     runs-on: ubuntu-latest
     container:
       image: rust:alpine
       volumes:
         - /usr/local/cargo/registry
     steps:
-      - name: Install dependencies
-        run: apk add --no-cache musl-dev lld protoc
-      - name: Checkout repository
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: ${{ env.FETCH_DEPTH }}
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+      - name: system dependencies
+        run: apk add --no-cache tar musl-dev lld protoc bash clang llvm
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
-          profile: minimal
-          target: x86_64-unknown-linux-musl
-      - name: Build
-        uses: actions-rs/cargo@v1
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
         with:
-          command: build
-          args: --target x86_64-unknown-linux-musl
-      - name: Build and run xtask
-        uses: actions-rs/cargo@v1
-        # xtask miscompiles on musl platform without explicit target flag
-        with:
-          command: run
-          args: -p xtask --target x86_64-unknown-linux-musl -- --help
+          key: ${{ matrix.target }}
+      - run: cargo build --target ${{ matrix.target }}
+      - run: cargo test --target ${{ matrix.target }}
+        if: ${{ matrix.target == 'x86_64-unknown-linux-musl' }}
+      - run: cargo run -p xtask --target ${{ matrix.target }} -- --help
+        if: ${{ matrix.target == 'x86_64-unknown-linux-musl' }}
 
-  build-aarch64-unknown-linux-gnu:
-    name: build (aarch64-unknown-linux-gnu)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: ${{ env.FETCH_DEPTH }}
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: aarch64-unknown-linux-gnu
-          profile: minimal
-          override: true
-      - name: Install target toolchain
-        run: sudo apt-get update && sudo apt-get install gcc-aarch64-linux-gnu
-      - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --target aarch64-unknown-linux-gnu
-      - name: Build and run xtask
-        uses: actions-rs/cargo@v1
-        with:
-          command: xtask
-          args: --help
-
-  build-aarch64-unknown-linux-musl:
-    name: build (aarch64-unknown-linux-musl)
-    runs-on: ubuntu-latest
-    container:
-      image: rust:alpine
-      volumes:
-        - /usr/local/cargo/registry
-    steps:
-      - name: Install dependencies
-        run: apk add --no-cache musl-dev clang lld llvm protoc
-      - name: Checkout repository
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: ${{ env.FETCH_DEPTH }}
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          target: aarch64-unknown-linux-musl
-          override: true
-      - name: Build
-        uses: actions-rs/cargo@v1
-        # xtask miscompiles on musl platform without explicit target flag
-        with:
-          command: run
-          args: -p xtask --target x86_64-unknown-linux-musl -- --help
-
-  build-test-x86_64-apple-darwin:
-    name: build and test (x86_64-apple-darwin)
+  build-apple:
+    strategy:
+      matrix:
+        target:
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
     runs-on: macos-latest
     env:
       SELECT_XCODE: /Applications/Xcode_13.2.app
     steps:
-      - name: Select XCode version
+      - name: xcode
         run: sudo xcode-select -s "${SELECT_XCODE}"
-      - name: Checkout repository
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: ${{ env.FETCH_DEPTH }}
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
-          profile: minimal
-          override: true
-      - name: Build
-        uses: actions-rs/cargo@v1
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
         with:
-          command: build
-      - name: Test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-      - name: Build and run xtask
-        uses: actions-rs/cargo@v1
-        with:
-          command: xtask
-          args: --help
-
-  build-aarch64-apple-darwin:
-    name: build (aarch64-apple-darwin)
-    runs-on: macos-latest
-    env:
-      SELECT_XCODE: /Applications/Xcode_13.2.app
-    steps:
-      - name: Select XCode version
-        run: sudo xcode-select -s "${SELECT_XCODE}"
-      - name: Checkout repository
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: ${{ env.FETCH_DEPTH }}
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: aarch64-apple-darwin
-          profile: minimal
-          override: true
-      - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --target aarch64-apple-darwin
-      - name: Build and run xtask
-        uses: actions-rs/cargo@v1
-        with:
-          command: xtask
-          args: --help
+          key: ${{ matrix.target }}
+      - run: cargo build --target ${{ matrix.target }}
+      - run: cargo test
+        if: ${{ matrix.target == 'x86_64-apple-darwin' }}
+      - run: cargo xtask --help
+        if: ${{ matrix.target == 'x86_64-apple-darwin' }}
