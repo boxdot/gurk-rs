@@ -1,5 +1,5 @@
 # gurk 🥒
-![CI][ci-badge] [![chat][chat-badge]][chat-link]
+[![ci][ci-badge]][ci-link] [![chat][chat-badge]][chat-link]
 
 [Signal Messenger] client for terminal.
 
@@ -61,21 +61,6 @@ libraries that are not available on crates.io.
 
 [![chat-qr](chat-qr.png)][chat-link]
 
-## Features
-
-* [ ] Store data in the db from [`presage`]'s `Manager` instead of a JSON file.
-* [ ] Encrypt the storage by default.
-* [x] Notifications over dbus or similar.
-* [x] Scrolling of messages.
-* [x] Reply functionality to a single message.
-* [ ] Mouse navigation (works for channels, missing for the messages list).
-* [ ] Search of messages/chats. Add quick switch between chats by name.
-* [x] Multiline messages; the `Enter` key sends the message, `Alt+Enter` switches modes.
-* [x] Viewing/sending of attachments.
-* [ ] Support for blocked contacts/groups.
-* [x] Reactions with emojis.
-* [x] Open URL in selected message.
-
 # Key bindings
 
 * App navigation
@@ -122,7 +107,8 @@ shall be licensed as above, without any additional terms or conditions.
 [`presage`]: https://github.com/whisperfish/presage
 [`src/config.rs`]: https://github.com/boxdot/gurk-rs/blob/master/src/config.rs
 [chat-badge]: https://img.shields.io/badge/chat-on%20signal-brightgreen?logo=signal
-[ci-badge]: https://github.com/boxdot/gurk-rs/workflows/ci/badge.svg
+[ci-badge]: https://github.com/boxdot/gurk-rs/actions/workflows/ci.yaml/badge.svg
+[ci-link]: https://github.com/boxdot/gurk-rs/actions/workflows/ci.yaml
 [chat-link]: https://signal.group/#CjQKILaqQTWUZks14mPRSn0m0zyU9A-buNMG6haQBmWrxJHeEhCc7HLIwCFZRNDw63MWj-fA
 [config-location]: https://docs.rs/dirs/3.0.2/dirs/fn.config_dir.html
 [Releases]: https://github.com/boxdot/gurk-rs/releases

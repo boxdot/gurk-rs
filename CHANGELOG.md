@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.4.3
+
+Due to several fixes in `libsignal-service-rs`/`presage` and the upgrade of
+libsignal protocol it is recommended to relink the account:
+
+```
+gurk --relink
+```
+
+### Added
+
+- handle incoming edit messages ([#263])
+
+### Fixed
+
+- multiple instances unlink account ([#262])
+- do not handle empty messages ([#265])
+- cache contact names ([#268])
+- upgrade libsignal protocol 0.32.0 -> 0.40.1 ([#269])
+
+[#262]: https://github.com/boxdot/gurk-rs/pull/262
+[#263]: https://github.com/boxdot/gurk-rs/pull/263
+[#265]: https://github.com/boxdot/gurk-rs/pull/265
+[#268]: https://github.com/boxdot/gurk-rs/pull/268
+[#269]: https://github.com/boxdot/gurk-rs/pull/269
+
 ## 0.4.2
 
 ### Changed
