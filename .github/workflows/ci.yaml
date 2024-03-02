@@ -96,6 +96,10 @@ jobs:
     steps:
       - name: xcode
         run: sudo xcode-select -s "${SELECT_XCODE}"
+      - name: protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@v1
         with:
