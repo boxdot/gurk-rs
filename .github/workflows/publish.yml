@@ -1,10 +1,9 @@
 name: release
 
-on: [push, pull_request]
-# on:
-#   push:
-#     tags:
-#       - 'v*.*.*'
+on:
+  push:
+    tags:
+      - 'v*.*.*'
 
 env:
   CARGO_INCREMENTAL: 0
