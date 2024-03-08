@@ -1,9 +1,10 @@
 name: release
 
-on:
-  push:
-    tags:
-      - 'v*.*.*'
+on: [push, pull_request]
+# on:
+#   push:
+#     tags:
+#       - 'v*.*.*'
 
 env:
   CARGO_INCREMENTAL: 0
@@ -127,31 +128,31 @@ jobs:
       - dist-musl
       - dist-apple
     steps:
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
           name: dist-changelog
           path: dist
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
           name: dist-aarch64-apple-darwin
           path: dist
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
           name: dist-x86_64-apple-darwin
           path: dist
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
           name: dist-x86_64-unknown-linux-gnu
           path: dist
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
           name: dist-x86_64-unknown-linux-musl
           path: dist
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
           name: dist-aarch64-unknown-linux-gnu
           path: dist
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
           name: dist-aarch64-unknown-linux-musl
           path: dist
