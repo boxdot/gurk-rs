@@ -31,6 +31,11 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    println!(
+        "You are using an outdated version of Gurk. \
+        Install or download the latest version from GitHub"
+    );
+
     let args = Args::from_args();
 
     let mut app = App::try_new(args.verbose)?;
