@@ -127,40 +127,38 @@ jobs:
       - dist-musl
       - dist-apple
     steps:
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
           name: dist-changelog
           path: dist
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
           name: dist-aarch64-apple-darwin
           path: dist
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
           name: dist-x86_64-apple-darwin
           path: dist
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
           name: dist-x86_64-unknown-linux-gnu
           path: dist
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
           name: dist-x86_64-unknown-linux-musl
           path: dist
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
           name: dist-aarch64-unknown-linux-gnu
           path: dist
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
           name: dist-aarch64-unknown-linux-musl
           path: dist
       - run: ls -al
         working-directory: dist
       - name: release
-        uses: softprops/action-gh-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v2
         with:
           body_path: dist/CHANGELOG.md
           files: dist/*.tar.gz
