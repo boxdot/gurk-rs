@@ -116,7 +116,7 @@ impl SignalManager for SignalManagerMock {
     fn send_reaction(&self, _channel: &Channel, _message: &Message, _emoji: String, _remove: bool) {
     }
 
-    async fn resolve_name_from_profile(
+    async fn resolve_profile_name(
         &mut self,
         _id: Uuid,
         _profile_key: ProfileKeyBytes,
@@ -128,8 +128,12 @@ impl SignalManager for SignalManagerMock {
         Ok(())
     }
 
-    fn contact_by_id(&self, _id: Uuid) -> anyhow::Result<Option<Contact>> {
-        Ok(None)
+    fn profile_name(&self, _id: Uuid) -> Option<String> {
+        None
+    }
+
+    fn contact(&self, _id: Uuid) -> Option<Contact> {
+        None
     }
 
     async fn receive_messages(&mut self) -> anyhow::Result<Pin<Box<dyn Stream<Item = Content>>>> {

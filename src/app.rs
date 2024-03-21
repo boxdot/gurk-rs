@@ -171,14 +171,18 @@ impl App {
             return self.config.user.name.clone();
         };
         self.name_by_id_cached(id, |id| {
-            if let Some(name) = self
-                .signal_manager
-                .contact_by_id(id)
-                .ok()
-                .flatten()
-                .map(|contact| contact.name)
-                .filter(|name| !name.trim().is_empty())
-            {
+            if let Some(name) = self.signal_manager.profile_name(id) {
+                return name;
+            }
+            if let Some(name) = self.signal_manager.contact(id).and_then(|contact| {
+                if !contact.name.trim().is_empty() {
+                    Some(contact.name)
+                } else {
+                    contact
+                        .phone_number
+                        .map(|p| p.format().mode(Mode::E164).to_string())
+                }
+            }) {
                 return name;
             }
             if let Some(name) = self.storage.name(id).filter(|name| !name.trim().is_empty()) {
@@ -1123,21 +1127,11 @@ impl App {
             })
             .is_some();
         if !is_known {
-            if let Some(name) = self
-                .signal_manager
-                .contact_by_id(uuid)
-                .ok()
-                .flatten()
-                .and_then(|c| {
-                    c.phone_number
-                        .map(|p| p.format().mode(Mode::E164).to_string())
-                })
-            {
-                // resolved from contact list
+            if let Some(name) = self.signal_manager.profile_name(uuid) {
                 self.storage.store_name(uuid, name);
             } else if let Some(name) = self
                 .signal_manager
-                .resolve_name_from_profile(uuid, profile_key)
+                .resolve_profile_name(uuid, profile_key)
                 .await
             {
                 // resolved from signal service via their profile
