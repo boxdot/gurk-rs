@@ -132,9 +132,9 @@ impl SignalManager for PresageManager {
             ..Default::default()
         };
 
-        if has_attachments && message.is_empty() {
+        if has_attachments {
             // TODO: Temporary solution until we start rendering attachments
-            message = format!(
+            let attachment_message: String = format!(
                 "<attached: {}>",
                 attachments
                     .iter()
@@ -142,6 +142,11 @@ impl SignalManager for PresageManager {
                     .collect::<Vec<_>>()
                     .join(", ")
             );
+            if message.is_empty() {
+                message = attachment_message
+            } else {
+                message = message + "\n" + &attachment_message
+            }
         }
 
         let (response_tx, response) = oneshot::channel();
