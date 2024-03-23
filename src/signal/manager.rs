@@ -48,8 +48,10 @@ pub trait SignalManager {
 
     fn send_reaction(&self, channel: &Channel, message: &Message, emoji: String, remove: bool);
 
+    fn profile_name(&self, id: Uuid) -> Option<String>;
+
     /// Resolves contact name from user's profile via Signal server
-    async fn resolve_name_from_profile(
+    async fn resolve_profile_name(
         &mut self,
         id: Uuid,
         profile_key: ProfileKeyBytes,
@@ -57,12 +59,7 @@ pub trait SignalManager {
 
     async fn request_contacts_sync(&self) -> anyhow::Result<()>;
 
-    /// Retrieves contact information stored in the manager
-    ///
-    /// The information is based on the contact book of the client and is only available after
-    /// [`Self::request_contacts_sync`] was called **and** contacts where received from Signal server.
-    /// This usually happens shortly after the latter method is called.
-    fn contact_by_id(&self, id: Uuid) -> anyhow::Result<Option<Contact>>;
+    fn contact(&self, id: Uuid) -> Option<Contact>;
 
     async fn receive_messages(&mut self) -> anyhow::Result<Pin<Box<dyn Stream<Item = Content>>>>;
 

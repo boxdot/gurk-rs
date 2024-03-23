@@ -273,7 +273,7 @@ impl SignalManager for PresageManager {
         }
     }
 
-    async fn resolve_name_from_profile(
+    async fn resolve_profile_name(
         &mut self,
         id: Uuid,
         profile_key: ProfileKeyBytes,
@@ -295,8 +295,19 @@ impl SignalManager for PresageManager {
         Ok(self.manager.clone().sync_contacts().await?)
     }
 
-    fn contact_by_id(&self, id: Uuid) -> anyhow::Result<Option<Contact>> {
-        Ok(self.manager.store().contact_by_id(&id)?)
+    fn profile_name(&self, id: Uuid) -> Option<String> {
+        let profile_key = self.manager.store().profile_key(&id).ok()??;
+        let profile = self.manager.store().profile(id, profile_key).ok()??;
+        let given_name = profile.name?.given_name;
+        if !given_name.is_empty() {
+            Some(given_name)
+        } else {
+            None
+        }
+    }
+
+    fn contact(&self, id: Uuid) -> Option<Contact> {
+        self.manager.store().contact_by_id(&id).ok()?
     }
 
     async fn receive_messages(&mut self) -> anyhow::Result<Pin<Box<dyn Stream<Item = Content>>>> {
