@@ -457,12 +457,6 @@ dependencies = [
 
 [[package]]
 name = "base64"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
-
-[[package]]
-name = "base64"
 version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
@@ -1691,7 +1685,7 @@ dependencies = [
  "anyhow",
  "arboard",
  "async-trait",
- "base64 0.13.1",
+ "base64",
  "chrono",
  "clap",
  "criterion",
@@ -1715,7 +1709,7 @@ dependencies = [
  "postcard",
  "presage",
  "presage-store-sled",
- "prost 0.10.4",
+ "prost",
  "qr2term",
  "quickcheck",
  "quickcheck_macros",
@@ -1806,7 +1800,7 @@ version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06683b93020a07e3dbcf5f8c0f6d40080d725bea7936fc01ad345c01b97dc270"
 dependencies = [
- "base64 0.21.7",
+ "base64",
  "bytes",
  "headers-core",
  "http 0.2.11",
@@ -2241,7 +2235,7 @@ dependencies = [
  "num_enum",
  "pqcrypto-kyber",
  "pqcrypto-traits",
- "prost 0.12.3",
+ "prost",
  "prost-build",
  "rand",
  "rayon",
@@ -2262,7 +2256,7 @@ dependencies = [
  "aes",
  "aes-gcm",
  "async-trait",
- "base64 0.21.7",
+ "base64",
  "bincode",
  "bytes",
  "cbc",
@@ -2275,7 +2269,7 @@ dependencies = [
  "hmac",
  "libsignal-protocol",
  "phonenumber",
- "prost 0.12.3",
+ "prost",
  "prost-build",
  "rand",
  "serde",
@@ -3152,7 +3146,7 @@ name = "presage"
 version = "0.6.1"
 source = "git+https://github.com/whisperfish/presage?rev=e51f6f6#e51f6f673500e8306e9d075d46e8ff4d34f6705d"
 dependencies = [
- "base64 0.21.7",
+ "base64",
  "futures",
  "hex",
  "libsignal-service",
@@ -3190,12 +3184,12 @@ version = "0.6.0-dev"
 source = "git+https://github.com/whisperfish/presage?rev=e51f6f6#e51f6f673500e8306e9d075d46e8ff4d34f6705d"
 dependencies = [
  "async-trait",
- "base64 0.21.7",
+ "base64",
  "fs_extra",
  "log",
  "presage",
  "presage-store-cipher",
- "prost 0.12.3",
+ "prost",
  "prost-build",
  "quickcheck_macros",
  "serde",
@@ -3236,22 +3230,12 @@ dependencies = [
 
 [[package]]
 name = "prost"
-version = "0.10.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71adf41db68aa0daaefc69bb30bcd68ded9b9abaad5d1fbb6304c4fb390e083e"
-dependencies = [
- "bytes",
- "prost-derive 0.10.1",
-]
-
-[[package]]
-name = "prost"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "146c289cda302b98a28d40c8b3b90498d6e526dd24ac2ecea73e4e491685b94a"
 dependencies = [
  "bytes",
- "prost-derive 0.12.3",
+ "prost-derive",
 ]
 
 [[package]]
@@ -3268,25 +3252,12 @@ dependencies = [
  "once_cell",
  "petgraph",
  "prettyplease",
- "prost 0.12.3",
+ "prost",
  "prost-types",
  "regex",
  "syn 2.0.52",
  "tempfile",
  "which",
-]
-
-[[package]]
-name = "prost-derive"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b670f45da57fb8542ebdbb6105a925fe571b67f9e7ed9f47a06a84e72b4e7cc"
-dependencies = [
- "anyhow",
- "itertools 0.10.5",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -3308,7 +3279,7 @@ version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "193898f59edcf43c26227dcd4c8427f00d99d61e95dcde58dabd49fa291d470e"
 dependencies = [
- "prost 0.12.3",
+ "prost",
 ]
 
 [[package]]
@@ -3672,7 +3643,7 @@ version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c74cae0a4cf6ccbbf5f359f08efdf8ee7e1dc532573bf0db71968cb56b1448c"
 dependencies = [
- "base64 0.21.7",
+ "base64",
 ]
 
 [[package]]
@@ -3681,7 +3652,7 @@ version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f48172685e6ff52a556baa527774f61fcaa884f59daf3375c62a3f1cd2549dab"
 dependencies = [
- "base64 0.21.7",
+ "base64",
  "rustls-pki-types",
 ]
 
@@ -4139,7 +4110,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e37195395df71fd068f6e2082247891bc11e3289624bbc776a0cdfa1ca7f1ea4"
 dependencies = [
  "atoi",
- "base64 0.21.7",
+ "base64",
  "bitflags 2.4.2",
  "byteorder",
  "bytes",
@@ -4183,7 +4154,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6ac0ac3b7ccd10cc96c7ab29791a7dd236bd94021f31eec7ba3d46a74aa1c24"
 dependencies = [
  "atoi",
- "base64 0.21.7",
+ "base64",
  "bitflags 2.4.2",
  "byteorder",
  "chrono",

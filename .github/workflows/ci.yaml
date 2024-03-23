@@ -30,7 +30,7 @@ jobs:
         with:
           toolchain: stable
           components: clippy
-      - run: cargo clippy --locked
+      - run: cargo clippy --locked --all-features
 
   build-gnu:
     strategy:
