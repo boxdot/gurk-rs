@@ -10,6 +10,7 @@ use sqlx::{ConnectOptions, Connection, SqliteConnection};
 use thread_local::ThreadLocal;
 use tokio::runtime::Runtime;
 use tracing::{instrument, trace};
+use url::Url;
 use uuid::Uuid;
 
 use crate::data::{BodyRange, Channel, ChannelId, GroupData, Message, TypingSet};
@@ -19,6 +20,7 @@ use crate::storage::copy::{self, Stats};
 use crate::storage::{MessageId, Metadata, Storage};
 
 use super::encoding::BlobData;
+use super::encrypt::{encrypt_db, is_sqlite_encrypted_heuristics};
 use super::util::ResultExt as _;
 
 const METADATA_ID: i64 = 0;
@@ -49,13 +51,38 @@ impl<'ctx, 'env: 'ctx> ExecuteContext<'ctx, 'env> {
 }
 
 impl SqliteStorage {
-    pub fn open(url: &str) -> sqlx::Result<Self> {
-        let opts: SqliteConnectOptions = url.parse()?;
-        let opts = opts
+    pub fn maybe_encrypt_and_open(
+        url: &Url,
+        passphrase: Option<String>,
+        preserve_unencrypted: bool,
+    ) -> anyhow::Result<Self> {
+        let db = if let Some(passphrase) = passphrase {
+            match is_sqlite_encrypted_heuristics(url) {
+                // encrypted or does not exist
+                Some(true) | None => Self::open(url, Some(passphrase)),
+                // not encrypted => encrypt
+                Some(false) => {
+                    encrypt_db(url, &passphrase, preserve_unencrypted)?;
+                    Self::open(url, Some(passphrase))
+                }
+            }
+        } else {
+            // not encrypted without passphrase => stays unencrypted
+            Self::open(url, None)
+        };
+        Ok(db?)
+    }
+
+    pub fn open(url: &Url, passphrase: Option<String>) -> sqlx::Result<Self> {
+        let opts: SqliteConnectOptions = url.as_str().parse()?;
+        let mut opts = opts
             .create_if_missing(true)
             .journal_mode(SqliteJournalMode::Wal)
             .synchronous(SqliteSynchronous::Full)
             .disable_statement_logging();
+        if let Some(passphrase) = passphrase {
+            opts = opts.pragma("key", passphrase);
+        }
 
         let thread = rayon::ThreadPoolBuilder::new()
             .thread_name(|_| "sqlite-sync".to_owned())
@@ -616,12 +643,14 @@ impl Storage for SqliteStorage {
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
+    use tempfile::tempdir;
     use uuid::uuid;
 
     use super::*;
 
     fn fixtures() -> SqliteStorage {
-        let mut storage = SqliteStorage::open("sqlite::memory:").unwrap();
+        let url: Url = "sqlite::memory:".parse().unwrap();
+        let mut storage = SqliteStorage::open(&url, None).unwrap();
 
         let user_channel = ChannelId::User(uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd"));
         storage.store_channel(Channel {
@@ -690,7 +719,7 @@ mod tests {
 
     #[test]
     fn test_sqlite_storage_channels() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
         let storage = fixtures();
         let channels: Vec<_> = storage.channels().collect();
         assert_eq!(channels.len(), 2);
@@ -700,7 +729,7 @@ mod tests {
 
     #[test]
     fn test_sqlite_storage_messages() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
         let storage = fixtures();
         let id: Uuid = "966960e0-a8cd-43f1-ac7a-2c986dd470cd".parse().unwrap();
 
@@ -718,7 +747,7 @@ mod tests {
 
     #[test]
     fn test_sqlite_storage_store_existing_message() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
         let mut storage = fixtures();
         let id: Uuid = "966960e0-a8cd-43f1-ac7a-2c986dd470cd".parse().unwrap();
         let arrived_at = 1664832050000;
@@ -741,7 +770,7 @@ mod tests {
 
     #[test]
     fn test_sqlite_storage_store_new_message() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
         let mut storage = fixtures();
 
         let id: Uuid = uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd");
@@ -802,7 +831,7 @@ mod tests {
 
     #[test]
     fn test_sqlite_storage_names() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
         let mut storage = fixtures();
         let id1 = uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd");
         let id2 = uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a");
@@ -821,7 +850,7 @@ mod tests {
 
     #[test]
     fn test_sqlite_storage_metadata() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
         let mut storage = fixtures();
         assert_eq!(storage.metadata().contacts_sync_request_at, None);
 
@@ -842,5 +871,36 @@ mod tests {
         } = storage.metadata().into_owned();
         assert_eq!(contacts_sync_request_at, Some(dt));
         assert_eq!(fully_migrated, Some(true));
+    }
+
+    #[test]
+    fn test_sqlite_created_unencrypted_without_passphrase() {
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+
+        let tempdir = tempdir().unwrap();
+        let path = tempdir.path().join("data.db");
+        let url: Url = format!("sqlite://{}", path.display()).parse().unwrap();
+
+        assert_eq!(is_sqlite_encrypted_heuristics(&url), None);
+
+        SqliteStorage::maybe_encrypt_and_open(&url, None, false).unwrap();
+
+        assert_eq!(is_sqlite_encrypted_heuristics(&url), Some(false));
+    }
+
+    #[test]
+    fn test_sqlite_created_encrypted_with_passphrase() {
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+
+        let tempdir = tempdir().unwrap();
+        let path = tempdir.path().join("data.db");
+        let url: Url = format!("sqlite://{}", path.display()).parse().unwrap();
+
+        assert_eq!(is_sqlite_encrypted_heuristics(&url), None);
+
+        let secret = "secret".to_owned();
+        SqliteStorage::maybe_encrypt_and_open(&url, Some(secret), false).unwrap();
+
+        assert_eq!(is_sqlite_encrypted_heuristics(&url), Some(true));
     }
 }

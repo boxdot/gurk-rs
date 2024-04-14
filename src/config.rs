@@ -1,5 +1,6 @@
 use anyhow::{anyhow, bail, Context};
 use serde::{Deserialize, Serialize};
+use url::Url;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -130,16 +131,37 @@ impl Config {
     }
 }
 
-#[derive(Debug, Default, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct SqliteConfig {
     pub enabled: bool,
     #[serde(default = "SqliteConfig::default_db_url")]
-    pub url: String,
+    pub url: Url,
+    /// If set, enables encryption of the database
+    pub passphrase: Option<String>,
+    /// Don't delete the unencrypted db, after applying encryption to it
+    ///
+    /// Useful for testing.
+    #[serde(default, rename = "_preserve_unencryped")]
+    pub preserve_unencrypted: bool,
+}
+
+impl Default for SqliteConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            url: Self::default_db_url(),
+            passphrase: Default::default(),
+            preserve_unencrypted: false,
+        }
+    }
 }
 
 impl SqliteConfig {
-    pub fn default_db_url() -> String {
-        default_data_dir().join("gurk.sqlite").display().to_string()
+    fn default_db_url() -> Url {
+        let path = default_data_dir().join("gurk.sqlite");
+        format!("sqlite://{}", path.display())
+            .parse()
+            .expect("invalid default sqlite path")
     }
 }
 
