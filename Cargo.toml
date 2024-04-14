@@ -51,7 +51,7 @@ hostname = "0.3.1"
 image = { version = "0.24.6", default-features = false, features = ["png"] }
 itertools = "0.10.5"
 # not used directly; brings sqlcipher capabilities to sqlite
-libsqlite3-sys = { version = "0.27.0", features = ["bundled-sqlcipher"] }
+libsqlite3-sys = { version = "0.27.0", features = ["bundled-sqlcipher-vendored-openssl"] }
 log-panics = "2.1.0"
 mime_guess = "2.0.4"
 notify-rust = "4.5.10"
