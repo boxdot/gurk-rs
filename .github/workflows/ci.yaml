@@ -67,11 +67,9 @@ jobs:
       image: rust:alpine
       volumes:
         - /usr/local/cargo/registry
-    env:
-      CC: clang
     steps:
       - name: system dependencies
-        run: apk add --no-cache tar musl-dev lld protoc bash clang llvm
+        run: apk add --no-cache tar musl-dev lld protoc bash clang llvm perl make
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@v1
         with:
