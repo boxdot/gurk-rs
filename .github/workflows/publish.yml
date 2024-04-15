@@ -67,6 +67,7 @@ jobs:
       volumes:
         - /usr/local/cargo/registry
     env:
+      CC: clang
       GURK_TARGET: ${{ matrix.target }}
     steps:
       - name: system dependencies
