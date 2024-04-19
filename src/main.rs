@@ -99,12 +99,12 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
     let mut storage: Box<dyn Storage> = if config.sqlite.enabled {
         debug!(
             %config.sqlite.url,
-            encrypt = config.sqlite.passphrase.is_some(),
+            encrypt = config.passphrase.is_some(),
             "opening sqlite"
         );
         let mut sqlite_storage = SqliteStorage::maybe_encrypt_and_open(
             &config.sqlite.url,
-            config.sqlite.passphrase.clone(),
+            config.passphrase.clone(),
             config.sqlite.preserve_unencrypted,
         )
         .with_context(|| {

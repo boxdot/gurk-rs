@@ -31,6 +31,9 @@ pub struct Config {
     pub developer: DeveloperConfig,
     #[serde(default)]
     pub sqlite: SqliteConfig,
+    #[serde(default)]
+    /// If set, enables encryption of the key store and messages database
+    pub passphrase: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -69,6 +72,7 @@ impl Config {
             #[cfg(feature = "dev")]
             developer: Default::default(),
             sqlite: Default::default(),
+            passphrase: None,
         }
     }
 
@@ -136,8 +140,6 @@ pub struct SqliteConfig {
     pub enabled: bool,
     #[serde(default = "SqliteConfig::default_db_url")]
     pub url: Url,
-    /// If set, enables encryption of the database
-    pub passphrase: Option<String>,
     /// Don't delete the unencrypted db, after applying encryption to it
     ///
     /// Useful for testing.
@@ -150,7 +152,6 @@ impl Default for SqliteConfig {
         Self {
             enabled: false,
             url: Self::default_db_url(),
-            passphrase: Default::default(),
             preserve_unencrypted: false,
         }
     }

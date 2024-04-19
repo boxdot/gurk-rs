@@ -33,12 +33,17 @@ pub async fn ensure_linked_device(
     relink: bool,
 ) -> anyhow::Result<(Box<dyn SignalManager>, Config)> {
     let config = Config::load_installed()?;
+
     let db_path = config
         .as_ref()
         .map(|c| c.signal_db_path.clone())
         .unwrap_or_else(config::default_signal_db_path);
-    let store = SledStore::open(
+    let passphrase = config
+        .as_ref()
+        .and_then(|config| config.passphrase.as_ref());
+    let store = SledStore::open_with_passphrase(
         db_path,
+        passphrase,
         MigrationConflictStrategy::BackupAndDrop,
         OnNewIdentity::Trust,
     )?;
