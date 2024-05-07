@@ -986,7 +986,7 @@ impl App {
                 message.reactions.swap_remove(idx);
                 false
             } else {
-                message.reactions[idx].1 = emoji.clone();
+                message.reactions[idx].1.clone_from(&emoji);
                 true
             }
         } else {
