@@ -50,6 +50,8 @@ hex = "0.4.3"
 hostname = "0.3.1"
 image = { version = "0.24.6", default-features = false, features = ["png"] }
 itertools = "0.10.5"
+# not used directly; brings sqlcipher capabilities to sqlite
+libsqlite3-sys = { version = "0.27.0", features = ["bundled-sqlcipher-vendored-openssl"] }
 log-panics = "2.1.0"
 mime_guess = "2.0.4"
 notify-rust = "4.5.10"
@@ -66,7 +68,7 @@ scopeguard = "1.1.0"
 serde = { version = "1.0.147", features = ["derive"] }
 serde_json = "1.0.87"
 sha2 = "0.10.8"
-sqlx = { version = "0.7.2", features = ["sqlite", "runtime-tokio-rustls", "uuid", "chrono"] }
+sqlx = { version = "0.7.4", features = ["sqlite", "runtime-tokio-rustls", "uuid", "chrono"] }
 textwrap = "0.16.0"
 thiserror = "1.0.40"
 thread_local = "1.1.7"
@@ -79,6 +81,8 @@ tracing-subscriber = "0.3.16"
 unicode-width = "0.1.10"
 uuid = { version = "1.2", features = ["v4"] }
 whoami = "1.2.3"
+url = "2.5.0"
+tempfile = "3.3.0"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
@@ -86,7 +90,6 @@ hex-literal = "0.4.1"
 insta = { version = "1.21.0", features = ["json"] }
 quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
-tempfile = "3.3.0"
 
 [[bench]]
 name = "app"
