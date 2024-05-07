@@ -3,7 +3,6 @@ use presage::libsignal_service::content::Metadata;
 use presage::proto::sync_message::Sent;
 use presage::proto::{DataMessage, EditMessage, SyncMessage};
 use tracing::debug;
-use uuid::Uuid;
 
 use crate::app::App;
 use crate::data::{ChannelId, Message};
@@ -90,17 +89,11 @@ impl App {
 }
 
 trait MessageExt {
-    fn sender_id(&self) -> Option<Uuid>;
-
     /// Get a channel id a message
     fn channel_id(&self) -> Option<ChannelId>;
 }
 
 impl MessageExt for SyncMessage {
-    fn sender_id(&self) -> Option<Uuid> {
-        todo!()
-    }
-
     fn channel_id(&self) -> Option<ChannelId> {
         // only sent sync message are attached to a conversation
         let sent = self.sent.as_ref()?;
