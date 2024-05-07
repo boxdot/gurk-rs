@@ -70,7 +70,7 @@ jobs:
       GURK_TARGET: ${{ matrix.target }}
     steps:
       - name: system dependencies
-        run: apk add --no-cache musl-dev lld protoc bash clang llvm perl make
+        run: apk add --no-cache musl-dev lld protoc bash clang llvm
       - uses: actions/checkout@v4
         with:
           fetch-depth: ${{ env.FETCH_DEPTH }}
@@ -96,7 +96,7 @@ jobs:
     runs-on: macos-latest
     env:
       GURK_TARGET: ${{ matrix.target }}
-      SELECT_XCODE: /Applications/Xcode_13.2.app
+      SELECT_XCODE: /Applications/Xcode_15.3.app
     steps:
       - name: xcode
         run: sudo xcode-select -s "${SELECT_XCODE}"
