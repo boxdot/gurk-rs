@@ -70,7 +70,7 @@ jobs:
       GURK_TARGET: ${{ matrix.target }}
     steps:
       - name: system dependencies
-        run: apk add --no-cache musl-dev lld protoc bash clang llvm
+        run: apk add --no-cache musl-dev lld protoc bash clang llvm make perl
       - uses: actions/checkout@v4
         with:
           fetch-depth: ${{ env.FETCH_DEPTH }}
