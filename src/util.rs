@@ -1,7 +1,7 @@
-use chrono::{DateTime, Local, NaiveDateTime, TimeZone as _, Utc};
+use chrono::{DateTime, Local};
 use phonenumber::PhoneNumber;
 use ratatui::widgets::ListState;
-use regex_automata::Regex;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 const MESSAGE_SCROLL_BACK: bool = false;
@@ -94,9 +94,9 @@ impl<T> StatefulList<T> {
 }
 
 pub fn utc_timestamp_msec_to_local(timestamp: u64) -> DateTime<Local> {
-    let dt = NaiveDateTime::from_timestamp_opt(timestamp as i64 / 1000, (timestamp % 1000) as u32)
-        .expect("invalid datetime");
-    Utc.from_utc_datetime(&dt).with_timezone(&Local)
+    DateTime::from_timestamp((timestamp / 1000) as i64, (timestamp % 1000) as u32)
+        .expect("invalid datetime")
+        .with_timezone(&Local)
 }
 
 pub fn utc_now_timestamp_msec() -> u64 {
