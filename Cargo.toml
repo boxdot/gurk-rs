@@ -43,7 +43,7 @@ chrono = { version = "0.4.22", default-features = false, features = ["serde"] }
 clap = { version = "4.0.19", features = ["derive"] }
 crossterm = { version = "0.27.0", features = ["event-stream"] }
 derivative = "2.2.0"
-dirs = "4.0.0"
+dirs = "5.0.0"
 emojis = "0.6.1"
 futures-channel = "0.3.25"
 hex = "0.4.3"
