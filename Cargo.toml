@@ -42,7 +42,6 @@ async-trait = "0.1.58"
 chrono = { version = "0.4.22", default-features = false, features = ["serde"] }
 clap = { version = "4.0.19", features = ["derive"] }
 crossterm = { version = "0.27.0", features = ["event-stream"] }
-derivative = "2.2.0"
 dirs = "5.0.0"
 emojis = "0.6.1"
 futures-channel = "0.3.25"
@@ -66,7 +65,6 @@ regex = "1.9.5"
 scopeguard = "1.1.0"
 serde = { version = "1.0.147", features = ["derive"] }
 serde_json = "1.0.87"
-sha2 = "0.10.8"
 sqlx = { version = "0.7.4", features = ["sqlite", "runtime-tokio-rustls", "uuid", "chrono"] }
 textwrap = "0.16.0"
 thiserror = "1.0.40"
