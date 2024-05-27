@@ -60,7 +60,7 @@ opener = "0.5.0"
 phonenumber = "0.3.1"
 postcard = { version = "1.0.4", features = ["alloc"] }
 qr2term = { git = "https://github.com/boxdot/qr2term-rs", rev = "ed8ae7f" }
-ratatui = "0.23.0"
+ratatui = "0.26.0"
 rayon = "1.7.0"
 regex = "1.9.5"
 regex-automata = "0.1.10"

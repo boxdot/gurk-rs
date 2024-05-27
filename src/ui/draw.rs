@@ -4,11 +4,10 @@ use std::fmt;
 
 use chrono::Datelike;
 use itertools::Itertools;
-use ratatui::backend::Backend;
-use ratatui::layout::{Constraint, Corner, Direction, Layout, Rect};
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph};
+use ratatui::widgets::{Block, Borders, Clear, List, ListDirection, ListItem, Paragraph};
 use ratatui::Frame;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use uuid::Uuid;
@@ -26,7 +25,7 @@ use super::name_resolver::NameResolver;
 use super::CHANNEL_VIEW_RATIO;
 
 /// The main function drawing the UI for each frame
-pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
+pub fn draw(f: &mut Frame, app: &mut App) {
     if app.is_help() {
         // Display shortcut panel
         let chunks = Layout::default()
@@ -59,7 +58,7 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     }
 }
 
-fn draw_select_channel_popup<B: Backend>(f: &mut Frame<B>, select_channel: &mut SelectChannel) {
+fn draw_select_channel_popup(f: &mut Frame, select_channel: &mut SelectChannel) {
     let area = centered_rect(60, 60, f.size());
     let chunks = Layout::default()
         .constraints([Constraint::Length(1 + 2), Constraint::Min(0)].as_ref())
@@ -93,7 +92,7 @@ fn draw_select_channel_popup<B: Backend>(f: &mut Frame<B>, select_channel: &mut 
     f.render_stateful_widget(list, chunks[1], &mut select_channel.state);
 }
 
-fn draw_channels<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
+fn draw_channels(f: &mut Frame, app: &mut App, area: Rect) {
     let channel_list_width = area.width.saturating_sub(2) as usize;
     let channels: Vec<ListItem> = app
         .channels
@@ -173,7 +172,7 @@ fn wrap(text: &str, mut cursor: Cursor, width: usize) -> (String, Cursor, usize)
     (res, cursor, line + 1)
 }
 
-fn draw_chat<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
+fn draw_chat(f: &mut Frame, app: &mut App, area: Rect) {
     let text_width = area.width.saturating_sub(2) as usize;
     let (wrapped_input, cursor, num_input_lines) =
         wrap(&app.input.data, app.input.cursor.clone(), text_width);
@@ -256,7 +255,7 @@ fn prepare_receipts(app: &mut App, height: usize) {
     }
 }
 
-fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
+fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     // area without borders
     let height = area.height.saturating_sub(2) as usize;
     if height == 0 {
@@ -377,7 +376,7 @@ fn draw_messages<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
     let list = List::new(items)
         .block(Block::default().title(title).borders(Borders::ALL))
         .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray))
-        .start_corner(Corner::BottomLeft);
+        .direction(ListDirection::BottomToTop);
 
     // re-borrow channel messages mutably
     let messages = app
@@ -650,7 +649,7 @@ fn add_edited(msg: &Message, out: &mut dyn fmt::Write) {
     }
 }
 
-fn draw_help<B: Backend>(f: &mut Frame<B>, app: &mut App, area: Rect) {
+fn draw_help(f: &mut Frame, app: &mut App, area: Rect) {
     let max_event_width = SHORTCUTS
         .iter()
         .map(
