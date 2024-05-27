@@ -1669,7 +1669,7 @@ dependencies = [
  "hostname",
  "image",
  "insta",
- "itertools 0.10.5",
+ "itertools 0.12.1",
  "libsqlite3-sys",
  "log-panics",
  "mime_guess",
