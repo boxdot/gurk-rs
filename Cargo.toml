@@ -63,7 +63,6 @@ qr2term = { git = "https://github.com/boxdot/qr2term-rs", rev = "ed8ae7f" }
 ratatui = "0.26.0"
 rayon = "1.7.0"
 regex = "1.9.5"
-regex-automata = "0.1.10"
 scopeguard = "1.1.0"
 serde = { version = "1.0.147", features = ["derive"] }
 serde_json = "1.0.87"

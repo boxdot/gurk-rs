@@ -1,7 +1,7 @@
 use chrono::{DateTime, Local};
 use phonenumber::PhoneNumber;
 use ratatui::widgets::ListState;
-use regex_automata::Regex;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 const MESSAGE_SCROLL_BACK: bool = false;

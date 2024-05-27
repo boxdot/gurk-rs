@@ -31,7 +31,7 @@ use presage::proto::{
     GroupContextV2,
 };
 use presage::proto::{AttachmentPointer, DataMessage, ReceiptMessage, SyncMessage, TypingMessage};
-use regex_automata::Regex;
+use regex::Regex;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -1280,8 +1280,8 @@ impl App {
         let mut clean_input = String::new();
 
         let re = self.attachment_regex.compiled();
-        let attachments = re.find_iter(input.as_bytes()).filter_map(|(start, end)| {
-            let path_str = &input[start..end].strip_prefix("file://")?;
+        let attachments = re.find_iter(input).filter_map(|m| {
+            let path_str = m.as_str().strip_prefix("file://")?;
 
             let (contents, content_type, file_name) = if path_str.starts_with("clip") {
                 let img = self.clipboard.as_mut()?.get_image().ok()?;
@@ -1320,8 +1320,8 @@ impl App {
                 (contents, content_type, file_name)
             };
 
-            clean_input.push_str(input[offset..start].trim_end_matches(""));
-            offset = end;
+            clean_input.push_str(input[offset..m.start()].trim_end());
+            offset = m.end();
 
             let spec = AttachmentSpec {
                 content_type,
@@ -1475,10 +1475,10 @@ fn to_emoji(s: &str) -> Option<&str> {
 
 fn open_url(message: &Message, url_regex: &Regex) -> Option<()> {
     let text = message.message.as_ref()?;
-    let (start, end) = url_regex.find(text.as_bytes())?;
-    let url = &text[start..end];
-    if let Err(e) = opener::open(url) {
-        error!("failed to open {}: {}", url, e);
+    let m = url_regex.find(text)?;
+    let url = m.as_str();
+    if let Err(error) = opener::open(url) {
+        error!(url, %error, "failed to open");
     }
     Some(())
 }
