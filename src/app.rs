@@ -1299,7 +1299,7 @@ impl App {
                         &data,
                         img.width as _,
                         img.height as _,
-                        image::ColorType::Rgba8,
+                        image::ExtendedColorType::Rgba8,
                     )
                     .ok()?;
 
