@@ -20,7 +20,10 @@ Download a pre-compiled binary from [Releases] for following targets:
 
 ## From source (using `cargo`)
 
-Prerequisite is the [`protoc`] compiler.
+Prerequisites:
+
+* [`protoc`] compiler
+* `perl`
 
 ```shell
 cargo install --git https://github.com/boxdot/gurk-rs gurk
