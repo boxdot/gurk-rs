@@ -20,6 +20,11 @@ Download a pre-compiled binary from [Releases] for following targets:
 
 ## From source (using `cargo`)
 
+Prerequisites:
+
+* [`protoc`] compiler
+* `perl`
+
 ```shell
 cargo install --git https://github.com/boxdot/gurk-rs gurk
 ```
@@ -112,3 +117,4 @@ shall be licensed as above, without any additional terms or conditions.
 [chat-link]: https://signal.group/#CjQKILaqQTWUZks14mPRSn0m0zyU9A-buNMG6haQBmWrxJHeEhCc7HLIwCFZRNDw63MWj-fA
 [config-location]: https://docs.rs/dirs/3.0.2/dirs/fn.config_dir.html
 [Releases]: https://github.com/boxdot/gurk-rs/releases
+[`protoc`]: https://github.com/protocolbuffers/protobuf?tab=readme-ov-file#protobuf-compiler-installation
