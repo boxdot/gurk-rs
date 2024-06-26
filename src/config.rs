@@ -137,6 +137,7 @@ impl Config {
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct SqliteConfig {
+    #[serde(default = "default_true")]
     pub enabled: bool,
     #[serde(default = "SqliteConfig::default_db_url")]
     pub url: Url,
