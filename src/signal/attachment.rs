@@ -117,7 +117,7 @@ mod tests {
             key: None,
             size: Some(42),
             thumbnail: None,
-            incremental_digest: None,
+            incremental_mac: None,
             incremental_mac_chunk_size: None,
             flags: None,
             width: None,
