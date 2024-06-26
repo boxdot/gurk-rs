@@ -9,7 +9,7 @@ use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
 use sqlx::{ConnectOptions, Connection, SqliteConnection};
 use thread_local::ThreadLocal;
 use tokio::runtime::Runtime;
-use tracing::{instrument, trace};
+use tracing::{info, instrument, trace};
 use url::Url;
 use uuid::Uuid;
 
@@ -56,6 +56,7 @@ impl SqliteStorage {
         passphrase: Option<String>,
         preserve_unencrypted: bool,
     ) -> anyhow::Result<Self> {
+        info!("loading app data from: {}", url);
         let db = if let Some(passphrase) = passphrase {
             match is_sqlite_encrypted_heuristics(url) {
                 // encrypted or does not exist
