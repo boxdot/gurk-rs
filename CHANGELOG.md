@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.5.0
+
+New configuration which enables encryption of the signal keystore and
+the gurk messages database:
+
+```
+passphrase = "secret"
+```
+
+Previously unencrypted database is replaced by the encrypted one. Make
+sure you backup your data before enabling this option.
+
+After enabling encryption device has to be linked again.
+
+### Added
+
+- Key store and messages database encryption ([#283])
+
+### Fixed
+
+- Show self send attachments ([#278])
+- Use profile names as user names ([#277])
+
+### Internal
+
+- Upgrade libsignal to v0.51.0 ([#294])
+- Make sqlite the default storage ([#295])
+
+[#277]: https://github.com/boxdot/gurk-rs/pull/277
+[#278]: https://github.com/boxdot/gurk-rs/pull/278
+[#283]: https://github.com/boxdot/gurk-rs/pull/283
+[#294]: https://github.com/boxdot/gurk-rs/pull/294
+[#295]: https://github.com/boxdot/gurk-rs/pull/295
+
 ## 0.4.3
 
 Due to several fixes in `libsignal-service-rs`/`presage` and the upgrade of
