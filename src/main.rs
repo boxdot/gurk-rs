@@ -50,7 +50,7 @@ async fn main() -> anyhow::Result<()> {
     let _guard = if args.verbosity > 0 {
         let file_appender = tracing_appender::rolling::never("./", "gurk.log");
         let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
-        tracing_subscriber::fmt()
+        tracing_subscriber::fmt::fmt()
             .with_max_level(match args.verbosity {
                 0 => LevelFilter::OFF,
                 1 => LevelFilter::INFO,
