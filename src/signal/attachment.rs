@@ -100,6 +100,7 @@ fn derive_name(pointer: &AttachmentPointer, digest: &[u8], mime: &Mime) -> Strin
 #[cfg(test)]
 mod tests {
     use hex_literal::hex;
+    use uuid::Uuid;
 
     use super::*;
 
@@ -110,6 +111,7 @@ mod tests {
         upload_timestamp: u64,
     ) -> AttachmentPointer {
         AttachmentPointer {
+            uuid: Some(Uuid::nil().into_bytes().to_vec()),
             content_type: Some(content_type.into()),
             digest: Some(digest.into()),
             file_name: file_name.map(|s| s.to_owned()),
