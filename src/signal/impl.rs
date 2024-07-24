@@ -8,6 +8,7 @@ use presage::libsignal_service::content::{Content, ContentBody};
 use presage::libsignal_service::models::Contact;
 use presage::libsignal_service::prelude::{Group, ProfileKey};
 use presage::libsignal_service::sender::AttachmentSpec;
+use presage::libsignal_service::ServiceAddress;
 use presage::manager::{ReceivingMode, Registered};
 use presage::proto::data_message::{Quote, Reaction};
 use presage::proto::{AttachmentPointer, DataMessage, GroupContextV2, ReceiptMessage};
@@ -98,7 +99,10 @@ impl SignalManager for PresageManager {
         let mut manager = self.manager.clone();
         tokio::task::spawn_local(async move {
             let body = ContentBody::ReceiptMessage(data_message);
-            if let Err(error) = manager.send_message(sender_uuid, body, now_timestamp).await {
+            if let Err(error) = manager
+                .send_message(ServiceAddress::new_aci(sender_uuid), body, now_timestamp)
+                .await
+            {
                 error!(%error, %sender_uuid, "failed to send receipt");
             }
         });
@@ -162,7 +166,10 @@ impl SignalManager for PresageManager {
                         return;
                     }
                     let body = ContentBody::DataMessage(data_message);
-                    if let Err(error) = manager.send_message(uuid, body, timestamp).await {
+                    if let Err(error) = manager
+                        .send_message(ServiceAddress::new_aci(uuid), body, timestamp)
+                        .await
+                    {
                         error!(dest =% uuid, %error, "failed to send message");
                         let _ = response_tx.send(Err(error.into()));
                         return;
@@ -241,7 +248,10 @@ impl SignalManager for PresageManager {
                 let mut manager = self.manager.clone();
                 let body = ContentBody::DataMessage(data_message);
                 tokio::task::spawn_local(async move {
-                    if let Err(e) = manager.send_message(uuid, body, timestamp).await {
+                    if let Err(e) = manager
+                        .send_message(ServiceAddress::new_aci(uuid), body, timestamp)
+                        .await
+                    {
                         // TODO: Proper error handling
                         error!("failed to send reaction {} to {}: {}", &emoji, uuid, e);
                     }

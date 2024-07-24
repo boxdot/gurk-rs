@@ -3,7 +3,7 @@ use std::io::BufWriter;
 
 use base64::prelude::*;
 use presage::libsignal_service::content::{Content, Metadata};
-use presage::libsignal_service::ServiceAddress;
+use presage::libsignal_service::{ServiceAddress, ServiceIdType};
 use presage::proto;
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -19,12 +19,28 @@ pub struct ContentBase64 {
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "Metadata")]
 struct MetadataDef {
+    #[serde(with = "ServiceAddressDef")]
     sender: ServiceAddress,
     sender_device: u32,
     timestamp: u64,
     needs_receipt: bool,
     unidentified_sender: bool,
     server_guid: Option<Uuid>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "ServiceAddress")]
+struct ServiceAddressDef {
+    pub uuid: Uuid,
+    #[serde(with = "ServiceIdTypeDef")]
+    pub identity: ServiceIdType,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "ServiceIdType")]
+pub enum ServiceIdTypeDef {
+    AccountIdentity,
+    PhoneNumberIdentity,
 }
 
 impl From<Metadata> for MetadataDef {
