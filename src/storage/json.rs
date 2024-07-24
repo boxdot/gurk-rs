@@ -217,6 +217,29 @@ impl Storage for JsonStorage {
         }
     }
 
+    fn edits(
+        &self,
+        message_id: MessageId,
+    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_> {
+        if let Some(channel) = self
+            .data
+            .channels
+            .items
+            .iter()
+            .find(|ch| ch.id == message_id.channel_id)
+        {
+            Box::new(
+                channel
+                    .messages
+                    .iter()
+                    .filter(move |message| message.edit == Some(message_id.arrived_at))
+                    .map(Cow::Borrowed),
+            )
+        } else {
+            Box::new(std::iter::empty())
+        }
+    }
+
     fn message(&self, message_id: MessageId) -> Option<Cow<Message>> {
         let channel = self
             .data

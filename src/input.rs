@@ -66,6 +66,10 @@ impl Input {
         self.cursor.delete_suffix(&mut self.data);
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+
     pub fn take(&mut self) -> String {
         self.cursor = Default::default();
         std::mem::take(&mut self.data)

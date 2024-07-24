@@ -29,6 +29,13 @@ impl Storage for ForgetfulStorage {
         Box::new(std::iter::empty())
     }
 
+    fn edits(
+        &self,
+        _message_id: MessageId,
+    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_> {
+        Box::new(std::iter::empty())
+    }
+
     fn message(&self, _message_id: MessageId) -> Option<Cow<Message>> {
         None
     }

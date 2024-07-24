@@ -43,6 +43,7 @@ pub trait SignalManager {
         channel: &Channel,
         text: String,
         quote_message: Option<&Message>,
+        edit_message_timestamp: Option<u64>,
         attachments: Vec<(AttachmentSpec, Vec<u8>)>,
     ) -> (Message, oneshot::Receiver<anyhow::Result<()>>);
 

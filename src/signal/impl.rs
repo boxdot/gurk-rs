@@ -11,7 +11,7 @@ use presage::libsignal_service::sender::AttachmentSpec;
 use presage::libsignal_service::ServiceAddress;
 use presage::manager::{ReceivingMode, Registered};
 use presage::proto::data_message::{Quote, Reaction};
-use presage::proto::{AttachmentPointer, DataMessage, GroupContextV2, ReceiptMessage};
+use presage::proto::{AttachmentPointer, DataMessage, EditMessage, GroupContextV2, ReceiptMessage};
 use presage::store::ContentsStore;
 use presage_store_sled::SledStore;
 use tokio::sync::oneshot;
@@ -113,6 +113,7 @@ impl SignalManager for PresageManager {
         channel: &Channel,
         text: String,
         quote_message: Option<&Message>,
+        edit_message_timestamp: Option<u64>,
         attachments: Vec<(AttachmentSpec, Vec<u8>)>,
     ) -> (Message, oneshot::Receiver<anyhow::Result<()>>) {
         let mut message: String = crate::emoji::replace_shortcodes(&text).into_owned();
@@ -165,7 +166,16 @@ impl SignalManager for PresageManager {
                         let _ = response_tx.send(Err(error));
                         return;
                     }
-                    let body = ContentBody::DataMessage(data_message);
+
+                    let body = if let Some(target_sent_timestamp) = edit_message_timestamp {
+                        ContentBody::EditMessage(EditMessage {
+                            target_sent_timestamp: Some(target_sent_timestamp),
+                            data_message: Some(data_message),
+                        })
+                    } else {
+                        ContentBody::DataMessage(data_message)
+                    };
+
                     if let Err(error) = manager
                         .send_message(ServiceAddress::new_aci(uuid), body, timestamp)
                         .await
@@ -196,8 +206,18 @@ impl SignalManager for PresageManager {
                             let _ = response_tx.send(Err(error));
                             return;
                         }
+
+                        let body = if let Some(target_sent_timestamp) = edit_message_timestamp {
+                            ContentBody::EditMessage(EditMessage {
+                                target_sent_timestamp: Some(target_sent_timestamp),
+                                data_message: Some(data_message),
+                            })
+                        } else {
+                            ContentBody::DataMessage(data_message)
+                        };
+
                         if let Err(error) = manager
-                            .send_message_to_group(&master_key_bytes, data_message, timestamp)
+                            .send_message_to_group(&master_key_bytes, body, timestamp)
                             .await
                         {
                             error!(%error, "failed to send group message");
@@ -222,8 +242,8 @@ impl SignalManager for PresageManager {
             receipt: Receipt::Sent,
             body_ranges: Default::default(),
             send_failed: Default::default(),
-            edit: Default::default(),
-            edited: Default::default(),
+            edit: edit_message_timestamp,
+            edited: edit_message_timestamp.is_some(),
         };
         (message, response)
     }

@@ -8,6 +8,11 @@ use crate::data::{Channel, ChannelId, Message};
 
 use super::{MessageId, Metadata, Storage};
 
+/// Caches the data of the underlying Storage in memory
+///
+/// The following data is NOT cached:
+///
+/// * edits
 pub struct MemCache<S: Storage> {
     channels: Vec<Channel>,
     channels_index: BTreeMap<ChannelId, usize>,
@@ -90,6 +95,13 @@ impl<S: Storage> Storage for MemCache<S> {
         } else {
             Box::new(std::iter::empty())
         }
+    }
+
+    fn edits(
+        &self,
+        message_id: MessageId,
+    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_> {
+        self.storage.edits(message_id) // Edits are not cached
     }
 
     fn message(&self, message_id: MessageId) -> Option<Cow<Message>> {
