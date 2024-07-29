@@ -59,6 +59,10 @@ pub static SHORTCUTS: &[ShortCut] = &[
         description: "Move cursor the the end of the text.",
     },
     ShortCut {
+        event: "ctrl+e",
+        description: "Edit selected message",
+    },
+    ShortCut {
         event: "Esc",
         description: "Reset message selection / Close popup.",
     },
