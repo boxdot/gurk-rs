@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0-dev
+
+## Added
+
+- Edit messages ([#301])
+
+[#301]: https://github.com/boxdot/gurk-rs/pull/301
+
 ## 0.5.0
 
 New configuration which enables encryption of the signal keystore and
