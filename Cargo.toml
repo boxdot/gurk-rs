@@ -28,8 +28,8 @@ debug = true
 dev = ["prost", "base64"]
 
 [dependencies]
-presage = { git = "https://github.com/whisperfish/presage", rev = "e2392c42a0392397b9db782607fdd7ab2ea91b5f" }
-presage-store-sled = { git = "https://github.com/whisperfish/presage", rev = "e2392c42a0392397b9db782607fdd7ab2ea91b5f" }
+presage = { git = "https://github.com/whisperfish/presage", rev = "b64c94b" }
+presage-store-sled = { git = "https://github.com/whisperfish/presage", rev = "b64c94b" }
 
 # dev feature dependencies
 prost = { version = "0.12.0", optional = true }
@@ -50,7 +50,7 @@ hostname = "0.4.0"
 image = { version = "0.25.0", default-features = false, features = ["png"] }
 itertools = "0.12.0"
 # not used directly; brings sqlcipher capabilities to sqlite
-libsqlite3-sys = { version = "0.27.0", features = ["bundled-sqlcipher-vendored-openssl"] }
+libsqlite3-sys = { version = "0.28.0", features = ["bundled-sqlcipher-vendored-openssl"] }
 log-panics = "2.1.0"
 mime_guess = "2.0.4"
 notify-rust = "4.5.10"
@@ -65,7 +65,7 @@ regex = "1.9.5"
 scopeguard = "1.1.0"
 serde = { version = "1.0.147", features = ["derive"] }
 serde_json = "1.0.87"
-sqlx = { version = "0.7.4", features = ["sqlite", "runtime-tokio-rustls", "uuid", "chrono"] }
+sqlx = { version = "0.8.0", features = ["sqlite", "runtime-tokio-rustls", "uuid", "chrono"] }
 textwrap = "0.16.0"
 thiserror = "1.0.40"
 thread_local = "1.1.7"
