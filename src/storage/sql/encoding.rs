@@ -2,7 +2,6 @@
 
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use sqlx::database::HasArguments;
 use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
 use sqlx::sqlite::SqliteValueRef;
@@ -25,7 +24,10 @@ impl Decode<'_, Sqlite> for ChannelId {
 }
 
 impl<'q> Encode<'q, Sqlite> for &'q ChannelId {
-    fn encode_by_ref(&self, buf: &mut <Sqlite as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Sqlite as Database>::ArgumentBuffer<'q>,
+    ) -> Result<IsNull, BoxDynError> {
         match self {
             ChannelId::User(uuid) => uuid.encode(buf),
             ChannelId::Group(bytes) => Encode::<'_, Sqlite>::encode(bytes.as_slice(), buf),
@@ -56,11 +58,14 @@ impl<T: DeserializeOwned> Decode<'_, Sqlite> for BlobData<T> {
 }
 
 impl<'q, T: Serialize> Encode<'q, Sqlite> for BlobData<T> {
-    fn encode_by_ref(&self, buf: &mut <Sqlite as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Sqlite as Database>::ArgumentBuffer<'q>,
+    ) -> Result<IsNull, BoxDynError> {
         if let Some(bytes) = postcard::to_allocvec(&self.0).ok_logged() {
             Encode::<'_, Sqlite>::encode(bytes, buf)
         } else {
-            IsNull::Yes
+            Ok(IsNull::Yes)
         }
     }
 }

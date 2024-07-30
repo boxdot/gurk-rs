@@ -21,7 +21,7 @@
       {
         "name": "group_revision",
         "ordinal": 3,
-        "type_info": "Int64"
+        "type_info": "Integer"
       },
       {
         "name": "group_members: _",

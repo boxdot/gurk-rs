@@ -6,7 +6,7 @@
       {
         "name": "arrived_at",
         "ordinal": 0,
-        "type_info": "Int64"
+        "type_info": "Integer"
       },
       {
         "name": "from_id: _",
@@ -41,7 +41,7 @@
       {
         "name": "quote_arrived_at: _",
         "ordinal": 7,
-        "type_info": "Int64"
+        "type_info": "Integer"
       },
       {
         "name": "quote_from_id: _",
@@ -71,7 +71,7 @@
       {
         "name": "edit",
         "ordinal": 13,
-        "type_info": "Int64"
+        "type_info": "Integer"
       },
       {
         "name": "edited: _",
