@@ -19,6 +19,8 @@ impl App {
             return Ok(());
         };
 
+        tracing::info!(?sync_message, "#########");
+
         // edit message
         if let Some(Sent {
             edit_message:

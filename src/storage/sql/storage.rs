@@ -446,6 +446,60 @@ impl Storage for SqliteStorage {
         )
     }
 
+    fn edits(
+        &self,
+        message_id: MessageId,
+    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_> {
+        let channel_id = &message_id.channel_id;
+        let arrived_at: Option<i64> = message_id
+            .arrived_at
+            .try_into()
+            .map_err(|_| MessageConvertError::InvalidTimestamp)
+            .ok_logged();
+        let Some(arrived_at) = arrived_at else {
+            return Box::new(std::iter::empty());
+        };
+        let messages = self.execute(|ctx| {
+            Box::pin(
+                sqlx::query_as!(
+                    SqlMessage,
+                    r#"
+                    SELECT
+                        m.arrived_at AS "arrived_at!",
+                        m.from_id AS "from_id: _",
+                        m.message,
+                        m.receipt AS "receipt: _",
+                        m.body_ranges AS "body_ranges: _",
+                        m.attachments AS "attachments: _",
+                        m.reactions AS "reactions: _",
+                        q.arrived_at AS "quote_arrived_at: _",
+                        q.from_id AS "quote_from_id: _",
+                        q.message AS quote_message,
+                        q.attachments AS "quote_attachments: _",
+                        q.body_ranges AS "quote_body_ranges: _",
+                        q.receipt AS "quote_receipt: _",
+                        NULL AS "edit: _",
+                        m.edited AS "edited: _"
+                    FROM messages AS m
+                    LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1
+                    WHERE m.channel_id = ?1 AND m.edit == ?2
+                    ORDER BY m.arrived_at ASC
+                "#,
+                    channel_id,
+                    arrived_at,
+                )
+                .fetch_all(ctx.conn),
+            )
+        });
+        Box::new(
+            messages
+                .ok_logged()
+                .into_iter()
+                .flatten()
+                .filter_map(|message| message.convert().ok_logged().map(Cow::Owned)),
+        )
+    }
+
     fn message(&self, message_id: MessageId) -> Option<Cow<Message>> {
         let channel_id = &message_id.channel_id;
         let arrived_at: i64 = message_id
