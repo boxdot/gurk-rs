@@ -83,6 +83,7 @@ impl SignalManager for SignalManagerMock {
         _channel: &Channel,
         text: String,
         quote_message: Option<&Message>,
+        _edit_message_timestamp: Option<u64>,
         _attachments: Vec<(AttachmentSpec, Vec<u8>)>,
     ) -> (Message, oneshot::Receiver<anyhow::Result<()>>) {
         let message: String = crate::emoji::replace_shortcodes(&text).into_owned();

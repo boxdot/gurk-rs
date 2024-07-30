@@ -62,6 +62,7 @@ pub struct App {
     receipt_handler: ReceiptHandler,
     pub input: Input,
     pub is_multiline_input: bool,
+    editing: Option<MessageId>,
     pub(crate) select_channel: SelectChannel,
     clipboard: Option<Clipboard>,
     event_tx: mpsc::UnboundedSender<Event>,
@@ -119,6 +120,7 @@ impl App {
             receipt_handler: ReceiptHandler::new(),
             input: Default::default(),
             is_multiline_input: false,
+            editing: None,
             select_channel: Default::default(),
             clipboard,
             event_tx,
@@ -256,7 +258,14 @@ impl App {
                 self.get_input().on_end();
             }
             KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.get_input().on_end();
+                if !self.select_channel.is_shown
+                    && self.channels.selected_item().is_some()
+                    && self.input.is_empty()
+                {
+                    self.start_editing();
+                } else {
+                    self.get_input().on_end();
+                }
             }
             KeyCode::Backspace => {
                 self.get_input().on_backspace();
@@ -270,7 +279,7 @@ impl App {
             KeyCode::Esc => {
                 if self.select_channel.is_shown {
                     self.select_channel.is_shown = false;
-                } else {
+                } else if !self.reset_editing() {
                     self.reset_message_selection();
                 }
             }
@@ -305,14 +314,18 @@ impl App {
         Some(())
     }
 
-    fn selected_message(&self) -> Option<Cow<Message>> {
+    fn selected_message_id(&self) -> Option<MessageId> {
         // Messages are shown in reversed order => selected is reversed
         let channel_id = self.channels.selected_item()?;
         let messages = self.messages.get(channel_id)?;
         let idx = messages.state.selected()?;
         let idx = messages.items.len().checked_sub(idx + 1)?;
         let arrived_at = messages.items.get(idx)?;
-        let message_id = MessageId::new(*channel_id, *arrived_at);
+        Some(MessageId::new(*channel_id, *arrived_at))
+    }
+
+    fn selected_message(&self) -> Option<Cow<Message>> {
+        let message_id = self.selected_message_id()?;
         self.storage.message(message_id)
     }
 
@@ -388,10 +401,15 @@ impl App {
             .storage
             .channel(channel_id)
             .expect("non-existent channel");
-        let quote = self.selected_message();
-        let (sent_message, response) =
-            self.signal_manager
-                .send_text(&channel, input, quote.as_deref(), attachments);
+        let editing = self.editing.take();
+        let quote = editing.is_none().then(|| self.selected_message()).flatten();
+        let (sent_message, response) = self.signal_manager.send_text(
+            &channel,
+            input,
+            quote.as_deref(),
+            editing.map(|id| id.arrived_at),
+            attachments,
+        );
 
         let message_id = MessageId::new(channel_id, sent_message.arrived_at);
         let tx = self.event_tx.clone();
@@ -404,18 +422,20 @@ impl App {
             }
         });
 
-        let sent_message = self.storage.store_message(channel_id, sent_message);
-        self.messages
-            .get_mut(&channel_id)
-            .expect("non-existent channel")
-            .items
-            .push(sent_message.arrived_at);
+        if let Some(id) = editing {
+            self.storage
+                .store_edited_message(channel_id, id.arrived_at, sent_message);
+        } else {
+            let sent_message = self.storage.store_message(channel_id, sent_message);
+            self.messages
+                .get_mut(&channel_id)
+                .expect("non-existent channel")
+                .items
+                .push(sent_message.arrived_at);
+        };
 
-        let sent_with_quote = sent_message.quote.is_some();
+        self.reset_message_selection();
         self.reset_unread_messages();
-        if sent_with_quote {
-            self.reset_message_selection();
-        }
         self.bubble_up_channel(channel_idx);
     }
 
@@ -460,7 +480,7 @@ impl App {
     }
 
     pub async fn on_message(&mut self, content: Content) -> anyhow::Result<()> {
-        // tracing::debug!("incoming: {:#?}", content);
+        tracing::info!(?content, "incoming");
 
         #[cfg(feature = "dev")]
         if self.config.developer.dump_raw_messages {
@@ -1434,6 +1454,47 @@ impl App {
             }
         }
         Ok(())
+    }
+
+    pub(crate) fn is_editing(&self) -> bool {
+        self.editing.is_some()
+    }
+
+    /// Returns `true` if editing was reset, otherwise `false`
+    fn reset_editing(&mut self) -> bool {
+        let is_reset = self.editing.take().is_some();
+        if is_reset {
+            self.take_input();
+        }
+        is_reset
+    }
+
+    fn start_editing(&mut self) -> Option<()> {
+        if !self.input.is_empty() {
+            return None;
+        }
+
+        let message_id = self.selected_message_id()?;
+        let message = self.storage.message(message_id)?;
+
+        if message.from_id != self.user_id {
+            return None;
+        }
+
+        let target_sent_timestamp = self
+            .storage
+            .edits(message_id)
+            .last()
+            .map(|last_edit| last_edit.arrived_at)
+            .unwrap_or(message.arrived_at);
+        let message_id = MessageId::new(message_id.channel_id, target_sent_timestamp);
+        let text = message.message.clone()?;
+
+        self.editing.replace(message_id);
+        self.input.data = text;
+        self.input.on_end();
+
+        Some(())
     }
 }
 
