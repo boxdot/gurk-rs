@@ -1,11 +1,16 @@
 # Changelog
 
-## 0.6.0-dev
+## 0.5.1
 
 ## Added
 
 - Edit messages ([#301])
 
+## Fixes
+
+- Fix unexpected response HTTP 409 during linking ([#299])
+
+[#299]: https://github.com/boxdot/gurk-rs/pull/299
 [#301]: https://github.com/boxdot/gurk-rs/pull/301
 
 ## 0.5.0
