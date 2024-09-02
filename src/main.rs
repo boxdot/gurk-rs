@@ -287,7 +287,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                     let col = event.column;
                     let row = event.row;
                     if let Some(channel_idx) =
-                        ui::coords_within_channels_view(terminal.get_frame().size(), col, row)
+                        ui::coords_within_channels_view(terminal.get_frame().area(), col, row)
                             .map(|(_, row)| row as usize)
                             .filter(|&idx| idx < app.channels.items.len())
                     {
@@ -297,7 +297,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                 }
                 MouseEventKind::ScrollUp => {
                     if event.column
-                        < terminal.get_frame().size().width / ui::CHANNEL_VIEW_RATIO as u16
+                        < terminal.get_frame().area().width / ui::CHANNEL_VIEW_RATIO as u16
                     {
                         app.select_previous_channel()
                     } else {
@@ -306,7 +306,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                 }
                 MouseEventKind::ScrollDown => {
                     if event.column
-                        < terminal.get_frame().size().width / ui::CHANNEL_VIEW_RATIO as u16
+                        < terminal.get_frame().area().width / ui::CHANNEL_VIEW_RATIO as u16
                     {
                         app.select_next_channel()
                     } else {

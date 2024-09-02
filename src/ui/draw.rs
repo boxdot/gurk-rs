@@ -35,7 +35,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 Constraint::Percentage(15),
             ])
             .direction(Direction::Horizontal)
-            .split(f.size());
+            .split(f.area());
         draw_help(f, app, chunks[1]);
         return;
     }
@@ -48,7 +48,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             .as_ref(),
         )
         .direction(Direction::Horizontal)
-        .split(f.size());
+        .split(f.area());
 
     draw_channels(f, app, chunks[0]);
     draw_chat(f, app, chunks[1]);
@@ -59,7 +59,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 }
 
 fn draw_select_channel_popup(f: &mut Frame, select_channel: &mut SelectChannel) {
-    let area = centered_rect(60, 60, f.size());
+    let area = centered_rect(60, 60, f.area());
     let chunks = Layout::default()
         .constraints([Constraint::Length(1 + 2), Constraint::Min(0)].as_ref())
         .direction(Direction::Vertical)
@@ -72,10 +72,10 @@ fn draw_select_channel_popup(f: &mut Frame, select_channel: &mut SelectChannel) 
     );
     f.render_widget(input, chunks[0]);
     let cursor = &select_channel.input.cursor;
-    f.set_cursor(
+    f.set_cursor_position((
         chunks[0].x + cursor.col as u16 + 1,
         chunks[0].y + cursor.line as u16 + 1,
-    );
+    ));
     let items: Vec<_> = select_channel.filtered_names().map(ListItem::new).collect();
     match select_channel.state.selected() {
         Some(idx) if items.len() <= idx => {
@@ -201,10 +201,10 @@ fn draw_chat(f: &mut Frame, app: &mut App, area: Rect) {
         .block(Block::default().borders(Borders::ALL).title(title));
     f.render_widget(input, chunks[1]);
     if !app.select_channel.is_shown {
-        f.set_cursor(
+        f.set_cursor_position((
             chunks[1].x + cursor.col as u16 + 1,  // +1 for frame
             chunks[1].y + cursor.line as u16 + 1, // +1 for frame
-        );
+        ));
     }
 }
 
