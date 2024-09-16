@@ -1,6 +1,8 @@
+use std::collections::BTreeMap;
+
 use anyhow::Context;
 use presage::libsignal_service::content::Metadata;
-use presage::proto::sync_message::Sent;
+use presage::proto::sync_message::{Read, Sent};
 use presage::proto::{DataMessage, EditMessage, SyncMessage};
 use tracing::debug;
 
@@ -18,8 +20,6 @@ impl App {
             debug!("dropping a sync message not attached to a channel");
             return Ok(());
         };
-
-        tracing::info!(?sync_message, "#########");
 
         // edit message
         if let Some(Sent {
@@ -88,6 +88,36 @@ impl App {
 
         Ok(())
     }
+
+    /// Handles read notifications
+    pub(crate) fn handle_read(&mut self, read: &[Read]) {
+        // First collect all the read counters to avoid hitting the storage for the same channel
+        let read_counters: BTreeMap<ChannelId, u32> = read
+            .iter()
+            .filter_map(|read| {
+                let arrived_at = read.timestamp?;
+                let channel_id = self.storage.message_channel(arrived_at)?;
+                let num_unread = self
+                    .storage
+                    .messages(channel_id)
+                    .rev()
+                    .take_while(|msg| arrived_at < msg.arrived_at)
+                    .count();
+                let num_unread: u32 = num_unread.try_into().ok()?;
+                Some((channel_id, num_unread))
+            })
+            .collect();
+        // Update the unread counters
+        for (channel_id, num_unread) in read_counters {
+            if let Some(channel) = self.storage.channel(channel_id) {
+                if channel.unread_messages > 0 {
+                    let mut channel = channel.into_owned();
+                    channel.unread_messages = num_unread;
+                    self.storage.store_channel(channel);
+                }
+            }
+        }
+    }
 }
 
 trait MessageExt {
@@ -120,5 +150,43 @@ impl MessageExt for SyncMessage {
                 })?;
             ChannelId::from_master_key_bytes(group_v2.master_key.as_deref()?).ok()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::app::tests::test_app;
+
+    use super::*;
+
+    #[test]
+    #[ignore = "forgetful storage does not support lookup by arrived_at"]
+    fn test_handle_read() {
+        let (mut app, _events, _sent_messages) = test_app();
+
+        let channel_id = *app.channels.items.first().unwrap();
+
+        // new incoming message
+        let message = app
+            .storage
+            .store_message(
+                channel_id,
+                Message::text(app.user_id, 42, "unread message".to_string()),
+            )
+            .into_owned();
+
+        // mark as unread
+        app.storage
+            .channel(channel_id)
+            .unwrap()
+            .into_owned()
+            .unread_messages = 1;
+
+        app.handle_read(&[Read {
+            timestamp: Some(message.arrived_at),
+            ..Default::default()
+        }]);
+
+        assert_eq!(app.storage.channel(channel_id).unwrap().unread_messages, 0);
     }
 }

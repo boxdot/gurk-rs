@@ -693,6 +693,36 @@ impl Storage for SqliteStorage {
     }
 
     fn save(&mut self) {}
+
+    fn message_channel(&self, arrived_at: u64) -> Option<ChannelId> {
+        struct SqlChannelId {
+            channel_id: ChannelId,
+        }
+
+        let arrived_at: i64 = arrived_at
+            .try_into()
+            .map_err(|_| MessageConvertError::InvalidTimestamp)
+            .ok_logged()?;
+
+        self.execute(|ctx| {
+            Box::pin(
+                sqlx::query_as!(
+                    SqlChannelId,
+                    r#"
+                    SELECT
+                        m.channel_id AS "channel_id: _"
+                    FROM messages AS m
+                    WHERE m.arrived_at = ?
+                    LIMIT 1
+                "#,
+                    arrived_at
+                )
+                .fetch_optional(ctx.conn),
+            )
+        })
+        .ok_logged()?
+        .map(|channel_id| channel_id.channel_id)
+    }
 }
 
 #[cfg(test)]
@@ -957,5 +987,18 @@ mod tests {
         SqliteStorage::maybe_encrypt_and_open(&url, Some(secret), false).unwrap();
 
         assert_eq!(is_sqlite_encrypted_heuristics(&url), Some(true));
+    }
+
+    #[test]
+    fn test_sqlite_storage_message_channel() {
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+        let mut storage = fixtures();
+        let from_id = uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd");
+        let channel_id = ChannelId::User(uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a"));
+        storage.store_message(
+            channel_id,
+            Message::text(from_id, 1664832050000, "hello".to_owned()),
+        );
+        assert_eq!(storage.message_channel(1664832050000), Some(channel_id));
     }
 }

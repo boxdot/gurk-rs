@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                    SELECT\n                        m.channel_id AS \"channel_id: _\"\n                    FROM messages AS m\n                    WHERE m.arrived_at = ?\n                    LIMIT 1\n                ",
+  "describe": {
+    "columns": [
+      {
+        "name": "channel_id: _",
+        "ordinal": 0,
+        "type_info": "Blob"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1b6fc3cd9b2c351443f980ab3212bfce367a7cfc86201ddf11e25f18a9c8cdb2"
+}

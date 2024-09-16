@@ -335,6 +335,16 @@ impl Storage for JsonStorage {
             error!(error =% e, "failed to save json storage");
         }
     }
+
+    fn message_channel(&self, arrived_at: u64) -> Option<ChannelId> {
+        self.data.channels.items.iter().find_map(|channel| {
+            channel
+                .messages
+                .binary_search_by_key(&arrived_at, |msg| msg.arrived_at)
+                .is_ok()
+                .then_some(channel.id)
+        })
+    }
 }
 
 #[cfg(test)]
@@ -600,5 +610,18 @@ mod tests {
             Some(dt)
         );
         assert_eq!(storage.metadata().contacts_sync_request_at, Some(dt));
+    }
+
+    #[test]
+    fn test_json_storage_message_channel() {
+        let mut storage = json_storage_from_snapshot();
+        let channel_id = ChannelId::User(uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd"));
+        let from_id = uuid!("00000000-0000-0000-0000-000000000000");
+        storage.store_message(
+            channel_id,
+            Message::text(from_id, 1664832050004, "hello".to_owned()),
+        );
+        assert_eq!(storage.message_channel(1664832050004), Some(channel_id));
+        assert_eq!(storage.message_channel(0), None);
     }
 }

@@ -44,6 +44,8 @@ pub trait Storage {
     /// Gets the message by id
     fn message(&self, message_id: MessageId) -> Option<Cow<Message>>;
 
+    fn message_channel(&self, arrived_at: u64) -> Option<ChannelId>;
+
     fn edits(
         &self,
         message_id: MessageId,

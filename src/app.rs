@@ -480,7 +480,7 @@ impl App {
     }
 
     pub async fn on_message(&mut self, content: Content) -> anyhow::Result<()> {
-        tracing::info!(?content, "incoming");
+        // tracing::info!(?content, "incoming");
 
         #[cfg(feature = "dev")]
         if self.config.developer.dump_raw_messages {
@@ -490,6 +490,10 @@ impl App {
         }
 
         let user_id = self.user_id;
+
+        if let ContentBody::SynchronizeMessage(SyncMessage { ref read, .. }) = content.body {
+            self.handle_read(read);
+        }
 
         let (channel_idx, message) = match (content.metadata, content.body) {
             // Private note message
@@ -1559,7 +1563,7 @@ fn add_emoji_from_sticker(body: &mut Option<String>, sticker: Option<Sticker>) {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     use crate::config::User;
@@ -1570,7 +1574,7 @@ mod tests {
     use std::cell::RefCell;
     use std::rc::Rc;
 
-    fn test_app() -> (
+    pub(crate) fn test_app() -> (
         App,
         mpsc::UnboundedReceiver<Event>,
         Rc<RefCell<Vec<Message>>>,
