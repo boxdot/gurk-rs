@@ -70,6 +70,7 @@ libraries that are not available on crates.io.
 
 * App navigation
   * `f1` Toggle help panel.
+  * `ctrl+c` Quit.
 * Message input
   * `tab` Send emoji from input line as reaction on selected message.
   * `alt+enter` Switch between multi-line and singl-line input modes.
