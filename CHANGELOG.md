@@ -4,7 +4,11 @@
 
 ### Added
 
-- Add `colored_messages` config option
+- Add `colored_messages` config option ([#311])
+- Handle read receipts from other clients ([#312])
+
+[#311]: https://github.com/boxdot/gurk-rs/pull/311
+[#312]: https://github.com/boxdot/gurk-rs/pull/312
 
 ## 0.5.1
 
