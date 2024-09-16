@@ -1,12 +1,18 @@
 # Changelog
 
+## 0.5.2-dev
+
+### Added
+
+- Add `colored_messages` config option
+
 ## 0.5.1
 
-## Added
+### Added
 
 - Edit messages ([#301])
 
-## Fixes
+### Fixes
 
 - Fix unexpected response HTTP 409 during linking ([#299])
 

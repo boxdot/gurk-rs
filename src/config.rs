@@ -34,6 +34,9 @@ pub struct Config {
     #[serde(default)]
     /// If set, enables encryption of the key store and messages database
     pub passphrase: Option<String>,
+    /// If set, the full message text will be colored, not only the author name
+    #[serde(default)]
+    pub colored_messages: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -73,6 +76,7 @@ impl Config {
             developer: Default::default(),
             sqlite: Default::default(),
             passphrase: None,
+            colored_messages: false,
         }
     }
 

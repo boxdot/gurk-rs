@@ -325,7 +325,15 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
             };
             let date_division = display_date_line(msg.arrived_at, &mut previous_msg_day, width);
             let show_receipt = ShowReceipt::from_msg(&msg, app.user_id, app.config.show_receipts);
-            let msg = display_message(&names, &msg, &prefix, width, height, show_receipt);
+            let msg = display_message(
+                &names,
+                &msg,
+                &prefix,
+                width,
+                height,
+                show_receipt,
+                app.config.colored_messages,
+            );
             [date_division, msg]
         })
         .flatten();
@@ -451,6 +459,7 @@ fn display_message(
     width: usize,
     height: usize,
     show_receipt: ShowReceipt,
+    colored_messages: bool,
 ) -> Option<ListItem<'static>> {
     let receipt = Span::styled(
         display_receipt(msg.receipt, show_receipt),
@@ -515,10 +524,10 @@ fn display_message(
                         time.clone(),
                         from.clone(),
                         delimiter.clone(),
-                        Span::styled(line.strip_prefix(prefix).unwrap().to_string(), quote_style),
+                        Span::styled(line.strip_prefix(prefix).unwrap().to_owned(), quote_style),
                     ]
                 } else {
-                    vec![Span::styled(line.to_string(), quote_style)]
+                    vec![Span::styled(line.into_owned(), quote_style)]
                 };
                 Line::from(res)
             })
@@ -526,6 +535,11 @@ fn display_message(
     }
 
     let add_time = spans.is_empty();
+    let message_style = if colored_messages {
+        Style::default().fg(from_color)
+    } else {
+        Style::default()
+    };
     spans.extend(
         textwrap::wrap(&text, &wrap_opts)
             .into_iter()
@@ -537,10 +551,10 @@ fn display_message(
                         time.clone(),
                         from.clone(),
                         delimiter.clone(),
-                        Span::from(line.strip_prefix(prefix).unwrap().to_string()),
+                        Span::styled(line.strip_prefix(prefix).unwrap().to_owned(), message_style),
                     ]
                 } else {
-                    vec![Span::from(line.into_owned())]
+                    vec![Span::styled(line.into_owned(), message_style)]
                 };
                 Line::from(res)
             }),
@@ -802,7 +816,15 @@ mod tests {
             attachments: vec![test_attachment()],
             ..test_message()
         };
-        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, ShowReceipt::Never);
+        let rendered = display_message(
+            &names,
+            &msg,
+            PREFIX,
+            WIDTH,
+            HEIGHT,
+            ShowReceipt::Never,
+            false,
+        );
 
         let expected = ListItem::new(Text::from(vec![
             Line::from(vec![
@@ -830,7 +852,15 @@ mod tests {
             attachments: vec![test_attachment()],
             ..test_message()
         };
-        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, ShowReceipt::Never);
+        let rendered = display_message(
+            &names,
+            &msg,
+            PREFIX,
+            WIDTH,
+            HEIGHT,
+            ShowReceipt::Never,
+            false,
+        );
 
         let expected = ListItem::new(Text::from(vec![
             Line::from(vec![
@@ -862,7 +892,7 @@ mod tests {
             ..test_message()
         };
         let show_receipt = ShowReceipt::from_msg(&msg, USER_ID, true);
-        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, show_receipt);
+        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, show_receipt, false);
 
         let expected = ListItem::new(Text::from(vec![Line::from(vec![
             Span::styled("○ ", Style::default().fg(Color::Yellow)),
@@ -886,7 +916,7 @@ mod tests {
             ..test_message()
         };
         let show_receipt = ShowReceipt::from_msg(&msg, USER_ID, true);
-        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, show_receipt);
+        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, show_receipt, false);
 
         let expected = ListItem::new(Text::from(vec![Line::from(vec![
             Span::styled("◉ ", Style::default().fg(Color::Yellow)),
@@ -910,7 +940,7 @@ mod tests {
             ..test_message()
         };
         let show_receipt = ShowReceipt::from_msg(&msg, USER_ID, true);
-        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, show_receipt);
+        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, show_receipt, false);
 
         let expected = ListItem::new(Text::from(vec![Line::from(vec![
             Span::styled("● ", Style::default().fg(Color::Yellow)),
@@ -934,7 +964,7 @@ mod tests {
             ..test_message()
         };
         let show_receipt = ShowReceipt::from_msg(&msg, USER_ID, false);
-        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, show_receipt);
+        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, show_receipt, false);
 
         let expected = ListItem::new(Text::from(vec![Line::from(vec![
             Span::styled("", Style::default().fg(Color::Yellow)),
@@ -960,7 +990,7 @@ mod tests {
             ..test_message()
         };
         let show_receipt = ShowReceipt::from_msg(&msg, USER_ID, true);
-        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, show_receipt);
+        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, show_receipt, false);
 
         let expected = ListItem::new(Text::from(vec![Line::from(vec![
             Span::styled("  ", Style::default().fg(Color::Yellow)),
@@ -998,7 +1028,7 @@ mod tests {
             ..test_message()
         };
         let show_receipt = ShowReceipt::from_msg(&msg, USER_ID, true);
-        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, show_receipt);
+        let rendered = display_message(&names, &msg, PREFIX, WIDTH, HEIGHT, show_receipt, false);
 
         let expected = ListItem::new(Text::from(vec![
             Line::from(vec![
