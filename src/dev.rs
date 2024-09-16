@@ -21,6 +21,8 @@ pub struct ContentBase64 {
 struct MetadataDef {
     #[serde(with = "ServiceAddressDef")]
     sender: ServiceAddress,
+    #[serde(with = "ServiceAddressDef", default = "default_destination")]
+    destination: ServiceAddress,
     sender_device: u32,
     timestamp: u64,
     needs_receipt: bool,
@@ -43,10 +45,18 @@ pub enum ServiceIdTypeDef {
     PhoneNumberIdentity,
 }
 
+fn default_destination() -> ServiceAddress {
+    ServiceAddress {
+        uuid: Uuid::nil(),
+        identity: ServiceIdType::AccountIdentity,
+    }
+}
+
 impl From<Metadata> for MetadataDef {
     fn from(metadata: Metadata) -> Self {
         Self {
             sender: metadata.sender,
+            destination: metadata.destination,
             sender_device: metadata.sender_device,
             timestamp: metadata.timestamp,
             needs_receipt: metadata.needs_receipt,
