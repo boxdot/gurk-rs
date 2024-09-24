@@ -68,6 +68,8 @@ libraries that are not available on crates.io.
 
 # Key bindings
 
+## Default keybindings
+
 * App navigation
   * `f1` Toggle help panel.
   * `ctrl+c` Quit.
@@ -97,6 +99,67 @@ libraries that are not available on crates.io.
   * `ctrl+p` Open / close channel selection popup.
 * Clipboard
   * `alt+y` Copy selected message to clipboard.
+
+## Custom keybindings
+The default keybindings can be overwritten at startup by configuring
+keybindings in `gurk.toml` using the format `keybindings.<mode>.<keycombination> =
+"<command>"`. Valid commands are `anywhere`, `normal`, `message_selected`,
+`channel_modal`, `multiline`, and `help`. Valid key combination specifiers are e.g. `left,
+alt-j, ctrl-f, backspace, pagedown`. The default keybindings can be disabled by
+setting `default_keybindings = false`. An empty command removes an existing
+binding if it exists in the given mode. Configuration troubleshooted by running
+`gurk --verbose` and examining the resulting `gurk.log`.
+
+### Supported commands
+```
+help
+quit
+toggle_channel_modal
+toggle_multiline
+react
+move_text up|down character|word|line
+select_channel previous|next
+select_channel_modal previous|text
+select_message previous|next entry
+kill_line
+kill_whole_line
+kill_backward_line
+kill_word
+copy_message selected
+beginning_of_line
+end_of_line
+delete_character previous
+edit_message
+open_url
+```
+
+### Example configuration
+```toml
+default_keybindings = true
+
+[keybindings.anywhere]
+ctrl-c = ""
+ctrl-q = "quit"
+
+[keybindings.normal]
+ctrl-j = ""
+ctrl-k = "kill_line"
+ctrl-n = "select_channel next"
+ctrl-p = "select_channel previous"
+alt-c = "toggle_channel_modal"
+up = "select_message previous entry"
+down = "select_message next entry"
+
+[keybindings.channel_modal]
+ctrl-j = ""
+ctrl-k = ""
+ctrl-n = "select_channel_modal next"
+ctrl-p = "select_channel_modal previous"
+
+[keybindings.message_selected]
+alt-y = ""
+alt-w = "copy_message selected"
+```
 
 ## License
 
