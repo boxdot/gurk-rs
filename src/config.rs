@@ -5,6 +5,8 @@ use url::Url;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::command::ModeKeybindingConfig;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
     /// Path to the JSON file (incl. filename) storing channels and messages.
@@ -37,6 +39,12 @@ pub struct Config {
     /// If set, the full message text will be colored, not only the author name
     #[serde(default)]
     pub colored_messages: bool,
+    #[serde(default)]
+    /// Keymaps
+    pub keybindings: ModeKeybindingConfig,
+    /// Whether to enable the default keybindings
+    #[serde(default = "default_true")]
+    pub default_keybindings: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -77,6 +85,8 @@ impl Config {
             sqlite: Default::default(),
             passphrase: None,
             colored_messages: false,
+            default_keybindings: true,
+            keybindings: ModeKeybindingConfig::default(),
         }
     }
 

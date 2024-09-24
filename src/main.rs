@@ -9,14 +9,15 @@ use chrono::{DateTime, Utc};
 use clap::Parser;
 use crossterm::{
     event::{
-        DisableMouseCapture, EnableMouseCapture, Event as CEvent, EventStream, KeyCode, KeyEvent,
-        KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+        DisableMouseCapture, EnableMouseCapture, Event as CEvent, EventStream, KeyEvent,
+        KeyEventKind, MouseButton, MouseEvent, MouseEventKind,
     },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use gurk::app::App;
 use gurk::backoff::Backoff;
+use gurk::command::Command;
 use gurk::storage::{sync_from_signal, JsonStorage, MemCache, SqliteStorage, Storage};
 use gurk::{config, signal, ui};
 use presage::libsignal_service::content::Content;
@@ -320,103 +321,17 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                     kind: KeyEventKind::Press,
                     ..
                 },
-            )) => match event.code {
-                KeyCode::F(1u8) => {
-                    // Toggle help panel
-                    app.toggle_help();
-                }
-                KeyCode::Char('c') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                    break;
-                }
-                KeyCode::Left => {
-                    if event
-                        .modifiers
-                        .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
-                    {
-                        app.get_input().move_back_word();
+            )) => {
+                if let Some(cmd) = app.event_to_command(&event) {
+                    if *cmd == Command::Quit {
+                        break;
                     } else {
-                        app.get_input().on_left();
+                        app.on_command(cmd.clone()).await?;
                     }
+                } else {
+                    app.on_key(event).await?
                 }
-                KeyCode::Up if event.modifiers.contains(KeyModifiers::ALT) => app.on_pgup(),
-                KeyCode::Right => {
-                    if event
-                        .modifiers
-                        .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
-                    {
-                        app.get_input().move_forward_word();
-                    } else {
-                        app.get_input().on_right();
-                    }
-                }
-                KeyCode::Down if event.modifiers.contains(KeyModifiers::ALT) => app.on_pgdn(),
-                KeyCode::Char('j') if event.modifiers.contains(KeyModifiers::ALT) => app.on_pgdn(),
-                KeyCode::PageUp => app.on_pgup(),
-                KeyCode::Char('k') if event.modifiers.contains(KeyModifiers::ALT) => app.on_pgup(),
-                KeyCode::PageDown => app.on_pgdn(),
-                KeyCode::Char('f') if event.modifiers.contains(KeyModifiers::ALT) => {
-                    app.get_input().move_forward_word();
-                }
-                KeyCode::Char('b') if event.modifiers.contains(KeyModifiers::ALT) => {
-                    app.get_input().move_back_word();
-                }
-                KeyCode::Char('u') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                    app.get_input().on_delete_line();
-                }
-                KeyCode::Char('w') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                    app.get_input().on_delete_word();
-                }
-                KeyCode::Down => {
-                    if app.is_select_channel_shown() {
-                        app.select_channel_next()
-                    } else if app.is_multiline_input {
-                        app.input.move_line_down();
-                    } else {
-                        app.select_next_channel();
-                    }
-                }
-                KeyCode::Char('j') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                    if app.is_select_channel_shown() {
-                        app.select_channel_next()
-                    } else if app.is_multiline_input {
-                        app.input.move_line_down();
-                    } else {
-                        app.select_next_channel();
-                    }
-                }
-                KeyCode::Char('y') if event.modifiers.contains(KeyModifiers::ALT) => {
-                    app.copy_selection();
-                }
-                KeyCode::Up => {
-                    if app.is_select_channel_shown() {
-                        app.select_channel_prev()
-                    } else if app.is_multiline_input {
-                        app.input.move_line_up();
-                    } else {
-                        app.select_previous_channel();
-                    }
-                }
-                KeyCode::Char('k') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                    if app.is_select_channel_shown() {
-                        app.select_channel_prev()
-                    } else if app.is_multiline_input {
-                        app.input.move_line_up();
-                    } else {
-                        app.select_previous_channel();
-                    }
-                }
-                KeyCode::Backspace
-                    if event
-                        .modifiers
-                        .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
-                {
-                    app.get_input().on_delete_word();
-                }
-                KeyCode::Char('k') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                    app.get_input().on_delete_suffix();
-                }
-                _ => app.on_key(event).await?,
-            },
+            }
             Some(Event::Input(..)) => {}
             Some(Event::Paste(content)) => {
                 let multi_line_state = app.is_multiline_input;
