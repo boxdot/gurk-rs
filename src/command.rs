@@ -183,6 +183,7 @@ pub fn parse(input: &str) -> Result<Command, CommandParseError> {
             "help" => Ok(Command::Help),
             "quit" => Ok(Command::Quit),
             "toggle_channel_modal" => Ok(Command::ToggleChannelModal),
+            "toggle_multiline" => Ok(Command::ToggleMultiline),
             "react" => Ok(Command::React),
             "move_text" => {
                 let usage = E::InsufficientArgs {
@@ -263,6 +264,7 @@ ctrl-c = "quit"
 
 [normal]
 ctrl-p = "toggle_channel_modal"
+alt-enter = "toggle_multiline"
 ctrl-left = "move_text previous character"
 ctrl-right = "move_text next character"
 left = "move_text previous character"
