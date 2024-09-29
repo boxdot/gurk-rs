@@ -17,7 +17,6 @@ use crossterm::{
 };
 use gurk::app::App;
 use gurk::backoff::Backoff;
-use gurk::command::Command;
 use gurk::storage::{sync_from_signal, JsonStorage, MemCache, SqliteStorage, Storage};
 use gurk::{config, signal, ui};
 use presage::libsignal_service::content::Content;
@@ -321,17 +320,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                     kind: KeyEventKind::Press,
                     ..
                 },
-            )) => {
-                if let Some(cmd) = app.event_to_command(&event) {
-                    if *cmd == Command::Quit {
-                        break;
-                    } else {
-                        app.on_command(cmd.clone()).await?;
-                    }
-                } else {
-                    app.on_key(event).await?
-                }
-            }
+            )) => app.on_key(event).await?,
             Some(Event::Input(..)) => {}
             Some(Event::Paste(content)) => {
                 let multi_line_state = app.is_multiline_input;

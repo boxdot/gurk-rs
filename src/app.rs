@@ -289,49 +289,56 @@ impl App {
                 self.get_input().on_backspace();
             }
             Command::DeleteCharacter(MoveDirection::Next) => {} // unimplemented!("{command:?}")},
-            Command::Quit => panic!("Should be handled by main"),
+            Command::Quit => {
+                self.should_quit = true;
+            }
         }
         Ok(())
     }
 
     pub async fn on_key(&mut self, key: KeyEvent) -> anyhow::Result<()> {
-        match key.code {
-            KeyCode::Char('\r') => self.get_input().put_char('\n'),
-            KeyCode::Enter => {
-                if !self.select_channel.is_shown {
-                    if self.is_multiline_input {
-                        self.get_input().new_line();
-                    } else if !self.input.data.is_empty() {
-                        if let Some(idx) = self.channels.state.selected() {
-                            self.send_input(idx);
+        if let Some(cmd) = self.event_to_command(&key) {
+            self.on_command(cmd.clone()).await?;
+        } else {
+            match key.code {
+                KeyCode::Char('\r') => self.get_input().put_char('\n'),
+                KeyCode::Enter => {
+                    if !self.select_channel.is_shown {
+                        if self.is_multiline_input {
+                            self.get_input().new_line();
+                        } else if !self.input.data.is_empty() {
+                            if let Some(idx) = self.channels.state.selected() {
+                                self.send_input(idx);
+                            }
+                        } else {
+                            // input is empty
+                            self.try_open_url();
                         }
-                    } else {
-                        // input is empty
-                        self.try_open_url();
+                    } else if self.select_channel.is_shown {
+                        if let Some(channel_id) = self.select_channel.selected_channel_id().copied()
+                        {
+                            self.select_channel.is_shown = false;
+                            let (idx, _) = self
+                                .channels
+                                .items
+                                .iter()
+                                .enumerate()
+                                .find(|(_, &id)| id == channel_id)
+                                .context("channel disappeared during channel select popup")?;
+                            self.channels.state.select(Some(idx));
+                        }
                     }
-                } else if self.select_channel.is_shown {
-                    if let Some(channel_id) = self.select_channel.selected_channel_id().copied() {
+                }
+                KeyCode::Esc => {
+                    if self.select_channel.is_shown {
                         self.select_channel.is_shown = false;
-                        let (idx, _) = self
-                            .channels
-                            .items
-                            .iter()
-                            .enumerate()
-                            .find(|(_, &id)| id == channel_id)
-                            .context("channel disappeared during channel select popup")?;
-                        self.channels.state.select(Some(idx));
+                    } else if !self.reset_editing() {
+                        self.reset_message_selection();
                     }
                 }
+                KeyCode::Char(c) => self.get_input().put_char(c),
+                _ => {}
             }
-            KeyCode::Esc => {
-                if self.select_channel.is_shown {
-                    self.select_channel.is_shown = false;
-                } else if !self.reset_editing() {
-                    self.reset_message_selection();
-                }
-            }
-            KeyCode::Char(c) => self.get_input().put_char(c),
-            _ => {}
         }
         Ok(())
     }
