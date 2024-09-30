@@ -1,103 +1,132 @@
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use crokey::KeyCombination;
 use serde::{Deserialize, Serialize};
+use strum::{EnumIter, EnumProperty, EnumString, VariantNames};
 
 pub type KeybindingConfig = HashMap<KeyCombination, String>;
 pub type ModeKeybindingConfig = HashMap<WindowMode, KeybindingConfig>;
 pub type Keybinding = HashMap<KeyCombination, Command>;
 pub type ModeKeybinding = HashMap<WindowMode, Keybinding>;
 
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Clone,
+    Default,
+    Debug,
+    Eq,
+    PartialEq,
+    strum_macros::Display,
+    strum_macros::VariantNames,
+    EnumString,
+)]
+#[strum(serialize_all = "snake_case")]
+pub enum Widget {
+    #[default]
+    Help,
+}
+
+#[derive(
+    Clone,
+    Default,
+    Debug,
+    Eq,
+    PartialEq,
+    strum_macros::Display,
+    strum_macros::VariantNames,
+    EnumString,
+)]
+#[strum(serialize_all = "snake_case")]
+pub enum DirectionVertical {
+    #[default]
+    Up,
+    Down,
+}
+
+#[derive(
+    Clone,
+    Default,
+    Debug,
+    Eq,
+    PartialEq,
+    strum_macros::Display,
+    strum_macros::VariantNames,
+    EnumString,
+)]
+#[strum(serialize_all = "snake_case")]
 pub enum MoveDirection {
+    #[default]
     Previous,
     Next,
 }
 
-impl MoveDirection {
-    fn parse(dir: &str) -> Result<Self, CommandParseError> {
-        match dir {
-            "previous" => Ok(Self::Previous),
-            "next" => Ok(Self::Next),
-            _ => Err(CommandParseError::BadEnumArg {
-                arg: dir.to_string(),
-                accept: vec!["previous".into(), "next".into()],
-                optional: false,
-            }),
-        }
-    }
-}
-
-#[derive(Clone, Eq, PartialEq, Serialize, Deserialize, Debug)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Clone,
+    Default,
+    Debug,
+    Eq,
+    PartialEq,
+    strum_macros::Display,
+    strum_macros::VariantNames,
+    EnumString,
+)]
+#[strum(serialize_all = "snake_case")]
 pub enum MoveAmountText {
+    #[default]
     Character,
     Word,
     Line,
     // Sentence,
 }
 
-impl MoveAmountText {
-    fn parse(amount: &str) -> Result<Self, CommandParseError> {
-        match amount {
-            "character" | "c" => Ok(Self::Character),
-            "word" | "w" => Ok(Self::Word),
-            "line" | "l" => Ok(Self::Line),
-            _ => Err(CommandParseError::BadEnumArg {
-                arg: amount.to_string(),
-                accept: vec!["character".into(), "word".into(), "line".into()],
-                optional: false,
-            }),
-        }
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Clone,
+    Default,
+    Debug,
+    Eq,
+    PartialEq,
+    strum_macros::Display,
+    strum_macros::VariantNames,
+    EnumString,
+)]
+#[strum(serialize_all = "snake_case")]
 pub enum MoveAmountVisual {
+    #[default]
     Entry,
     // HalfScreen,
     // Screen,
 }
 
-impl MoveAmountVisual {
-    fn parse(amount: &str) -> Result<Self, CommandParseError> {
-        match amount {
-            "entry" => Ok(Self::Entry),
-            // "half_screen" => Ok(Self::HalfScreen),
-            // "screen" => Ok(Self::Screen),
-            _ => Err(CommandParseError::BadEnumArg {
-                arg: amount.to_string(),
-                accept: vec!["entry".into()],
-                optional: false,
-            }),
-        }
-    }
-}
-
-#[derive(Clone, Eq, PartialEq, Serialize, Deserialize, Debug)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Clone,
+    Default,
+    Debug,
+    Eq,
+    PartialEq,
+    strum_macros::Display,
+    strum_macros::VariantNames,
+    EnumString,
+)]
+#[strum(serialize_all = "snake_case")]
 pub enum MessageSelector {
+    #[default]
     Selected,
     Marked,
 }
 
-impl MessageSelector {
-    fn parse(input: &str) -> Result<Self, CommandParseError> {
-        match input {
-            "selected" => Ok(Self::Selected),
-            "marked" => Ok(Self::Marked),
-            _ => Err(CommandParseError::BadEnumArg {
-                arg: input.to_string(),
-                accept: vec!["selected".into(), "marked".into()],
-                optional: false,
-            }),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Hash, Copy)]
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    Deserialize,
+    Serialize,
+    Hash,
+    Copy,
+    strum_macros::Display,
+    strum_macros::VariantNames,
+)]
+#[strum(serialize_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 pub enum WindowMode {
     Anywhere,
@@ -108,47 +137,87 @@ pub enum WindowMode {
     Normal,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
-#[serde(rename_all = "snake_case")]
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    strum_macros::Display,
+    strum_macros::VariantNames,
+    EnumString,
+    EnumIter,
+    EnumProperty,
+)]
+#[strum(serialize_all = "snake_case")]
 pub enum Command {
-    /// Toggle help panel
+    #[strum(props(desc = "Toggle help panel"))]
     Help,
-    /// Quit application
+    #[strum(props(desc = "Quit application"))]
     Quit,
-    /// Open pop-up for selecting a channel
+    #[strum(props(desc = "Open pop-up for selecting a channel"))]
     ToggleChannelModal,
-    /// Switch between single-line and multi-line modes.
+    #[strum(props(desc = "Switch between single-line and multi-line modes."))]
     ToggleMultiline,
-    /// Sends emoji from input line as reaction on selected message.
+    #[strum(props(desc = "Sends emoji from input line as reaction on selected message."))]
     React,
-    /// Move forward/backward one character/word/line
+    #[strum(props(desc = "Scroll a widget", usage = "scroll help up|down entry"))]
+    #[strum(serialize = "scroll", to_string = "scroll {0} {1} {2}")]
+    Scroll(Widget, DirectionVertical, MoveAmountVisual),
+    #[strum(props(
+        desc = "Move forward/backward one character/word/line",
+        usage = "move_text previous|next character|word|line"
+    ))]
+    #[strum(serialize = "move_text", to_string = "move_text {0} {1}")]
     MoveText(MoveDirection, MoveAmountText),
     // MoveChannel(MoveDirectionVert, MoveAmountVisual),
-    /// Select next/previous channel in sidebar
+    #[strum(props(
+        desc = "Select next/previous channel in sidebar",
+        usage = "select_channel previous|next"
+    ))]
+    #[strum(serialize = "select_channel", to_string = "select_channel {0}")]
     SelectChannel(MoveDirection),
-    /// Select next/previous channel in channel modal
+    #[strum(props(
+        desc = "Select next/previous channel in channel modal",
+        usage = "select_channel_modal previous|next"
+    ))]
+    #[strum(
+        serialize = "select_channel_modal",
+        to_string = "select_channel_modal {0}"
+    )]
     SelectChannelModal(MoveDirection),
-    /// Select next/previous message
+    #[strum(props(
+        desc = "Select next/previous message",
+        usage = "select_message previous|next entry"
+    ))]
+    #[strum(serialize = "select_message", to_string = "select_message {0} {1}")]
     SelectMessage(MoveDirection, MoveAmountVisual),
-    /// Delete to the end of the line.
+    #[strum(props(desc = "Delete to the end of the line."))]
     KillLine,
-    /// Delete from the start to the end of the line.
+    #[strum(props(desc = "Delete from the start to the end of the line."))]
     KillWholeLine,
-    /// Delete to the start of the line.
+    #[strum(props(desc = "Delete to the start of the line."))]
     KillBackwardLine,
-    /// Delete last word.
+    #[strum(props(desc = "Delete last word."))]
     KillWord,
-    /// Copy selected message to clipboard
+    #[strum(props(
+        desc = "Copy selected message to clipboard",
+        usage = "copy_message selected"
+    ))]
+    #[strum(serialize = "copy_message", to_string = "copy_message {0}")]
     CopyMessage(MessageSelector),
-    /// Move cursor to the beginning of the text.
+    #[strum(props(desc = "Move cursor to the beginning of the text."))]
     BeginningOfLine,
-    /// Move cursor the the end of the text.
+    #[strum(props(desc = "Move cursor the the end of the text."))]
     EndOfLine,
-    /// Delete previous character.
+    #[strum(props(
+        desc = "Delete previous character.",
+        usage = "delete_character previous|next"
+    ))]
+    #[strum(serialize = "delete_character", to_string = "delete_character {0}")]
     DeleteCharacter(MoveDirection),
-    /// Edit selected message
+    #[strum(props(desc = "Edit selected message"))]
     EditMessage,
-    /// Try to open the first url in the selected message
+    #[strum(props(desc = "Try to open the first url in the selected message"))]
     OpenUrl,
     // ReplyMessage,
     // DeleteMessage,
@@ -158,6 +227,7 @@ pub enum Command {
 pub enum CommandParseError {
     NoSuchCommand {
         cmd: String,
+        accept: &'static [&'static str],
     },
     InsufficientArgs {
         cmd: String,
@@ -165,95 +235,121 @@ pub enum CommandParseError {
     },
     BadEnumArg {
         arg: String,
-        accept: Vec<String>,
+        accept: &'static [&'static str],
         optional: bool,
-    },
-    ArgParseError {
-        arg: String,
-        err: String,
     },
 }
 
-pub fn parse(input: &str) -> Result<Command, CommandParseError> {
-    let words: Vec<_> = input.split_whitespace().collect();
+fn parse(input: &str) -> Result<Command, CommandParseError> {
+    let words: Vec<_> = input.trim().split_whitespace().collect();
     use CommandParseError as E;
 
-    if let Some((cmd, args)) = words.split_first() {
-        match *cmd {
-            "help" => Ok(Command::Help),
-            "quit" => Ok(Command::Quit),
-            "toggle_channel_modal" => Ok(Command::ToggleChannelModal),
-            "toggle_multiline" => Ok(Command::ToggleMultiline),
-            "react" => Ok(Command::React),
-            "move_text" => {
-                let usage = E::InsufficientArgs {
-                    cmd: cmd.to_string(),
-                    hint: Some("previous|next character|word|line".into()),
-                };
-                let &dir = args.first().ok_or(usage.clone())?;
-                let &amount = args.get(1).ok_or(usage)?;
-                let dir = MoveDirection::parse(dir)?;
-                let amount = MoveAmountText::parse(amount)?;
-                Ok(Command::MoveText(dir, amount))
-            }
-            // MoveDirectionVert, MoveAmountVisual
-            "select_channel" => {
-                let usage = E::InsufficientArgs {
-                    cmd: cmd.to_string(),
-                    hint: Some("previous|next".into()),
-                };
-                let &dir = args.first().ok_or(usage)?;
-                let dir = MoveDirection::parse(dir)?;
-                Ok(Command::SelectChannel(dir))
-            }
-            "select_channel_modal" => {
-                let usage = E::InsufficientArgs {
-                    cmd: cmd.to_string(),
-                    hint: Some("previous|next".into()),
-                };
-                let &dir = args.first().ok_or(usage)?;
-                let dir = MoveDirection::parse(dir)?;
-                Ok(Command::SelectChannelModal(dir))
-            }
-            "select_message" => {
-                let usage = E::InsufficientArgs {
-                    cmd: cmd.to_string(),
-                    hint: Some("previous|next entry".into()),
-                };
-                let &dir = args.first().ok_or(usage.clone())?;
-                let &amount = args.get(1).ok_or(usage)?;
-                let dir = MoveDirection::parse(dir)?;
-                let amount = MoveAmountVisual::parse(amount)?;
-                Ok(Command::SelectMessage(dir, amount))
-            }
-            "kill_line" => Ok(Command::KillLine),
-            "kill_whole_line" => Ok(Command::KillWholeLine),
-            "kill_backward_line" => Ok(Command::KillBackwardLine),
-            "kill_word" => Ok(Command::KillWord),
-            "copy_message" => Ok(Command::CopyMessage(MessageSelector::parse(
-                args.first().unwrap_or(&"selected"),
-            )?)),
-            "beginning_of_line" => Ok(Command::BeginningOfLine),
-            "end_of_line" => Ok(Command::EndOfLine),
-            "delete_character" => {
-                let usage = E::InsufficientArgs {
-                    cmd: cmd.to_string(),
-                    hint: Some("previous|next".into()),
-                };
-                let &dir = args.first().ok_or(usage.clone())?;
-                let dir = MoveDirection::parse(dir)?;
-                Ok(Command::DeleteCharacter(dir))
-            }
-            "edit_message" => Ok(Command::EditMessage),
-            "open_url" => Ok(Command::OpenUrl),
-            // "reply_message" => Ok(Command::ReplyMessage),
-            // "delete_message" => Ok(Command::DeleteMessage),
-            _ => Err(CommandParseError::NoSuchCommand {
-                cmd: cmd.to_string(),
-            }),
+    let (cmd_str, args) = words.split_first().unwrap();
+    let cmd = Command::from_str(cmd_str).map_err(|_e| E::NoSuchCommand {
+        cmd: cmd_str.to_string(),
+        accept: Command::VARIANTS,
+    })?;
+    match cmd {
+        Command::Scroll(_, _, _) => {
+            let usage = E::InsufficientArgs {
+                cmd: cmd_str.to_string(),
+                hint: Some(
+                    [
+                        Widget::VARIANTS.join("|"),
+                        DirectionVertical::VARIANTS.join("|"),
+                        MoveAmountVisual::VARIANTS.join("|"),
+                    ]
+                    .join(" "),
+                ),
+            };
+            let widget = args.first().ok_or(usage.clone())?;
+            let dir = args.get(1).ok_or(usage.clone())?;
+            let amount = args.get(2).ok_or(usage)?;
+            let widget = Widget::from_str(widget).map_err(|_e| E::BadEnumArg {
+                arg: widget.to_string(),
+                accept: Widget::VARIANTS,
+                optional: false,
+            })?;
+            let dir = DirectionVertical::from_str(dir).map_err(|_e| E::BadEnumArg {
+                arg: dir.to_string(),
+                accept: DirectionVertical::VARIANTS,
+                optional: false,
+            })?;
+            let amount = MoveAmountVisual::from_str(amount).map_err(|_e| E::BadEnumArg {
+                arg: amount.to_string(),
+                accept: MoveAmountVisual::VARIANTS,
+                optional: false,
+            })?;
+            Ok(Command::Scroll(widget, dir, amount))
         }
-    } else {
-        Err(CommandParseError::NoSuchCommand { cmd: input.into() })
+        Command::MoveText(_, _) => {
+            let usage = E::InsufficientArgs {
+                cmd: cmd_str.to_string(),
+                hint: Some(
+                    [
+                        MoveDirection::VARIANTS.join("|"),
+                        MoveAmountText::VARIANTS.join("|"),
+                    ]
+                    .join(" "),
+                ),
+            };
+            let direction = args.first().ok_or(usage.clone())?;
+            let amount = args.get(1).ok_or(usage)?;
+            let direction = MoveDirection::from_str(direction).map_err(|_e| E::BadEnumArg {
+                arg: direction.to_string(),
+                accept: MoveDirection::VARIANTS,
+                optional: false,
+            })?;
+            let amount = MoveAmountText::from_str(amount).map_err(|_e| E::BadEnumArg {
+                arg: amount.to_string(),
+                accept: MoveAmountText::VARIANTS,
+                optional: false,
+            })?;
+            Ok(Command::MoveText(direction, amount))
+        }
+        Command::SelectChannel(_) => {
+            let usage = E::InsufficientArgs {
+                cmd: cmd_str.to_string(),
+                hint: Some(MoveDirection::VARIANTS.join("|")),
+            };
+            let direction = args.first().ok_or(usage)?;
+            let direction = MoveDirection::from_str(direction).map_err(|_e| E::BadEnumArg {
+                arg: direction.to_string(),
+                accept: MoveDirection::VARIANTS,
+                optional: false,
+            })?;
+            Ok(Command::SelectChannel(direction))
+            // Ok(Command::SelectChannel(MoveDirection::from_str(args.first().unwrap_or(&""))?))
+        }
+        Command::SelectChannelModal(_) => {
+            let usage = E::InsufficientArgs {
+                cmd: cmd_str.to_string(),
+                hint: Some(MoveDirection::VARIANTS.join("|")),
+            };
+            let direction = args.first().ok_or(usage)?;
+            let direction = MoveDirection::from_str(direction).map_err(|_e| E::BadEnumArg {
+                arg: direction.to_string(),
+                accept: MoveDirection::VARIANTS,
+                optional: false,
+            })?;
+            Ok(Command::SelectChannelModal(direction))
+            // Ok(Command::SelectChannelModal(MoveDirection::from_str(args.first().unwrap_or(&""))?))
+        }
+        Command::CopyMessage(_) => {
+            let usage = E::InsufficientArgs {
+                cmd: cmd_str.to_string(),
+                hint: Some(MessageSelector::VARIANTS.join("|")),
+            };
+            let selector = args.first().ok_or(usage)?;
+            let selector = MessageSelector::from_str(selector).map_err(|_e| E::BadEnumArg {
+                arg: selector.to_string(),
+                accept: MessageSelector::VARIANTS,
+                optional: false,
+            })?;
+            Ok(Command::CopyMessage(selector))
+            // Ok(Command::CopyMessage(MessageSelector::from_str(args.first().unwrap_or(&""))?))
+        }
+        _ => Ok(cmd),
     }
 }
 

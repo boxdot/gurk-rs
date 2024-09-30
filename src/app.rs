@@ -1,7 +1,7 @@
 use crate::channels::SelectChannel;
 use crate::command::{
-    get_keybindings, Command, ModeKeybinding, MoveAmountText, MoveAmountVisual, MoveDirection,
-    WindowMode,
+    get_keybindings, Command, DirectionVertical, ModeKeybinding, MoveAmountText,
+    MoveAmountVisual, MoveDirection, Widget, WindowMode,
 };
 use crate::config::Config;
 use crate::data::{BodyRange, Channel, ChannelId, Message, TypingAction, TypingSet};
@@ -59,6 +59,7 @@ pub struct App {
     pub storage: Box<dyn Storage>,
     pub channels: StatefulList<ChannelId>,
     pub messages: BTreeMap<ChannelId, StatefulList<u64 /* arrived at*/>>,
+    pub help_scroll: u64,
     pub user_id: Uuid,
     pub should_quit: bool,
     url_regex: LazyRegex,
@@ -73,7 +74,7 @@ pub struct App {
     event_tx: mpsc::UnboundedSender<Event>,
     // It is expensive to hit the signal manager contacts storage, so we cache it
     names_cache: Cell<Option<BTreeMap<Uuid, String>>>,
-    mode_keybindings: ModeKeybinding,
+    pub mode_keybindings: ModeKeybinding,
 }
 
 impl App {
@@ -122,6 +123,7 @@ impl App {
             storage,
             channels,
             messages,
+            help_scroll: 0,
             should_quit: false,
             url_regex: LazyRegex::new(URL_REGEX),
             attachment_regex: LazyRegex::new(ATTACHMENT_REGEX),
@@ -291,6 +293,16 @@ impl App {
             Command::DeleteCharacter(MoveDirection::Next) => {} // unimplemented!("{command:?}")},
             Command::Quit => {
                 self.should_quit = true;
+            }
+            Command::Scroll(Widget::Help, DirectionVertical::Up, MoveAmountVisual::Entry) => {
+                // TODO: rerender
+                if self.help_scroll >= 1 {
+                    self.help_scroll -= 1
+                }
+            }
+            Command::Scroll(Widget::Help, DirectionVertical::Down, MoveAmountVisual::Entry) => {
+                // TODO: rerender
+                self.help_scroll += 1
             }
         }
         Ok(())

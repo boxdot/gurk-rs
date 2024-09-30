@@ -14,10 +14,10 @@ use uuid::Uuid;
 
 use crate::app::App;
 use crate::channels::SelectChannel;
+use crate::command::{Command, WindowMode};
 use crate::cursor::Cursor;
 use crate::data::{AssociatedValue, Message};
 use crate::receipt::{Receipt, ReceiptEvent};
-use crate::shortcuts::{ShortCut, SHORTCUTS};
 use crate::storage::MessageId;
 use crate::util::utc_timestamp_msec_to_local;
 
@@ -666,72 +666,43 @@ fn add_edited(msg: &Message, out: &mut dyn fmt::Write) {
 }
 
 fn draw_help(f: &mut Frame, app: &mut App, area: Rect) {
-    let max_event_width = SHORTCUTS
+    let modes = vec![
+        WindowMode::Normal,
+        WindowMode::Anywhere,
+        WindowMode::Help,
+        WindowMode::ChannelModal,
+        WindowMode::Multiline,
+        WindowMode::MessageSelected,
+    ];
+    let mode_shortcuts = modes
         .iter()
-        .map(
-            |ShortCut {
-                 event: ev,
-                 description: _,
-             }| { (**ev).width() },
-        )
-        .max()
-        .unwrap_or(0);
-
-    let width = area.width.saturating_sub(2) as usize;
-    let delimiter = Span::from(": ");
-    const DELIMITER_WIDTH: usize = 2;
-    let prefix_width = max_event_width + DELIMITER_WIDTH + 1; // +1 because we add 1 extra " " between the event and the delimiter
-    let prefix = " ".repeat(prefix_width);
-
-    let wrap_opts = textwrap::Options::new(width)
-        .initial_indent(&prefix)
-        .subsequent_indent(&prefix);
-
-    let shorts: Vec<ListItem> = SHORTCUTS
-        .iter()
-        .map(
-            |ShortCut {
-                 event: ev,
-                 description: desc,
-             }| {
-                let event = ev;
-                let description = desc;
-
-                let wrapped = textwrap::wrap(description, &wrap_opts);
-
-                let mut res = Vec::new();
-
-                wrapped.into_iter().enumerate().for_each(|(i, line)| {
-                    let mut truc = Vec::new();
-                    if i == 0 {
-                        let event_span = Span::from(textwrap::indent(
-                            &" ".repeat(
-                                max_event_width
-                                    .checked_sub(event.width())
-                                    .unwrap_or_default()
-                                    + 1,
-                            ),
-                            event,
-                        ));
-                        truc.push(event_span);
-                        truc.push(delimiter.clone());
-                        truc.push(Span::from(line.strip_prefix(&prefix).unwrap().to_string()));
-                    } else {
-                        truc.push(Span::from(line.to_string()))
-                    };
-
-                    let spans = Line::from(truc);
-                    res.push(spans);
-                });
-
-                ListItem::new(Text::from(res))
-            },
-        )
-        .collect();
-
-    let shorts_widget =
-        List::new(shorts).block(Block::default().borders(Borders::ALL).title("Help"));
-    f.render_stateful_widget(shorts_widget, area, &mut app.channels.state);
+        .map(|mode| {
+            let mode_title = format!("==== Mode: {mode}");
+            let doc = if let Some(kb) = app.mode_keybindings.get(mode) {
+                kb.iter()
+                    .map(|(kc, cmd)| {
+                        let cmd_doc =
+                            strum::EnumProperty::get_str(cmd, "desc").unwrap_or("Undocumented");
+                        format!("{kc}: {cmd} ({cmd_doc})")
+                    })
+                    .join("\n")
+            } else {
+                "".into()
+            };
+            format!("{mode_title}\n{doc}")
+        })
+        .join("\n\n");
+    let commands = <Command as strum::IntoEnumIterator>::iter()
+        .map(|cmd| {
+            format!(
+                "{}    {}",
+                &strum::EnumProperty::get_str(&cmd, "usage").unwrap_or(&cmd.to_string()),
+                &strum::EnumProperty::get_str(&cmd, "desc").unwrap_or("Undocumented")
+            )
+        })
+        .join("\n");
+    let commands = Paragraph::new(commands + "\n" + &mode_shortcuts).block(Block::bordered().title("Available commands and configured shortcuts"));
+    f.render_widget(commands, area);
 }
 
 fn displayed_quote(names: &NameResolver, quote: &Message) -> Option<String> {
