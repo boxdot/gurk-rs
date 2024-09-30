@@ -1,7 +1,7 @@
 use crate::channels::SelectChannel;
 use crate::command::{
-    get_keybindings, Command, DirectionVertical, ModeKeybinding, MoveAmountText,
-    MoveAmountVisual, MoveDirection, Widget, WindowMode,
+    get_keybindings, Command, DirectionVertical, ModeKeybinding, MoveAmountText, MoveAmountVisual,
+    MoveDirection, Widget, WindowMode,
 };
 use crate::config::Config;
 use crate::data::{BodyRange, Channel, ChannelId, Message, TypingAction, TypingSet};

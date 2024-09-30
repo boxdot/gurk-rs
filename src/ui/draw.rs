@@ -701,7 +701,8 @@ fn draw_help(f: &mut Frame, app: &mut App, area: Rect) {
             )
         })
         .join("\n");
-    let commands = Paragraph::new(commands + "\n" + &mode_shortcuts).block(Block::bordered().title("Available commands and configured shortcuts"));
+    let commands = Paragraph::new(commands + "\n" + &mode_shortcuts)
+        .block(Block::bordered().title("Available commands and configured shortcuts"));
     f.render_widget(commands, area);
 }
 
