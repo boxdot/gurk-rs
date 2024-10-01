@@ -3,6 +3,7 @@
 pub mod app;
 pub mod backoff;
 mod channels;
+pub mod command;
 pub mod config;
 pub mod cursor;
 pub mod data;

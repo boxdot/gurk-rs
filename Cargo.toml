@@ -79,6 +79,9 @@ uuid = { version = "1.2", features = ["v4"] }
 whoami = "1.2.3"
 url = "2.5.0"
 tempfile = "3.3.0"
+crokey = "1.1.0"
+strum_macros = "0.26.4"
+strum = { version = "0.26.3", features = ["derive"] }
 
 [package.metadata.cargo-machete]
 # not used directly; brings sqlcipher capabilities to sqlite

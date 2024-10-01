@@ -1,4 +1,8 @@
 use crate::channels::SelectChannel;
+use crate::command::{
+    get_keybindings, Command, DirectionVertical, ModeKeybinding, MoveAmountText, MoveAmountVisual,
+    MoveDirection, Widget, WindowMode,
+};
 use crate::config::Config;
 use crate::data::{BodyRange, Channel, ChannelId, Message, TypingAction, TypingSet};
 use crate::event::Event;
@@ -16,7 +20,8 @@ use std::io::Cursor;
 use anyhow::{anyhow, Context as _};
 use arboard::Clipboard;
 use chrono::{DateTime, Utc};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crokey::Combiner;
+use crossterm::event::{KeyCode, KeyEvent};
 use image::codecs::png::PngEncoder;
 use image::{ImageBuffer, ImageEncoder, Rgba};
 use itertools::Itertools;
@@ -54,6 +59,7 @@ pub struct App {
     pub storage: Box<dyn Storage>,
     pub channels: StatefulList<ChannelId>,
     pub messages: BTreeMap<ChannelId, StatefulList<u64 /* arrived at*/>>,
+    pub help_scroll: u64,
     pub user_id: Uuid,
     pub should_quit: bool,
     url_regex: LazyRegex,
@@ -68,6 +74,7 @@ pub struct App {
     event_tx: mpsc::UnboundedSender<Event>,
     // It is expensive to hit the signal manager contacts storage, so we cache it
     names_cache: Cell<Option<BTreeMap<Uuid, String>>>,
+    pub mode_keybindings: ModeKeybinding,
 }
 
 impl App {
@@ -106,6 +113,9 @@ impl App {
 
         let (event_tx, event_rx) = mpsc::unbounded_channel();
 
+        let mode_keybindings = get_keybindings(&config.keybindings, config.default_keybindings)
+            .expect("keybinding configuration failed");
+
         let app = Self {
             config,
             signal_manager,
@@ -113,6 +123,7 @@ impl App {
             storage,
             channels,
             messages,
+            help_scroll: 0,
             should_quit: false,
             url_regex: LazyRegex::new(URL_REGEX),
             attachment_regex: LazyRegex::new(ATTACHMENT_REGEX),
@@ -125,6 +136,7 @@ impl App {
             clipboard,
             event_tx,
             names_cache: Default::default(),
+            mode_keybindings,
         };
         Ok((app, event_rx))
     }
@@ -217,79 +229,128 @@ impl App {
         }
     }
 
-    pub async fn on_key(&mut self, key: KeyEvent) -> anyhow::Result<()> {
-        match key.code {
-            KeyCode::Char('\r') => self.get_input().put_char('\n'),
-            KeyCode::Enter => {
-                if !self.select_channel.is_shown {
-                    if key.modifiers.contains(KeyModifiers::ALT) {
-                        self.is_multiline_input = !self.is_multiline_input;
-                    } else if self.is_multiline_input {
-                        self.get_input().new_line();
-                    } else if !self.input.data.is_empty() {
-                        if let Some(idx) = self.channels.state.selected() {
-                            self.send_input(idx);
-                        }
-                    } else {
-                        // input is empty
-                        self.try_open_url();
-                    }
-                } else if self.select_channel.is_shown {
-                    if let Some(channel_id) = self.select_channel.selected_channel_id().copied() {
-                        self.select_channel.is_shown = false;
-                        let (idx, _) = self
-                            .channels
-                            .items
-                            .iter()
-                            .enumerate()
-                            .find(|(_, &id)| id == channel_id)
-                            .context("channel disappeared during channel select popup")?;
-                        self.channels.state.select(Some(idx));
-                    }
-                }
+    pub async fn on_command(&mut self, command: Command) -> anyhow::Result<()> {
+        match command {
+            Command::Help => self.toggle_help(),
+            Command::MoveText(MoveDirection::Previous, MoveAmountText::Word) => {
+                self.get_input().move_back_word()
             }
-            KeyCode::Home => {
-                self.get_input().on_home();
+            Command::MoveText(MoveDirection::Previous, MoveAmountText::Character) => {
+                self.get_input().on_left()
             }
-            KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.get_input().on_home();
+            Command::MoveText(MoveDirection::Previous, MoveAmountText::Line) => {
+                self.get_input().move_line_up()
             }
-            KeyCode::End => {
-                self.get_input().on_end();
+            Command::MoveText(MoveDirection::Next, MoveAmountText::Word) => {
+                self.get_input().move_forward_word()
             }
-            KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                if !self.select_channel.is_shown
-                    && self.channels.selected_item().is_some()
-                    && self.input.is_empty()
-                {
-                    self.start_editing();
-                } else {
-                    self.get_input().on_end();
-                }
+            Command::MoveText(MoveDirection::Next, MoveAmountText::Character) => {
+                self.get_input().on_right()
             }
-            KeyCode::Backspace => {
-                self.get_input().on_backspace();
+            Command::MoveText(MoveDirection::Next, MoveAmountText::Line) => {
+                self.get_input().move_line_down()
             }
-            KeyCode::Char('p') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            Command::SelectMessage(MoveDirection::Previous, MoveAmountVisual::Entry) => {
+                self.on_pgup()
+            }
+            Command::SelectMessage(MoveDirection::Next, MoveAmountVisual::Entry) => self.on_pgdn(),
+            Command::KillBackwardLine => self.get_input().on_delete_line(),
+            Command::KillWord => self.get_input().on_delete_word(),
+            Command::CopyMessage(_) => self.copy_selection(),
+            Command::KillLine => self.get_input().on_delete_suffix(),
+            Command::SelectChannel(MoveDirection::Previous) => self.select_previous_channel(),
+            Command::SelectChannel(MoveDirection::Next) => self.select_next_channel(),
+            Command::SelectChannelModal(MoveDirection::Previous) => self.select_channel_prev(),
+            Command::SelectChannelModal(MoveDirection::Next) => self.select_channel_next(),
+            Command::KillWholeLine => self.get_input().on_delete_line(),
+            Command::BeginningOfLine => self.get_input().on_home(),
+            Command::EndOfLine => self.get_input().on_end(),
+            Command::EditMessage => {
+                self.start_editing();
+            }
+            // Command::ReplyMessage => unimplemented!("{command:?}"),
+            // Command::DeleteMessage => unimplemented!("{command:?}"),
+            Command::ToggleChannelModal => {
                 if !self.select_channel.is_shown {
                     self.select_channel.reset(&*self.storage);
                 }
                 self.select_channel.is_shown = !self.select_channel.is_shown;
             }
-            KeyCode::Esc => {
-                if self.select_channel.is_shown {
-                    self.select_channel.is_shown = false;
-                } else if !self.reset_editing() {
-                    self.reset_message_selection();
-                }
+            Command::ToggleMultiline => {
+                self.is_multiline_input = !self.is_multiline_input;
             }
-            KeyCode::Char(c) => self.get_input().put_char(c),
-            KeyCode::Tab => {
+            Command::React => {
                 if let Some(idx) = self.channels.state.selected() {
                     self.add_reaction(idx);
                 }
             }
-            _ => {}
+            Command::OpenUrl => {
+                self.try_open_url();
+            }
+            Command::DeleteCharacter(MoveDirection::Previous) => {
+                self.get_input().on_backspace();
+            }
+            Command::DeleteCharacter(MoveDirection::Next) => {} // unimplemented!("{command:?}")},
+            Command::Quit => {
+                self.should_quit = true;
+            }
+            Command::Scroll(Widget::Help, DirectionVertical::Up, MoveAmountVisual::Entry) => {
+                // TODO: rerender
+                if self.help_scroll >= 1 {
+                    self.help_scroll -= 1
+                }
+            }
+            Command::Scroll(Widget::Help, DirectionVertical::Down, MoveAmountVisual::Entry) => {
+                // TODO: rerender
+                self.help_scroll += 1
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn on_key(&mut self, key: KeyEvent) -> anyhow::Result<()> {
+        if let Some(cmd) = self.event_to_command(&key) {
+            self.on_command(cmd.clone()).await?;
+        } else {
+            match key.code {
+                KeyCode::Char('\r') => self.get_input().put_char('\n'),
+                KeyCode::Enter => {
+                    if !self.select_channel.is_shown {
+                        if self.is_multiline_input {
+                            self.get_input().new_line();
+                        } else if !self.input.data.is_empty() {
+                            if let Some(idx) = self.channels.state.selected() {
+                                self.send_input(idx);
+                            }
+                        } else {
+                            // input is empty
+                            self.try_open_url();
+                        }
+                    } else if self.select_channel.is_shown {
+                        if let Some(channel_id) = self.select_channel.selected_channel_id().copied()
+                        {
+                            self.select_channel.is_shown = false;
+                            let (idx, _) = self
+                                .channels
+                                .items
+                                .iter()
+                                .enumerate()
+                                .find(|(_, &id)| id == channel_id)
+                                .context("channel disappeared during channel select popup")?;
+                            self.channels.state.select(Some(idx));
+                        }
+                    }
+                }
+                KeyCode::Esc => {
+                    if self.select_channel.is_shown {
+                        self.select_channel.is_shown = false;
+                    } else if !self.reset_editing() {
+                        self.reset_message_selection();
+                    }
+                }
+                KeyCode::Char(c) => self.get_input().put_char(c),
+                _ => {}
+            }
         }
         Ok(())
     }
@@ -1499,6 +1560,38 @@ impl App {
         self.input.on_end();
 
         Some(())
+    }
+
+    pub fn event_to_command<'r>(&'r self, event: &KeyEvent) -> Option<&'r Command> {
+        let mut combiner = Combiner::default();
+        let keys_pressed = combiner.transform(*event)?;
+        let modes = if self.is_help() {
+            vec![WindowMode::Anywhere, WindowMode::Help]
+        } else if self.is_select_channel_shown() {
+            vec![WindowMode::Anywhere, WindowMode::ChannelModal]
+        } else if self.is_multiline_input {
+            vec![
+                WindowMode::Anywhere,
+                WindowMode::Multiline,
+                WindowMode::Normal,
+            ]
+        } else if self.input.is_empty() {
+            vec![
+                WindowMode::Anywhere,
+                WindowMode::MessageSelected,
+                WindowMode::Normal,
+            ]
+        } else {
+            vec![WindowMode::Anywhere, WindowMode::Normal]
+        };
+        for mode in modes {
+            if let Some(kb) = self.mode_keybindings.get(&mode) {
+                if let Some(cmd) = kb.get(&keys_pressed) {
+                    return Some(cmd);
+                }
+            }
+        }
+        None
     }
 }
 
