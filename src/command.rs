@@ -335,6 +335,31 @@ fn parse(input: &str) -> Result<Command, CommandParseError> {
             Ok(Command::SelectChannelModal(direction))
             // Ok(Command::SelectChannelModal(MoveDirection::from_str(args.first().unwrap_or(&""))?))
         }
+        Command::SelectMessage(_, _) => {
+            let usage = E::InsufficientArgs {
+                cmd: cmd_str.to_string(),
+                hint: Some(
+                    [
+                        MoveDirection::VARIANTS.join("|"),
+                        MoveAmountVisual::VARIANTS.join("|"),
+                    ]
+                    .join(" "),
+                ),
+            };
+            let direction = args.first().ok_or(usage.clone())?;
+            let amount = args.get(1).ok_or(usage)?;
+            let direction = MoveDirection::from_str(direction).map_err(|_e| E::BadEnumArg {
+                arg: direction.to_string(),
+                accept: MoveDirection::VARIANTS,
+                optional: false,
+            })?;
+            let amount = MoveAmountVisual::from_str(amount).map_err(|_e| E::BadEnumArg {
+                arg: amount.to_string(),
+                accept: MoveAmountText::VARIANTS,
+                optional: false,
+            })?;
+            Ok(Command::SelectMessage(direction, amount))
+        }
         Command::CopyMessage(_) => {
             let usage = E::InsufficientArgs {
                 cmd: cmd_str.to_string(),
