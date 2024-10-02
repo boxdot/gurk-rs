@@ -408,6 +408,12 @@ ctrl-j = "move_text next line"
 ctrl-k = "move_text previous line"
 
 [help]
+ctrl-j = "scroll help down entry"
+ctrl-k = "scroll help up entry"
+down = "scroll help down entry"
+up = "scroll help up entry"
+pagedown = "scroll help down entry"
+pageup = "scroll help up entry"
 "#;
 
 #[cfg(test)]

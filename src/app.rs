@@ -59,7 +59,7 @@ pub struct App {
     pub storage: Box<dyn Storage>,
     pub channels: StatefulList<ChannelId>,
     pub messages: BTreeMap<ChannelId, StatefulList<u64 /* arrived at*/>>,
-    pub help_scroll: u64,
+    pub help_scroll: (u16, u16),
     pub user_id: Uuid,
     pub should_quit: bool,
     url_regex: LazyRegex,
@@ -123,7 +123,7 @@ impl App {
             storage,
             channels,
             messages,
-            help_scroll: 0,
+            help_scroll: (0, 0),
             should_quit: false,
             url_regex: LazyRegex::new(URL_REGEX),
             attachment_regex: LazyRegex::new(ATTACHMENT_REGEX),
@@ -295,14 +295,13 @@ impl App {
                 self.should_quit = true;
             }
             Command::Scroll(Widget::Help, DirectionVertical::Up, MoveAmountVisual::Entry) => {
-                // TODO: rerender
-                if self.help_scroll >= 1 {
-                    self.help_scroll -= 1
+                if self.help_scroll.0 >= 1 {
+                    self.help_scroll.0 -= 1
                 }
             }
             Command::Scroll(Widget::Help, DirectionVertical::Down, MoveAmountVisual::Entry) => {
-                // TODO: rerender
-                self.help_scroll += 1
+                // TODO: prevent overscrolling
+                self.help_scroll.0 += 1
             }
         }
         Ok(())
