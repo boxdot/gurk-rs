@@ -303,6 +303,7 @@ impl App {
                 // TODO: prevent overscrolling
                 self.help_scroll.0 += 1
             }
+            Command::NoOp => {}
         }
         Ok(())
     }
@@ -1588,7 +1589,12 @@ impl App {
                 }
             }
         }
-        None
+        if self.is_help() {
+            // Swallow event
+            Some(&Command::NoOp)
+        } else {
+            None
+        }
     }
 }
 

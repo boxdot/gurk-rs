@@ -150,6 +150,8 @@ pub enum WindowMode {
 )]
 #[strum(serialize_all = "snake_case")]
 pub enum Command {
+    #[strum(props(desc = "Do nothing"))]
+    NoOp,
     #[strum(props(desc = "Toggle help panel"))]
     Help,
     #[strum(props(desc = "Quit application"))]
