@@ -341,9 +341,7 @@ impl App {
                     }
                 }
                 KeyCode::Esc => {
-                    if self.select_channel.is_shown {
-                        self.select_channel.is_shown = false;
-                    } else if !self.reset_editing() {
+                    if !self.reset_editing() {
                         self.reset_message_selection();
                     }
                 }
