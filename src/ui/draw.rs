@@ -5,7 +5,7 @@ use std::fmt;
 use chrono::Datelike;
 use itertools::Itertools;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Color, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Clear, List, ListDirection, ListItem, Paragraph};
 use ratatui::Frame;
@@ -30,9 +30,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         // Display shortcut panel
         let chunks = Layout::default()
             .constraints([
-                Constraint::Percentage(15),
-                Constraint::Percentage(70),
-                Constraint::Percentage(15),
+                Constraint::Percentage(5),
+                Constraint::Percentage(90),
+                Constraint::Percentage(5),
             ])
             .direction(Direction::Horizontal)
             .split(f.area());
@@ -665,45 +665,89 @@ fn add_edited(msg: &Message, out: &mut dyn fmt::Write) {
     }
 }
 
-fn draw_help(f: &mut Frame, app: &mut App, area: Rect) {
-    let modes = vec![
+fn help_commands<'a>() -> Vec<Line<'a>> {
+    let commands = <Command as strum::IntoEnumIterator>::iter()
+        .map(|cmd| {
+            (
+                strum::EnumProperty::get_str(&cmd, "usage")
+                    .unwrap_or(&cmd.to_string())
+                    .to_string(),
+                strum::EnumProperty::get_str(&cmd, "desc")
+                    .unwrap_or("Undocumented")
+                    .to_string(),
+            )
+        })
+        .collect_vec();
+    let usage_len = commands.iter().map(|inf| inf.0.len()).max().unwrap_or(0);
+    let commands = commands
+        .iter()
+        .map(|inf| Line::raw(format!("{: <usage_len$}   {}", inf.0, inf.1)));
+    let mut v = vec![
+        Line::styled("Commands", Style::default().add_modifier(Modifier::BOLD)),
+        Line::default(),
+    ];
+    v.extend(commands);
+    v
+}
+
+fn bindings(app: &App) -> Vec<Line> {
+    vec![
         WindowMode::Normal,
         WindowMode::Anywhere,
         WindowMode::Help,
         WindowMode::ChannelModal,
         WindowMode::Multiline,
         WindowMode::MessageSelected,
+    ]
+    .iter()
+    .map(|mode| bindings_mode(app, mode))
+    .concat()
+}
+
+fn bindings_mode<'a>(app: &App, mode: &WindowMode) -> Vec<Line<'a>> {
+    let bindings = if let Some(kb) = app.mode_keybindings.get(mode) {
+        kb.iter()
+            .map(|(kc, cmd)| {
+                (
+                    kc.to_string(),
+                    cmd.to_string(),
+                    strum::EnumProperty::get_str(cmd, "desc")
+                        .unwrap_or("Undocumented")
+                        .to_string(),
+                )
+            })
+            .sorted()
+            .collect_vec()
+    } else {
+        Vec::default()
+    };
+    let kc_len = bindings.iter().map(|inf| inf.0.len()).max().unwrap_or(0);
+    let cmd_len = bindings.iter().map(|inf| inf.1.len()).max().unwrap_or(0);
+    let bindings = bindings.iter().map(|inf| {
+        Line::raw(format!(
+            "{: <kc_len$}  {: <cmd_len$}  {}",
+            inf.0, inf.1, inf.2
+        ))
+    });
+    let mut v = vec![
+        Line::default(),
+        Line::styled(
+            format!("Bindings for {mode} mode"),
+            Style::default().add_modifier(Modifier::BOLD),
+        ),
+        Line::default(),
     ];
-    let mode_shortcuts = modes
-        .iter()
-        .map(|mode| {
-            let mode_title = format!("==== Mode: {mode}");
-            let doc = if let Some(kb) = app.mode_keybindings.get(mode) {
-                kb.iter()
-                    .map(|(kc, cmd)| {
-                        let cmd_doc =
-                            strum::EnumProperty::get_str(cmd, "desc").unwrap_or("Undocumented");
-                        format!("{kc}: {cmd} ({cmd_doc})")
-                    })
-                    .join("\n")
-            } else {
-                "".into()
-            };
-            format!("{mode_title}\n{doc}")
-        })
-        .join("\n\n");
-    let commands = <Command as strum::IntoEnumIterator>::iter()
-        .map(|cmd| {
-            format!(
-                "{}    {}",
-                &strum::EnumProperty::get_str(&cmd, "usage").unwrap_or(&cmd.to_string()),
-                &strum::EnumProperty::get_str(&cmd, "desc").unwrap_or("Undocumented")
-            )
-        })
-        .join("\n");
-    let commands = Paragraph::new(commands + "\n" + &mode_shortcuts)
-        .block(Block::bordered().title("Available commands and configured shortcuts"));
-    f.render_widget(commands, area);
+    v.extend(bindings);
+    v
+}
+
+fn draw_help(f: &mut Frame, app: &mut App, area: Rect) {
+    let mut command_bindings = help_commands();
+    command_bindings.extend(bindings(app));
+    let command_bindings = Paragraph::new(Text::from(command_bindings))
+        .block(Block::bordered().title("Available commands and configured shortcuts"))
+        .scroll(app.help_scroll);
+    f.render_widget(command_bindings, area);
 }
 
 fn displayed_quote(names: &NameResolver, quote: &Message) -> Option<String> {

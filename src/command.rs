@@ -150,6 +150,8 @@ pub enum WindowMode {
 )]
 #[strum(serialize_all = "snake_case")]
 pub enum Command {
+    #[strum(props(desc = "Do nothing"))]
+    NoOp,
     #[strum(props(desc = "Toggle help panel"))]
     Help,
     #[strum(props(desc = "Quit application"))]
@@ -335,6 +337,31 @@ fn parse(input: &str) -> Result<Command, CommandParseError> {
             Ok(Command::SelectChannelModal(direction))
             // Ok(Command::SelectChannelModal(MoveDirection::from_str(args.first().unwrap_or(&""))?))
         }
+        Command::SelectMessage(_, _) => {
+            let usage = E::InsufficientArgs {
+                cmd: cmd_str.to_string(),
+                hint: Some(
+                    [
+                        MoveDirection::VARIANTS.join("|"),
+                        MoveAmountVisual::VARIANTS.join("|"),
+                    ]
+                    .join(" "),
+                ),
+            };
+            let direction = args.first().ok_or(usage.clone())?;
+            let amount = args.get(1).ok_or(usage)?;
+            let direction = MoveDirection::from_str(direction).map_err(|_e| E::BadEnumArg {
+                arg: direction.to_string(),
+                accept: MoveDirection::VARIANTS,
+                optional: false,
+            })?;
+            let amount = MoveAmountVisual::from_str(amount).map_err(|_e| E::BadEnumArg {
+                arg: amount.to_string(),
+                accept: MoveAmountText::VARIANTS,
+                optional: false,
+            })?;
+            Ok(Command::SelectMessage(direction, amount))
+        }
         Command::CopyMessage(_) => {
             let usage = E::InsufficientArgs {
                 cmd: cmd_str.to_string(),
@@ -396,6 +423,8 @@ alt-y = "copy_message selected"
 ctrl-e = "edit_message"
 
 [channel_modal]
+esc = "toggle_channel_modal"
+ctrl-p = "toggle_channel_modal"
 down = "select_channel_modal next"
 up = "select_channel_modal previous"
 ctrl-j = "select_channel_modal next"
@@ -408,6 +437,13 @@ ctrl-j = "move_text next line"
 ctrl-k = "move_text previous line"
 
 [help]
+esc = "help"
+ctrl-j = "scroll help down entry"
+ctrl-k = "scroll help up entry"
+down = "scroll help down entry"
+up = "scroll help up entry"
+pagedown = "scroll help down entry"
+pageup = "scroll help up entry"
 "#;
 
 #[cfg(test)]
