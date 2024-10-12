@@ -91,7 +91,7 @@ libraries that are not available on crates.io.
   * `ctrl+a / Home` Move cursor to the beginning of the line.
   * `ctrl+e / End` Move cursor the the end of the line.
 * Message/channel selection
-  * `Esc` Reset message selection.
+  * `esc` Reset message selection or close channel selection popup.
   * `alt+Up / alt+k / PgUp` Select previous message.
   * `alt+Down / alt+j / PgDown` Select next message.
   * `ctrl+j / Up` Select previous channel.
@@ -99,6 +99,10 @@ libraries that are not available on crates.io.
   * `ctrl+p` Open / close channel selection popup.
 * Clipboard
   * `alt+y` Copy selected message to clipboard.
+* Help menu
+  * `esc` Close help panel.
+  * `ctrl+j / Up / PgUp` Previous line
+  * `ctrl+k / Down / PgDown` Next line
 
 ## Custom keybindings
 The default keybindings can be overwritten at startup by configuring
@@ -117,7 +121,8 @@ quit
 toggle_channel_modal
 toggle_multiline
 react
-move_text up|down character|word|line
+scroll help up|down entry
+move_text previous|next character|word|line
 select_channel previous|next
 select_channel_modal previous|text
 select_message previous|next entry
