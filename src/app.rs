@@ -585,6 +585,118 @@ impl App {
                 let message = Message::new(user_id, body, body_ranges, timestamp, attachments);
                 (channel_idx, message)
             }
+            // reactions
+            (
+                Metadata {
+                    sender:
+                        ServiceAddress {
+                            uuid: sender_uuid, ..
+                        },
+                    ..
+                },
+                ContentBody::SynchronizeMessage(SyncMessage {
+                    sent:
+                        Some(Sent {
+                            destination_service_id: destination_uuid,
+                            message:
+                                Some(DataMessage {
+                                    body: None,
+                                    group_v2,
+                                    reaction:
+                                        Some(Reaction {
+                                            emoji: Some(emoji),
+                                            remove,
+                                            target_author_aci: Some(target_author_uuid),
+                                            target_sent_timestamp: Some(target_sent_timestamp),
+                                            ..
+                                        }),
+                                    ..
+                                }),
+                            ..
+                        }),
+                    read,
+                    ..
+                }),
+            ) => {
+                let channel_id = if let Some(GroupContextV2 {
+                    master_key: Some(master_key),
+                    ..
+                }) = group_v2
+                {
+                    ChannelId::from_master_key_bytes(master_key)?
+                } else if let Some(uuid) = destination_uuid {
+                    ChannelId::User(uuid.parse()?)
+                } else {
+                    ChannelId::User(target_author_uuid.parse()?)
+                };
+
+                self.handle_reaction(
+                    channel_id,
+                    target_sent_timestamp,
+                    sender_uuid,
+                    emoji,
+                    HandleReactionOptions::new()
+                        .remove(remove.unwrap_or(false))
+                        .notify(true)
+                        .bell(true),
+                );
+                read.into_iter().for_each(|r| {
+                    self.handle_receipt(
+                        Uuid::parse_str(r.sender_aci.unwrap().as_str()).unwrap(),
+                        Receipt::Read,
+                        vec![r.timestamp.unwrap()],
+                    );
+                });
+                return Ok(());
+            }
+            (
+                Metadata {
+                    sender:
+                        ServiceAddress {
+                            uuid: sender_uuid, ..
+                        },
+                    ..
+                },
+                ContentBody::DataMessage(DataMessage {
+                    body: None,
+                    group_v2,
+                    reaction:
+                        Some(Reaction {
+                            emoji: Some(emoji),
+                            remove,
+                            target_sent_timestamp: Some(target_sent_timestamp),
+                            target_author_aci: Some(target_author_uuid),
+                            ..
+                        }),
+                    ..
+                }),
+            ) => {
+                let channel_id = if let Some(GroupContextV2 {
+                    master_key: Some(master_key),
+                    ..
+                }) = group_v2
+                {
+                    ChannelId::from_master_key_bytes(master_key)?
+                } else if sender_uuid == self.user_id {
+                    // reaction from us => target author is the user channel
+                    ChannelId::User(target_author_uuid.parse()?)
+                } else {
+                    // reaction is from somebody else => they are the user channel
+                    ChannelId::User(sender_uuid)
+                };
+
+                self.handle_reaction(
+                    channel_id,
+                    target_sent_timestamp,
+                    sender_uuid,
+                    emoji,
+                    HandleReactionOptions::new()
+                        .remove(remove.unwrap_or(false))
+                        .notify(true)
+                        .bell(true),
+                );
+                return Ok(());
+            }
             // Direct/group message by us from a different device
             (
                 Metadata {
@@ -744,120 +856,8 @@ impl App {
 
                 (channel_idx, message)
             }
-            // reactions
-            (
-                Metadata {
-                    sender:
-                        ServiceAddress {
-                            uuid: sender_uuid, ..
-                        },
-                    ..
-                },
-                ContentBody::SynchronizeMessage(SyncMessage {
-                    sent:
-                        Some(Sent {
-                            destination_service_id: destination_uuid,
-                            message:
-                                Some(DataMessage {
-                                    body: None,
-                                    group_v2,
-                                    reaction:
-                                        Some(Reaction {
-                                            emoji: Some(emoji),
-                                            remove,
-                                            target_author_aci: Some(target_author_uuid),
-                                            target_sent_timestamp: Some(target_sent_timestamp),
-                                            ..
-                                        }),
-                                    ..
-                                }),
-                            ..
-                        }),
-                    read,
-                    ..
-                }),
-            ) => {
-                let channel_id = if let Some(GroupContextV2 {
-                    master_key: Some(master_key),
-                    ..
-                }) = group_v2
-                {
-                    ChannelId::from_master_key_bytes(master_key)?
-                } else if let Some(uuid) = destination_uuid {
-                    ChannelId::User(uuid.parse()?)
-                } else {
-                    ChannelId::User(target_author_uuid.parse()?)
-                };
-
-                self.handle_reaction(
-                    channel_id,
-                    target_sent_timestamp,
-                    sender_uuid,
-                    emoji,
-                    HandleReactionOptions::new()
-                        .remove(remove.unwrap_or(false))
-                        .notify(true)
-                        .bell(true),
-                );
-                read.into_iter().for_each(|r| {
-                    self.handle_receipt(
-                        Uuid::parse_str(r.sender_aci.unwrap().as_str()).unwrap(),
-                        Receipt::Read,
-                        vec![r.timestamp.unwrap()],
-                    );
-                });
-                return Ok(());
-            }
             (metadata, ContentBody::SynchronizeMessage(sync_message)) => {
                 return self.handle_sync_message(metadata, sync_message);
-            }
-            (
-                Metadata {
-                    sender:
-                        ServiceAddress {
-                            uuid: sender_uuid, ..
-                        },
-                    ..
-                },
-                ContentBody::DataMessage(DataMessage {
-                    body: None,
-                    group_v2,
-                    reaction:
-                        Some(Reaction {
-                            emoji: Some(emoji),
-                            remove,
-                            target_sent_timestamp: Some(target_sent_timestamp),
-                            target_author_aci: Some(target_author_uuid),
-                            ..
-                        }),
-                    ..
-                }),
-            ) => {
-                let channel_id = if let Some(GroupContextV2 {
-                    master_key: Some(master_key),
-                    ..
-                }) = group_v2
-                {
-                    ChannelId::from_master_key_bytes(master_key)?
-                } else if sender_uuid == self.user_id {
-                    // reaction from us => target author is the user channel
-                    ChannelId::User(target_author_uuid.parse()?)
-                } else {
-                    // reaction is from somebody else => they are the user channel
-                    ChannelId::User(sender_uuid)
-                };
-
-                self.handle_reaction(
-                    channel_id,
-                    target_sent_timestamp,
-                    sender_uuid,
-                    emoji,
-                    HandleReactionOptions::new()
-                        .remove(remove.unwrap_or(false))
-                        .notify(true)
-                        .bell(true),
-                );
-                return Ok(());
             }
             (
                 Metadata {
