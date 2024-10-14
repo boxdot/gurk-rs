@@ -635,7 +635,7 @@ impl App {
                         .map_err(|_| anyhow!("invalid profile key"))?;
                     let destination_uuid = destination_uuid.parse()?;
                     let name = self.name_by_id(destination_uuid);
-                    self.ensure_user_is_known(destination_uuid, profile_key)
+                    self.ensure_user_is_known(destination_uuid, Some(profile_key))
                         .await;
                     self.ensure_contact_channel_exists(destination_uuid, &name)
                         .await
@@ -671,7 +671,7 @@ impl App {
                     mut body,
                     group_v2,
                     timestamp: Some(timestamp),
-                    profile_key: Some(profile_key),
+                    profile_key,
                     quote,
                     attachments: attachment_pointers,
                     sticker,
@@ -686,9 +686,15 @@ impl App {
                 }) = group_v2
                 {
                     // incoming group message
-                    let profile_key = profile_key
-                        .try_into()
-                        .map_err(|_| anyhow!("invalid profile key"))?;
+                    // profile_key can be None and is not required for known contacts
+                    let profile_key = match profile_key {
+                        Some(profile_key) => Some(
+                            profile_key
+                                .try_into()
+                                .map_err(|_| anyhow!("invalid profile key"))?,
+                        ),
+                        None => None,
+                    };
                     let master_key = master_key
                         .try_into()
                         .map_err(|_| anyhow!("invalid group master key"))?;
@@ -704,9 +710,10 @@ impl App {
                 } else {
                     // incoming direct message
                     let profile_key = profile_key
+                        .context("sync message with destination without profile key")?
                         .try_into()
                         .map_err(|_| anyhow!("invalid profile key"))?;
-                    self.ensure_user_is_known(uuid, profile_key).await;
+                    self.ensure_user_is_known(uuid, Some(profile_key)).await;
                     let name = self.name_by_id(uuid);
                     let channel_idx = self.ensure_contact_channel_exists(uuid, &name).await;
                     // Reset typing notification as the Tipyng::Stop are not always sent by the server when a message is sent.
@@ -1194,7 +1201,7 @@ impl App {
         }
     }
 
-    async fn ensure_user_is_known(&mut self, uuid: Uuid, profile_key: ProfileKeyBytes) {
+    async fn ensure_user_is_known(&mut self, uuid: Uuid, profile_key: Option<ProfileKeyBytes>) {
         // is_known <=>
         //   * in names, and
         //   * is not empty
@@ -1210,19 +1217,24 @@ impl App {
             })
             .is_some();
         if !is_known {
-            if let Some(name) = self.signal_manager.profile_name(uuid) {
-                self.storage.store_name(uuid, name);
-            } else if let Some(name) = self
-                .signal_manager
-                .resolve_profile_name(uuid, profile_key)
-                .await
-            {
-                // resolved from signal service via their profile
-                self.storage.store_name(uuid, name);
+            let name = if let Some(name) = self.signal_manager.profile_name(uuid) {
+                name
             } else {
-                // failed to resolve
-                self.storage.store_name(uuid, uuid.to_string());
-            }
+                match profile_key {
+                    Some(profile_key) => {
+                        // try to resolve from signal service via their profile
+                        self.signal_manager
+                            .resolve_profile_name(uuid, profile_key)
+                            .await
+                            .unwrap_or_else(|| uuid.to_string())
+                    }
+                    None => {
+                        // cannot be resolved
+                        uuid.to_string()
+                    }
+                }
+            };
+            self.storage.store_name(uuid, name);
         }
     }
 
@@ -1232,7 +1244,7 @@ impl App {
     ) {
         // TODO: Run in parallel
         for (uuid, profile_key) in users_with_keys {
-            self.ensure_user_is_known(uuid, profile_key).await;
+            self.ensure_user_is_known(uuid, Some(profile_key)).await;
         }
     }
 
