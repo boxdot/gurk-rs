@@ -6,10 +6,11 @@ use anyhow::Context;
 use async_trait::async_trait;
 use presage::libsignal_service::content::{Content, ContentBody};
 use presage::libsignal_service::models::Contact;
-use presage::libsignal_service::prelude::{Group, ProfileKey};
+use presage::libsignal_service::prelude::ProfileKey;
 use presage::libsignal_service::sender::AttachmentSpec;
 use presage::libsignal_service::ServiceAddress;
 use presage::manager::{ReceivingMode, Registered};
+use presage::model::groups::Group;
 use presage::proto::data_message::{Quote, Reaction};
 use presage::proto::{AttachmentPointer, DataMessage, EditMessage, GroupContextV2, ReceiptMessage};
 use presage::store::ContentsStore;
@@ -100,7 +101,7 @@ impl SignalManager for PresageManager {
         tokio::task::spawn_local(async move {
             let body = ContentBody::ReceiptMessage(data_message);
             if let Err(error) = manager
-                .send_message(ServiceAddress::new_aci(sender_uuid), body, now_timestamp)
+                .send_message(ServiceAddress::from_aci(sender_uuid), body, now_timestamp)
                 .await
             {
                 error!(%error, %sender_uuid, "failed to send receipt");
@@ -177,7 +178,7 @@ impl SignalManager for PresageManager {
                     };
 
                     if let Err(error) = manager
-                        .send_message(ServiceAddress::new_aci(uuid), body, timestamp)
+                        .send_message(ServiceAddress::from_aci(uuid), body, timestamp)
                         .await
                     {
                         error!(dest =% uuid, %error, "failed to send message");
@@ -269,7 +270,7 @@ impl SignalManager for PresageManager {
                 let body = ContentBody::DataMessage(data_message);
                 tokio::task::spawn_local(async move {
                     if let Err(e) = manager
-                        .send_message(ServiceAddress::new_aci(uuid), body, timestamp)
+                        .send_message(ServiceAddress::from_aci(uuid), body, timestamp)
                         .await
                     {
                         // TODO: Proper error handling
