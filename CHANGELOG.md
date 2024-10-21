@@ -1,14 +1,25 @@
 # Changelog
 
-## 0.5.2-dev
+## 0.5.2
 
 ### Added
 
 - Add `colored_messages` config option ([#311])
 - Handle read receipts from other clients ([#312])
+- Add command, window mode, and keybinding logic ([#315], [#317])
+
+### Fixes
+
+- Process group messages without a profile key ([#318], [#319])
+- Upgrade libsignal-client 0.51.1 -> 0.56.1 (fixes linking) ([#314])
 
 [#311]: https://github.com/boxdot/gurk-rs/pull/311
 [#312]: https://github.com/boxdot/gurk-rs/pull/312
+[#314]: https://github.com/boxdot/gurk-rs/pull/314
+[#315]: https://github.com/boxdot/gurk-rs/pull/315
+[#317]: https://github.com/boxdot/gurk-rs/pull/317
+[#318]: https://github.com/boxdot/gurk-rs/pull/318
+[#319]: https://github.com/boxdot/gurk-rs/pull/319
 
 ## 0.5.1
 
