@@ -24,7 +24,7 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use tokio::select;
 use tokio_stream::StreamExt;
 use tracing::debug;
-use tracing::{error, info, metadata::LevelFilter};
+use tracing::{error, info};
 
 const TARGET_FPS: u64 = 144;
 const RECEIPT_TICK_PERIOD: u64 = 144;
