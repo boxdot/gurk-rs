@@ -112,7 +112,7 @@ keybindings in `gurk.toml` using the format `keybindings.<mode>.<keycombination>
 alt-j, ctrl-f, backspace, pagedown`. The default keybindings can be disabled by
 setting `default_keybindings = false`. An empty command removes an existing
 binding if it exists in the given mode. Configuration troubleshooted by running
-`gurk --verbose` and examining the resulting `gurk.log`.
+`RUST_LOG=gurk=trace,presage=trace,libsignal=trace gurk --verbose` and examining the resulting `gurk.log`.
 
 ### Supported commands
 ```
