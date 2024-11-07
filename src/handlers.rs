@@ -36,7 +36,7 @@ impl App {
             ..
         }) = sync_message.sent
         {
-            let from_id = metadata.sender.uuid;
+            let from_id = metadata.sender.raw_uuid();
             // Note: target_sent_timestamp points to the previous edit or the original message
             let edited = self
                 .storage

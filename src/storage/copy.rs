@@ -42,8 +42,8 @@ pub fn copy(from: &dyn Storage, to: &mut dyn Storage) -> Stats {
 ///
 /// Note: At the moment, there is no group sync implemented in presage, so only contacts are
 /// synced fully.
-pub fn sync_from_signal(manager: &dyn SignalManager, storage: &mut dyn Storage) {
-    for contact in manager.contacts() {
+pub async fn sync_from_signal(manager: &dyn SignalManager, storage: &mut dyn Storage) {
+    for contact in manager.contacts().await {
         if contact.name.is_empty() {
             // not sure what to do with contacts without a name
             continue;
@@ -64,7 +64,7 @@ pub fn sync_from_signal(manager: &dyn SignalManager, storage: &mut dyn Storage) 
         }
     }
 
-    for (master_key_bytes, group) in manager.groups() {
+    for (master_key_bytes, group) in manager.groups().await {
         let channel_id = match ChannelId::from_master_key_bytes(master_key_bytes) {
             Ok(channel_id) => channel_id,
             Err(error) => {

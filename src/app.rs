@@ -29,7 +29,6 @@ use notify_rust::Notification;
 use phonenumber::Mode;
 use presage::libsignal_service::content::{Content, ContentBody, Metadata};
 use presage::libsignal_service::sender::AttachmentSpec;
-use presage::libsignal_service::ServiceAddress;
 use presage::proto::{
     data_message::{Reaction, Sticker},
     sync_message::Sent,
@@ -37,6 +36,7 @@ use presage::proto::{
 };
 use presage::proto::{AttachmentPointer, DataMessage, ReceiptMessage, SyncMessage, TypingMessage};
 use regex::Regex;
+use tokio::runtime::Handle;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -185,26 +185,33 @@ impl App {
             return self.config.user.name.clone();
         };
         self.name_by_id_cached(id, |id| {
-            if let Some(name) = self.signal_manager.profile_name(id) {
-                return name;
-            }
-            if let Some(name) = self.signal_manager.contact(id).and_then(|contact| {
-                if !contact.name.trim().is_empty() {
-                    Some(contact.name)
-                } else {
-                    contact
-                        .phone_number
-                        .map(|p| p.format().mode(Mode::E164).to_string())
-                }
-            }) {
-                return name;
-            }
-            if let Some(name) = self.storage.name(id).filter(|name| !name.trim().is_empty()) {
-                // user should be at least known via their profile or phone number
-                return name.into_owned();
-            }
-            // give up
-            id.to_string()
+            tokio::task::block_in_place(move || {
+                Handle::current().block_on(async move {
+                    if let Some(name) = self.signal_manager.profile_name(id).await {
+                        name
+                    } else if let Some(name) =
+                        self.signal_manager.contact(id).await.and_then(|contact| {
+                            if !contact.name.trim().is_empty() {
+                                Some(contact.name)
+                            } else {
+                                contact
+                                    .phone_number
+                                    .map(|p| p.format().mode(Mode::E164).to_string())
+                            }
+                        })
+                    {
+                        name
+                    } else if let Some(name) =
+                        self.storage.name(id).filter(|name| !name.trim().is_empty())
+                    {
+                        // user should be at least known via their profile or phone number
+                        name.into_owned()
+                    } else {
+                        // give up
+                        id.to_string()
+                    }
+                })
+            })
         })
     }
 
@@ -587,13 +594,7 @@ impl App {
             }
             // reactions
             (
-                Metadata {
-                    sender:
-                        ServiceAddress {
-                            uuid: sender_uuid, ..
-                        },
-                    ..
-                },
+                Metadata { sender, .. },
                 ContentBody::SynchronizeMessage(SyncMessage {
                     sent:
                         Some(Sent {
@@ -633,7 +634,7 @@ impl App {
                 self.handle_reaction(
                     channel_id,
                     target_sent_timestamp,
-                    sender_uuid,
+                    sender.raw_uuid(),
                     emoji,
                     HandleReactionOptions::new()
                         .remove(remove.unwrap_or(false))
@@ -650,13 +651,7 @@ impl App {
                 return Ok(());
             }
             (
-                Metadata {
-                    sender:
-                        ServiceAddress {
-                            uuid: sender_uuid, ..
-                        },
-                    ..
-                },
+                Metadata { sender, .. },
                 ContentBody::DataMessage(DataMessage {
                     body: None,
                     group_v2,
@@ -677,18 +672,18 @@ impl App {
                 }) = group_v2
                 {
                     ChannelId::from_master_key_bytes(master_key)?
-                } else if sender_uuid == self.user_id {
+                } else if sender.raw_uuid() == self.user_id {
                     // reaction from us => target author is the user channel
                     ChannelId::User(target_author_uuid.parse()?)
                 } else {
                     // reaction is from somebody else => they are the user channel
-                    ChannelId::User(sender_uuid)
+                    ChannelId::User(sender.raw_uuid())
                 };
 
                 self.handle_reaction(
                     channel_id,
                     target_sent_timestamp,
-                    sender_uuid,
+                    sender.raw_uuid(),
                     emoji,
                     HandleReactionOptions::new()
                         .remove(remove.unwrap_or(false))
@@ -699,13 +694,7 @@ impl App {
             }
             // Direct/group message by us from a different device
             (
-                Metadata {
-                    sender:
-                        ServiceAddress {
-                            uuid: sender_uuid, ..
-                        },
-                    ..
-                },
+                Metadata { sender, .. },
                 ContentBody::SynchronizeMessage(SyncMessage {
                     sent:
                         Some(Sent {
@@ -726,7 +715,7 @@ impl App {
                         }),
                     ..
                 }),
-            ) if sender_uuid == user_id => {
+            ) if sender.raw_uuid() == user_id => {
                 let channel_idx = if let Some(GroupContextV2 {
                     master_key: Some(master_key),
                     revision: Some(revision),
@@ -775,10 +764,7 @@ impl App {
             }
             // Incoming direct/group message
             (
-                Metadata {
-                    sender: ServiceAddress { uuid, .. },
-                    ..
-                },
+                Metadata { sender, .. },
                 ContentBody::DataMessage(DataMessage {
                     mut body,
                     group_v2,
@@ -815,8 +801,9 @@ impl App {
                         .await
                         .context("failed to create group channel")?;
 
-                    self.ensure_user_is_known(uuid, profile_key).await;
-                    let from = self.name_by_id(uuid);
+                    self.ensure_user_is_known(sender.raw_uuid(), profile_key)
+                        .await;
+                    let from = self.name_by_id(sender.raw_uuid());
 
                     (channel_idx, from)
                 } else {
@@ -825,9 +812,12 @@ impl App {
                         .context("sync message with destination without profile key")?
                         .try_into()
                         .map_err(|_| anyhow!("invalid profile key"))?;
-                    self.ensure_user_is_known(uuid, Some(profile_key)).await;
-                    let name = self.name_by_id(uuid);
-                    let channel_idx = self.ensure_contact_channel_exists(uuid, &name).await;
+                    self.ensure_user_is_known(sender.raw_uuid(), Some(profile_key))
+                        .await;
+                    let name = self.name_by_id(sender.raw_uuid());
+                    let channel_idx = self
+                        .ensure_contact_channel_exists(sender.raw_uuid(), &name)
+                        .await;
                     // Reset typing notification as the Tipyng::Stop are not always sent by the server when a message is sent.
                     let channel_id = self.channels.items[channel_idx];
                     let mut channel = self
@@ -836,7 +826,7 @@ impl App {
                         .expect("non-existent channel")
                         .into_owned();
                     let from = channel.name.clone();
-                    if channel.reset_writing(uuid) {
+                    if channel.reset_writing(sender.raw_uuid()) {
                         self.storage.store_channel(channel);
                     }
                     (channel_idx, from)
@@ -848,13 +838,17 @@ impl App {
                 self.notify_about_message(&from, body.as_deref(), &attachments);
 
                 // Send "Delivered" receipt
-                self.add_receipt_event(ReceiptEvent::new(uuid, timestamp, Receipt::Delivered));
+                self.add_receipt_event(ReceiptEvent::new(
+                    sender.raw_uuid(),
+                    timestamp,
+                    Receipt::Delivered,
+                ));
 
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
                 let message = Message {
                     quote,
-                    ..Message::new(uuid, body, body_ranges, timestamp, attachments)
+                    ..Message::new(sender.raw_uuid(), body, body_ranges, timestamp, attachments)
                 };
 
                 if message.is_empty() {
@@ -867,31 +861,19 @@ impl App {
                 return self.handle_sync_message(metadata, sync_message);
             }
             (
-                Metadata {
-                    sender:
-                        ServiceAddress {
-                            uuid: sender_uuid, ..
-                        },
-                    ..
-                },
+                Metadata { sender, .. },
                 ContentBody::ReceiptMessage(ReceiptMessage {
                     r#type: Some(receipt_type),
                     timestamp: timestamps,
                 }),
             ) => {
                 let receipt = Receipt::from_i32(receipt_type);
-                self.handle_receipt(sender_uuid, receipt, timestamps);
+                self.handle_receipt(sender.raw_uuid(), receipt, timestamps);
                 return Ok(());
             }
 
             (
-                Metadata {
-                    sender:
-                        ServiceAddress {
-                            uuid: sender_uuid, ..
-                        },
-                    ..
-                },
+                Metadata { sender, .. },
                 ContentBody::TypingMessage(TypingMessage {
                     timestamp: Some(timest),
                     group_id,
@@ -907,7 +889,7 @@ impl App {
                 };
                 if self
                     .handle_typing(
-                        sender_uuid,
+                        sender.raw_uuid(),
                         group_id_bytes,
                         TypingAction::from_i32(act),
                         timest,
@@ -1217,7 +1199,7 @@ impl App {
             })
             .is_some();
         if !is_known {
-            let name = if let Some(name) = self.signal_manager.profile_name(uuid) {
+            let name = if let Some(name) = self.signal_manager.profile_name(uuid).await {
                 name
             } else {
                 match profile_key {

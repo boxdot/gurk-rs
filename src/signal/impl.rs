@@ -5,11 +5,12 @@ use std::pin::Pin;
 use anyhow::Context;
 use async_trait::async_trait;
 use presage::libsignal_service::content::{Content, ContentBody};
-use presage::libsignal_service::models::Contact;
-use presage::libsignal_service::prelude::{Group, ProfileKey};
+use presage::libsignal_service::prelude::ProfileKey;
+use presage::libsignal_service::protocol::ServiceId;
 use presage::libsignal_service::sender::AttachmentSpec;
-use presage::libsignal_service::ServiceAddress;
 use presage::manager::{ReceivingMode, Registered};
+use presage::model::contacts::Contact;
+use presage::model::groups::Group;
 use presage::proto::data_message::{Quote, Reaction};
 use presage::proto::{AttachmentPointer, DataMessage, EditMessage, GroupContextV2, ReceiptMessage};
 use presage::store::ContentsStore;
@@ -54,7 +55,8 @@ impl SignalManager for PresageManager {
         let decrypted_group = self
             .manager
             .store()
-            .group(master_key_bytes)?
+            .group(master_key_bytes)
+            .await?
             .context("no group found")?;
 
         let mut members = Vec::with_capacity(decrypted_group.members.len());
@@ -100,7 +102,7 @@ impl SignalManager for PresageManager {
         tokio::task::spawn_local(async move {
             let body = ContentBody::ReceiptMessage(data_message);
             if let Err(error) = manager
-                .send_message(ServiceAddress::new_aci(sender_uuid), body, now_timestamp)
+                .send_message(ServiceId::Aci(sender_uuid.into()), body, now_timestamp)
                 .await
             {
                 error!(%error, %sender_uuid, "failed to send receipt");
@@ -177,7 +179,7 @@ impl SignalManager for PresageManager {
                     };
 
                     if let Err(error) = manager
-                        .send_message(ServiceAddress::new_aci(uuid), body, timestamp)
+                        .send_message(ServiceId::Aci(uuid.into()), body, timestamp)
                         .await
                     {
                         error!(dest =% uuid, %error, "failed to send message");
@@ -269,7 +271,7 @@ impl SignalManager for PresageManager {
                 let body = ContentBody::DataMessage(data_message);
                 tokio::task::spawn_local(async move {
                     if let Err(e) = manager
-                        .send_message(ServiceAddress::new_aci(uuid), body, timestamp)
+                        .send_message(ServiceId::Aci(uuid.into()), body, timestamp)
                         .await
                     {
                         // TODO: Proper error handling
@@ -325,9 +327,9 @@ impl SignalManager for PresageManager {
         Ok(self.manager.clone().sync_contacts().await?)
     }
 
-    fn profile_name(&self, id: Uuid) -> Option<String> {
-        let profile_key = self.manager.store().profile_key(&id).ok()??;
-        let profile = self.manager.store().profile(id, profile_key).ok()??;
+    async fn profile_name(&self, id: Uuid) -> Option<String> {
+        let profile_key = self.manager.store().profile_key(&id).await.ok()??;
+        let profile = self.manager.store().profile(id, profile_key).await.ok()??;
         let given_name = profile.name?.given_name;
         if !given_name.is_empty() {
             Some(given_name)
@@ -336,8 +338,8 @@ impl SignalManager for PresageManager {
         }
     }
 
-    fn contact(&self, id: Uuid) -> Option<Contact> {
-        self.manager.store().contact_by_id(&id).ok()?
+    async fn contact(&self, id: Uuid) -> Option<Contact> {
+        self.manager.store().contact_by_id(&id).await.ok()?
     }
 
     async fn receive_messages(&mut self) -> anyhow::Result<Pin<Box<dyn Stream<Item = Content>>>> {
@@ -348,22 +350,24 @@ impl SignalManager for PresageManager {
         ))
     }
 
-    fn contacts(&self) -> Box<dyn Iterator<Item = Contact>> {
+    async fn contacts(&self) -> Box<dyn Iterator<Item = Contact>> {
         Box::new(
             self.manager
                 .store()
                 .contacts()
+                .await
                 .into_iter()
                 .flatten()
                 .flatten(),
         )
     }
 
-    fn groups(&self) -> Box<dyn Iterator<Item = (GroupMasterKeyBytes, Group)>> {
+    async fn groups(&self) -> Box<dyn Iterator<Item = (GroupMasterKeyBytes, Group)>> {
         Box::new(
             self.manager
                 .store()
                 .groups()
+                .await
                 .into_iter()
                 .flatten()
                 .flatten(),

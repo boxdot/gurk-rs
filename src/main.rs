@@ -131,7 +131,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
         Box::new(json_storage)
     };
 
-    sync_from_signal(&*signal_manager, &mut *storage);
+    sync_from_signal(&*signal_manager, &mut *storage).await;
 
     let (mut app, mut app_events) = App::try_new(config, signal_manager.clone_boxed(), storage)?;
 

@@ -3,9 +3,10 @@ use std::{cell::RefCell, rc::Rc};
 
 use async_trait::async_trait;
 use presage::libsignal_service::content::Content;
-use presage::libsignal_service::models::Contact;
-use presage::libsignal_service::prelude::{AttachmentIdentifier, Group};
+use presage::libsignal_service::prelude::AttachmentIdentifier;
 use presage::libsignal_service::sender::AttachmentSpec;
+use presage::model::contacts::Contact;
+use presage::model::groups::Group;
 use presage::proto::data_message::Quote;
 use presage::proto::AttachmentPointer;
 use tokio::sync::oneshot;
@@ -129,11 +130,11 @@ impl SignalManager for SignalManagerMock {
         Ok(())
     }
 
-    fn profile_name(&self, _id: Uuid) -> Option<String> {
+    async fn profile_name(&self, _id: Uuid) -> Option<String> {
         None
     }
 
-    fn contact(&self, _id: Uuid) -> Option<Contact> {
+    async fn contact(&self, _id: Uuid) -> Option<Contact> {
         None
     }
 
@@ -148,11 +149,11 @@ impl SignalManager for SignalManagerMock {
         })
     }
 
-    fn contacts(&self) -> Box<dyn Iterator<Item = Contact>> {
+    async fn contacts(&self) -> Box<dyn Iterator<Item = Contact>> {
         Box::new(std::iter::empty())
     }
 
-    fn groups(&self) -> Box<dyn Iterator<Item = (GroupMasterKeyBytes, Group)>> {
+    async fn groups(&self) -> Box<dyn Iterator<Item = (GroupMasterKeyBytes, Group)>> {
         Box::new(std::iter::empty())
     }
 }

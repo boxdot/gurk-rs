@@ -5,9 +5,9 @@ use std::pin::Pin;
 
 use async_trait::async_trait;
 use presage::libsignal_service::content::Content;
-use presage::libsignal_service::models::Contact;
-use presage::libsignal_service::prelude::Group;
 use presage::libsignal_service::sender::AttachmentSpec;
+use presage::model::contacts::Contact;
+use presage::model::groups::Group;
 use presage::proto::AttachmentPointer;
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
@@ -49,7 +49,7 @@ pub trait SignalManager {
 
     fn send_reaction(&self, channel: &Channel, message: &Message, emoji: String, remove: bool);
 
-    fn profile_name(&self, id: Uuid) -> Option<String>;
+    async fn profile_name(&self, id: Uuid) -> Option<String>;
 
     /// Resolves contact name from user's profile via Signal server
     async fn resolve_profile_name(
@@ -60,12 +60,12 @@ pub trait SignalManager {
 
     async fn request_contacts_sync(&self) -> anyhow::Result<()>;
 
-    fn contact(&self, id: Uuid) -> Option<Contact>;
+    async fn contact(&self, id: Uuid) -> Option<Contact>;
 
     async fn receive_messages(&mut self) -> anyhow::Result<Pin<Box<dyn Stream<Item = Content>>>>;
 
-    fn contacts(&self) -> Box<dyn Iterator<Item = Contact>>;
-    fn groups(&self) -> Box<dyn Iterator<Item = (GroupMasterKeyBytes, Group)>>;
+    async fn contacts(&self) -> Box<dyn Iterator<Item = Contact>>;
+    async fn groups(&self) -> Box<dyn Iterator<Item = (GroupMasterKeyBytes, Group)>>;
 }
 
 pub struct ResolvedGroup {
