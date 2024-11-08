@@ -36,7 +36,6 @@ use presage::proto::{
 };
 use presage::proto::{AttachmentPointer, DataMessage, ReceiptMessage, SyncMessage, TypingMessage};
 use regex::Regex;
-use tokio::runtime::Handle;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -163,11 +162,24 @@ impl App {
             };
             Some(format!(
                 "[{}] writing...",
-                uuids.map(|id| self.name_by_id(id)).format(", ")
+                uuids.map(|id| self.name_by_id_cached(id)).format(", ")
             ))
         } else {
             None
         }
+    }
+
+    /// Returns the name of a user by their ID from the cache without resolving it.
+    pub fn name_by_id_cached(&self, id: Uuid) -> String {
+        if self.user_id == id {
+            // it's me
+            return self.config.user.name.clone();
+        };
+
+        let cache = self.names_cache.take().unwrap_or_default();
+        let name = cache.get(&id).cloned().unwrap_or_else(|| id.to_string());
+        self.names_cache.replace(Some(cache));
+        name
     }
 
     // Resolves name of a user by their id
@@ -179,48 +191,51 @@ impl App {
     //    book) => use it,
     // 3. User id is in the gurk's user name table (custom name) => use it,
     // 4. give up with UUID as user name
-    pub fn name_by_id(&self, id: Uuid) -> String {
+    pub async fn name_by_id(&self, id: Uuid) -> String {
         if self.user_id == id {
             // it's me
             return self.config.user.name.clone();
         };
-        self.name_by_id_cached(id, |id| {
-            tokio::task::block_in_place(move || {
-                Handle::current().block_on(async move {
-                    if let Some(name) = self.signal_manager.profile_name(id).await {
-                        name
-                    } else if let Some(name) =
-                        self.signal_manager.contact(id).await.and_then(|contact| {
-                            if !contact.name.trim().is_empty() {
-                                Some(contact.name)
-                            } else {
-                                contact
-                                    .phone_number
-                                    .map(|p| p.format().mode(Mode::E164).to_string())
-                            }
-                        })
-                    {
-                        name
-                    } else if let Some(name) =
-                        self.storage.name(id).filter(|name| !name.trim().is_empty())
-                    {
-                        // user should be at least known via their profile or phone number
-                        name.into_owned()
-                    } else {
-                        // give up
-                        id.to_string()
-                    }
-                })
-            })
+        self.name_by_id_or_insert(id, |id| {
+            async move {
+                if let Some(name) = self.signal_manager.profile_name(id).await {
+                    name
+                } else if let Some(name) =
+                    self.signal_manager.contact(id).await.and_then(|contact| {
+                        if !contact.name.trim().is_empty() {
+                            Some(contact.name)
+                        } else {
+                            contact
+                                .phone_number
+                                .map(|p| p.format().mode(Mode::E164).to_string())
+                        }
+                    })
+                {
+                    name
+                } else if let Some(name) =
+                    self.storage.name(id).filter(|name| !name.trim().is_empty())
+                {
+                    // user should be at least known via their profile or phone number
+                    name.into_owned()
+                } else {
+                    // give up
+                    id.to_string()
+                }
+            }
         })
+        .await
     }
 
-    fn name_by_id_cached(&self, id: Uuid, on_miss: impl FnOnce(Uuid) -> String) -> String {
+    async fn name_by_id_or_insert<F: Future<Output = String>>(
+        &self,
+        id: Uuid,
+        on_miss: impl FnOnce(Uuid) -> F,
+    ) -> String {
         let mut cache = self.names_cache.take().unwrap_or_default();
         let name = if let Some(name) = cache.get(&id).cloned() {
             name
         } else {
-            let name = on_miss(id);
+            let name = on_miss(id).await;
             cache.insert(id, name.clone());
             name
         };
@@ -230,7 +245,7 @@ impl App {
 
     pub fn channel_name<'a>(&self, channel: &'a Channel) -> Cow<'a, str> {
         if let Some(id) = channel.user_id() {
-            self.name_by_id(id).into()
+            self.name_by_id_cached(id).into()
         } else {
             (&channel.name).into()
         }
@@ -288,7 +303,7 @@ impl App {
             }
             Command::React => {
                 if let Some(idx) = self.channels.state.selected() {
-                    self.add_reaction(idx);
+                    self.add_reaction(idx).await;
                 }
             }
             Command::OpenUrl => {
@@ -409,7 +424,7 @@ impl App {
         }
     }
 
-    pub fn add_reaction(&mut self, channel_idx: usize) -> Option<()> {
+    pub async fn add_reaction(&mut self, channel_idx: usize) -> Option<()> {
         let reaction = self.take_reaction()?;
         let channel = self.storage.channel(self.channels.items[channel_idx])?;
         let message = self.selected_message()?;
@@ -437,7 +452,8 @@ impl App {
             self.signal_manager.user_id(),
             emoji,
             HandleReactionOptions::new().remove(true),
-        );
+        )
+        .await;
 
         self.reset_unread_messages();
         self.bubble_up_channel(channel_idx);
@@ -640,7 +656,8 @@ impl App {
                         .remove(remove.unwrap_or(false))
                         .notify(true)
                         .bell(true),
-                );
+                )
+                .await;
                 read.into_iter().for_each(|r| {
                     self.handle_receipt(
                         Uuid::parse_str(r.sender_aci.unwrap().as_str()).unwrap(),
@@ -689,7 +706,8 @@ impl App {
                         .remove(remove.unwrap_or(false))
                         .notify(true)
                         .bell(true),
-                );
+                )
+                .await;
                 return Ok(());
             }
             // Direct/group message by us from a different device
@@ -735,7 +753,7 @@ impl App {
                         .try_into()
                         .map_err(|_| anyhow!("invalid profile key"))?;
                     let destination_uuid = destination_uuid.parse()?;
-                    let name = self.name_by_id(destination_uuid);
+                    let name = self.name_by_id(destination_uuid).await;
                     self.ensure_user_is_known(destination_uuid, Some(profile_key))
                         .await;
                     self.ensure_contact_channel_exists(destination_uuid, &name)
@@ -803,7 +821,7 @@ impl App {
 
                     self.ensure_user_is_known(sender.raw_uuid(), profile_key)
                         .await;
-                    let from = self.name_by_id(sender.raw_uuid());
+                    let from = self.name_by_id(sender.raw_uuid()).await;
 
                     (channel_idx, from)
                 } else {
@@ -814,7 +832,7 @@ impl App {
                         .map_err(|_| anyhow!("invalid profile key"))?;
                     self.ensure_user_is_known(sender.raw_uuid(), Some(profile_key))
                         .await;
-                    let name = self.name_by_id(sender.raw_uuid());
+                    let name = self.name_by_id(sender.raw_uuid()).await;
                     let channel_idx = self
                         .ensure_contact_channel_exists(sender.raw_uuid(), &name)
                         .await;
@@ -1036,7 +1054,7 @@ impl App {
         }
     }
 
-    fn handle_reaction(
+    async fn handle_reaction(
         &mut self,
         channel_id: ChannelId,
         target_sent_timestamp: u64,
@@ -1083,7 +1101,7 @@ impl App {
             let channel = self.storage.channel(channel_id)?;
             let channel_name = channel.name.clone();
 
-            let sender_name = self.name_by_id(sender_uuid);
+            let sender_name = self.name_by_id(sender_uuid).await;
             let summary = if let ChannelId::Group(_) = channel_id {
                 Cow::from(format!("{sender_name} in {channel_name}"))
             } else {
@@ -1792,8 +1810,8 @@ pub(crate) mod tests {
         }
     }
 
-    #[test]
-    fn test_add_reaction_with_emoji() {
+    #[tokio::test]
+    async fn test_add_reaction_with_emoji() {
         let (mut app, _events, _sent_messages) = test_app();
 
         let channel_id = app.channels.items[0];
@@ -1804,7 +1822,7 @@ pub(crate) mod tests {
             .select(Some(0));
 
         app.get_input().put_char('👍');
-        app.add_reaction(0);
+        app.add_reaction(0).await;
 
         let arrived_at = app.messages[&channel_id].items[0];
         let reactions = &app
@@ -1816,8 +1834,8 @@ pub(crate) mod tests {
         assert_eq!(reactions[0], (app.user_id, "👍".to_string()));
     }
 
-    #[test]
-    fn test_add_reaction_with_emoji_codepoint() {
+    #[tokio::test]
+    async fn test_add_reaction_with_emoji_codepoint() {
         let (mut app, _events, _sent_messages) = test_app();
 
         let channel_id = app.channels.items[0];
@@ -1830,7 +1848,7 @@ pub(crate) mod tests {
         for c in ":thumbsup:".chars() {
             app.get_input().put_char(c);
         }
-        app.add_reaction(0);
+        app.add_reaction(0).await;
 
         let arrived_at = app.messages[&channel_id].items[0];
         let reactions = &app
@@ -1842,8 +1860,8 @@ pub(crate) mod tests {
         assert_eq!(reactions[0], (app.user_id, "👍".to_string()));
     }
 
-    #[test]
-    fn test_remove_reaction() {
+    #[tokio::test]
+    async fn test_remove_reaction() {
         let (mut app, _events, _sent_messages) = test_app();
 
         let channel_id = app.channels.items[0];
@@ -1861,7 +1879,7 @@ pub(crate) mod tests {
             .into_owned();
         message.reactions.push((app.user_id, "👍".to_string()));
         app.storage.store_message(channel_id, message);
-        app.add_reaction(0);
+        app.add_reaction(0).await;
 
         let reactions = &app
             .storage
@@ -1871,8 +1889,8 @@ pub(crate) mod tests {
         assert!(reactions.is_empty());
     }
 
-    #[test]
-    fn test_add_invalid_reaction() {
+    #[tokio::test]
+    async fn test_add_invalid_reaction() {
         let (mut app, _events, _sent_messages) = test_app();
         let channel_id = app.channels.items[0];
         app.messages
@@ -1884,7 +1902,7 @@ pub(crate) mod tests {
         for c in ":thumbsup".chars() {
             app.get_input().put_char(c);
         }
-        app.add_reaction(0);
+        app.add_reaction(0).await;
 
         assert_eq!(app.get_input().data, ":thumbsup");
         let arrived_at = app.messages[&channel_id].items[0];
