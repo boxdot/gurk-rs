@@ -4,8 +4,8 @@
 
 ### Added
 
-- Add 'thumbsup' command [[#1]]
-- Use ctrl-t as shortcut for thumbsup [#1]
+- Add 'thumbsup' command ([#1])
+- Use ctrl-t as shortcut for thumbsup ([#1])
 
 ## 0.5.2
 
