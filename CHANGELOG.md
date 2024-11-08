@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.3
+
+### Added
+
+- Add 'thumbsup' command
+- Use ctrl-t as shortcut for thumbsup
+
 ## 0.5.2
 
 ### Added

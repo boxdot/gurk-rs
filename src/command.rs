@@ -162,6 +162,8 @@ pub enum Command {
     ToggleMultiline,
     #[strum(props(desc = "Sends emoji from input line as reaction on selected message."))]
     React,
+    #[strum(props(desc = "Sends thumbsup emoji as reaction on selected message."))]
+    Thumbsup,
     #[strum(props(desc = "Scroll a widget", usage = "scroll help up|down entry"))]
     #[strum(serialize = "scroll", to_string = "scroll {0} {1} {2}")]
     Scroll(Widget, DirectionVertical, MoveAmountVisual),
@@ -417,6 +419,7 @@ end = "end_of_line"
 ctrl-e = "end_of_line"
 backspace = "delete_character previous"
 tab = "react"
+ctrl-t = "thumbsup"
 
 [message_selected]
 alt-y = "copy_message selected"
