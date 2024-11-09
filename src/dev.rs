@@ -3,7 +3,7 @@ use std::io::BufWriter;
 
 use base64::prelude::*;
 use presage::libsignal_service::content::{Content, Metadata};
-use presage::libsignal_service::{ServiceAddress, ServiceIdType};
+use presage::libsignal_service::protocol::ServiceId;
 use presage::proto;
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -19,10 +19,10 @@ pub struct ContentBase64 {
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "Metadata")]
 struct MetadataDef {
-    #[serde(with = "ServiceAddressDef")]
-    sender: ServiceAddress,
-    #[serde(with = "ServiceAddressDef", default = "default_destination")]
-    destination: ServiceAddress,
+    #[serde(with = "service_id")]
+    sender: ServiceId,
+    #[serde(with = "service_id")]
+    destination: ServiceId,
     sender_device: u32,
     timestamp: u64,
     needs_receipt: bool,
@@ -30,25 +30,24 @@ struct MetadataDef {
     server_guid: Option<Uuid>,
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(remote = "ServiceAddress")]
-struct ServiceAddressDef {
-    pub uuid: Uuid,
-    #[serde(with = "ServiceIdTypeDef")]
-    pub identity: ServiceIdType,
-}
+mod service_id {
+    use presage::libsignal_service::protocol::ServiceId;
+    use serde::{Deserialize, Serialize, Serializer};
 
-#[derive(Serialize, Deserialize)]
-#[serde(remote = "ServiceIdType")]
-pub enum ServiceIdTypeDef {
-    AccountIdentity,
-    PhoneNumberIdentity,
-}
+    pub fn serialize<S>(value: &ServiceId, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        value.service_id_string().serialize(serializer)
+    }
 
-fn default_destination() -> ServiceAddress {
-    ServiceAddress {
-        uuid: Uuid::nil(),
-        identity: ServiceIdType::AccountIdentity,
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<ServiceId, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        ServiceId::parse_from_service_id_string(&s)
+            .ok_or_else(|| serde::de::Error::custom(format!("invalid service id string: {s}")))
     }
 }
 
