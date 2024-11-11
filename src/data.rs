@@ -121,6 +121,13 @@ impl ChannelId {
         Ok(Self::Group(group_id))
     }
 
+    pub(crate) fn user(&self) -> Option<Uuid> {
+        match self {
+            ChannelId::User(uuid) => Some(*uuid),
+            _ => None,
+        }
+    }
+
     pub(crate) fn is_user(&self) -> bool {
         matches!(self, ChannelId::User(_))
     }

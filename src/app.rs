@@ -26,7 +26,6 @@ use image::codecs::png::PngEncoder;
 use image::{ImageBuffer, ImageEncoder, Rgba};
 use itertools::Itertools;
 use notify_rust::Notification;
-use phonenumber::Mode;
 use presage::libsignal_service::content::{Content, ContentBody, Metadata};
 use presage::libsignal_service::sender::AttachmentSpec;
 use presage::libsignal_service::ServiceAddress;
@@ -141,6 +140,23 @@ impl App {
         Ok((app, event_rx))
     }
 
+    /// Resolve and cache all user names for the known user channels
+    pub fn populate_names_cache(&self) {
+        let mut names_cache = BTreeMap::new();
+        for user_id in self
+            .storage
+            .channels()
+            .filter_map(|channel| channel.id.user())
+        {
+            if let Some(name) = self.resolve_name(user_id) {
+                names_cache.insert(user_id, name);
+            }
+        }
+        let mut cache = self.names_cache.take().unwrap_or_default();
+        cache.extend(names_cache);
+        self.names_cache.replace(Some(cache));
+    }
+
     pub fn get_input(&mut self) -> &mut Input {
         if self.select_channel.is_shown {
             &mut self.select_channel.input
@@ -170,52 +186,55 @@ impl App {
         }
     }
 
+    /// Resolves name of a user by their id
+    ///
+    /// The resolution is done from the following places:
+    ///
+    /// 1. signal's profile name storage
+    /// 2. signal's contacts storage
+    /// 3. internal gurk's user name table
+    fn resolve_name(&self, user_id: Uuid) -> Option<String> {
+        if let Some(name) = self.signal_manager.profile_name(user_id) {
+            debug!(name, "resolved name as profile name");
+            Some(name)
+        } else if let Some(contact) = self.signal_manager.contact(user_id) {
+            debug!(name = contact.name, "resolved name from contacts");
+            Some(contact.name)
+        } else if let Some(name) = self
+            .storage
+            .name(user_id)
+            .filter(|name| !name.trim().is_empty())
+        {
+            debug!(%name, "resolved name from storage");
+            Some(name.into_owned())
+        } else {
+            None
+        }
+    }
+
     // Resolves name of a user by their id
-    //
-    // The resolution is done in the following way:
-    //
-    // 1. It's us => name from config
-    // 2. User id is in presage's signal manager (that is, it is a known contact from our address
-    //    book) => use it,
-    // 3. User id is in the gurk's user name table (custom name) => use it,
-    // 4. give up with UUID as user name
     pub fn name_by_id(&self, id: Uuid) -> String {
         if self.user_id == id {
             // it's me
-            return self.config.user.name.clone();
-        };
-        self.name_by_id_cached(id, |id| {
-            if let Some(name) = self.signal_manager.profile_name(id) {
-                return name;
-            }
-            if let Some(name) = self.signal_manager.contact(id).and_then(|contact| {
-                if !contact.name.trim().is_empty() {
-                    Some(contact.name)
-                } else {
-                    contact
-                        .phone_number
-                        .map(|p| p.format().mode(Mode::E164).to_string())
-                }
-            }) {
-                return name;
-            }
-            if let Some(name) = self.storage.name(id).filter(|name| !name.trim().is_empty()) {
-                // user should be at least known via their profile or phone number
-                return name.into_owned();
-            }
-            // give up
-            id.to_string()
-        })
+            self.config.user.name.clone()
+        } else {
+            self.name_by_id_or_cache(id, |id| self.resolve_name(id))
+        }
     }
 
-    fn name_by_id_cached(&self, id: Uuid, on_miss: impl FnOnce(Uuid) -> String) -> String {
+    fn name_by_id_or_cache(
+        &self,
+        id: Uuid,
+        on_miss: impl FnOnce(Uuid) -> Option<String>,
+    ) -> String {
         let mut cache = self.names_cache.take().unwrap_or_default();
         let name = if let Some(name) = cache.get(&id).cloned() {
             name
-        } else {
-            let name = on_miss(id);
+        } else if let Some(name) = on_miss(id) {
             cache.insert(id, name.clone());
             name
+        } else {
+            id.to_string()
         };
         self.names_cache.replace(Some(cache));
         name
