@@ -26,7 +26,6 @@ use image::codecs::png::PngEncoder;
 use image::{ImageBuffer, ImageEncoder, Rgba};
 use itertools::Itertools;
 use notify_rust::Notification;
-use phonenumber::Mode;
 use presage::libsignal_service::content::{Content, ContentBody, Metadata};
 use presage::libsignal_service::sender::AttachmentSpec;
 use presage::proto::{
@@ -140,6 +139,23 @@ impl App {
         Ok((app, event_rx))
     }
 
+    /// Resolve and cache all user names for the known user channels
+    pub async fn populate_names_cache(&self) {
+        let mut names_cache = BTreeMap::new();
+        for user_id in self
+            .storage
+            .channels()
+            .filter_map(|channel| channel.id.user())
+        {
+            if let Some(name) = self.resolve_name(user_id).await {
+                names_cache.insert(user_id, name);
+            }
+        }
+        let mut cache = self.names_cache.take().unwrap_or_default();
+        cache.extend(names_cache);
+        self.names_cache.replace(Some(cache));
+    }
+
     pub fn get_input(&mut self) -> &mut Input {
         if self.select_channel.is_shown {
             &mut self.select_channel.input
@@ -182,65 +198,61 @@ impl App {
         name
     }
 
+    /// Resolves name of a user by their id
+    ///
+    /// The resolution is done from the following places:
+    ///
+    /// 1. signal's profile name storage
+    /// 2. signal's contacts storage
+    /// 3. internal gurk's user name table
+    async fn resolve_name(&self, user_id: Uuid) -> Option<String> {
+        if let Some(name) = self.signal_manager.profile_name(user_id).await {
+            debug!(name, "resolved name as profile name");
+            Some(name)
+        } else if let Some(contact) = self.signal_manager.contact(user_id).await {
+            debug!(name = contact.name, "resolved name from contacts");
+            Some(contact.name)
+        } else if let Some(name) = self
+            .storage
+            .name(user_id)
+            .filter(|name| !name.trim().is_empty())
+        {
+            debug!(%name, "resolved name from storage");
+            Some(name.into_owned())
+        } else {
+            None
+        }
+    }
+
     // Resolves name of a user by their id
-    //
-    // The resolution is done in the following way:
-    //
-    // 1. It's us => name from config
-    // 2. User id is in presage's signal manager (that is, it is a known contact from our address
-    //    book) => use it,
-    // 3. User id is in the gurk's user name table (custom name) => use it,
-    // 4. give up with UUID as user name
     pub async fn name_by_id(&self, id: Uuid) -> String {
         if self.user_id == id {
             // it's me
-            return self.config.user.name.clone();
-        };
-        self.name_by_id_or_insert(id, |id| {
-            async move {
-                if let Some(name) = self.signal_manager.profile_name(id).await {
-                    name
-                } else if let Some(name) =
-                    self.signal_manager.contact(id).await.and_then(|contact| {
-                        if !contact.name.trim().is_empty() {
-                            Some(contact.name)
-                        } else {
-                            contact
-                                .phone_number
-                                .map(|p| p.format().mode(Mode::E164).to_string())
-                        }
-                    })
-                {
-                    name
-                } else if let Some(name) =
-                    self.storage.name(id).filter(|name| !name.trim().is_empty())
-                {
-                    // user should be at least known via their profile or phone number
-                    name.into_owned()
-                } else {
-                    // give up
-                    id.to_string()
-                }
-            }
-        })
-        .await
+            self.config.user.name.clone()
+        } else {
+            self.name_by_id_or_cache(id, |id| self.resolve_name(id))
+                .await
+        }
     }
 
-    async fn name_by_id_or_insert<F: Future<Output = String>>(
-        &self,
-        id: Uuid,
-        on_miss: impl FnOnce(Uuid) -> F,
-    ) -> String {
-        let mut cache = self.names_cache.take().unwrap_or_default();
-        let name = if let Some(name) = cache.get(&id).cloned() {
+    async fn name_by_id_or_cache<F>(&self, id: Uuid, on_miss: impl FnOnce(Uuid) -> F) -> String
+    where
+        F: Future<Output = Option<String>>,
+    {
+        let cache = self.names_cache.take().unwrap_or_default();
+        let name = cache.get(&id).cloned();
+        self.names_cache.replace(Some(cache));
+
+        if let Some(name) = name {
+            name
+        } else if let Some(name) = on_miss(id).await {
+            let mut cache = self.names_cache.take().unwrap_or_default();
+            cache.insert(id, name.clone());
+            self.names_cache.replace(Some(cache));
             name
         } else {
-            let name = on_miss(id).await;
-            cache.insert(id, name.clone());
-            name
-        };
-        self.names_cache.replace(Some(cache));
-        name
+            id.to_string()
+        }
     }
 
     pub fn channel_name<'a>(&self, channel: &'a Channel) -> Cow<'a, str> {
