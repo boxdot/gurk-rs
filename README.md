@@ -164,6 +164,8 @@ ctrl-p = "select_channel_modal previous"
 [keybindings.message_selected]
 alt-y = ""
 alt-w = "copy_message selected"
+ctrl-t = "react :thumbsup:"
+ctrl-h = "react ❤️"
 ```
 
 ## License
