@@ -4,8 +4,8 @@ mod manager;
 pub mod test;
 
 use anyhow::{bail, Context as _};
-use presage::libsignal_service::configuration::SignalServers;
-use presage_store_sled::{MigrationConflictStrategy, OnNewIdentity, SledStore};
+use presage::{libsignal_service::configuration::SignalServers, model::identity::OnNewIdentity};
+use presage_store_sled::{MigrationConflictStrategy, SledStore};
 
 use crate::config::{self, Config};
 
@@ -46,7 +46,8 @@ pub async fn ensure_linked_device(
         passphrase,
         MigrationConflictStrategy::BackupAndDrop,
         OnNewIdentity::Trust,
-    )?;
+    )
+    .await?;
 
     if !relink {
         if let Some(config) = config.clone() {

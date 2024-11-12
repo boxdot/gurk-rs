@@ -68,7 +68,7 @@ impl<'a> NameResolver<'a> {
             .get(&id)
             .map(|(name, color)| (name.into(), *color))
             .unwrap_or_else(|| {
-                let name = self.app.expect("logic error").name_by_id(id).into();
+                let name = self.app.expect("logic error").name_by_id_cached(id).into();
                 (name, Color::Magenta)
             })
     }
@@ -91,7 +91,7 @@ impl<'a> NameResolver<'a> {
 
 impl App {
     fn name_and_color(&self, id: Uuid) -> (String, Color) {
-        let name = self.name_by_id(id);
+        let name = self.name_by_id_cached(id);
         let color = user_color(&name);
         let name = displayed_name(name, self.config.first_name_only);
         (name, color)

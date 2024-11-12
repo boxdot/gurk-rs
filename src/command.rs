@@ -243,7 +243,7 @@ pub enum CommandParseError {
 }
 
 fn parse(input: &str) -> Result<Command, CommandParseError> {
-    let words: Vec<_> = input.trim().split_whitespace().collect();
+    let words: Vec<_> = input.split_whitespace().collect();
     use CommandParseError as E;
 
     let (cmd_str, args) = words.split_first().unwrap();
@@ -446,34 +446,9 @@ pagedown = "scroll help down entry"
 pageup = "scroll help up entry"
 "#;
 
-#[cfg(test)]
-mod tests {
-    use toml;
-
-    use super::{get_keybindings, ModeKeybindingConfig, DEFAULT_KEYBINDINGS};
-
-    #[test]
-    fn default_keybindings_deserialize() {
-        let _keybindings: ModeKeybindingConfig = toml::from_str(DEFAULT_KEYBINDINGS).unwrap();
-    }
-
-    #[test]
-    fn default_keybindings_parse() {
-        get_keybindings(&ModeKeybindingConfig::new(), true).unwrap();
-    }
-
-    #[test]
-    fn custom_keybindings() {
-        let bindings: ModeKeybindingConfig =
-            toml::from_str("[normal]\n  F1 = \"\"\n  ctrl-h = \"help\"\n").unwrap();
-        get_keybindings(&bindings, true).unwrap();
-        get_keybindings(&bindings, false).unwrap();
-    }
-}
-
 fn merge_keybinding_configs(mkb1: &mut ModeKeybindingConfig, mkb2: ModeKeybindingConfig) {
     for (mode, kb2) in mkb2 {
-        mkb1.entry(mode).or_insert(HashMap::new()).extend(kb2);
+        mkb1.entry(mode).or_default().extend(kb2);
     }
 }
 
@@ -509,4 +484,29 @@ fn parse_keybindings(kbc: &KeybindingConfig) -> Result<Keybinding, CommandParseE
         }
     }
     Ok(keybindings)
+}
+
+#[cfg(test)]
+mod tests {
+    use toml;
+
+    use super::{get_keybindings, ModeKeybindingConfig, DEFAULT_KEYBINDINGS};
+
+    #[test]
+    fn default_keybindings_deserialize() {
+        let _keybindings: ModeKeybindingConfig = toml::from_str(DEFAULT_KEYBINDINGS).unwrap();
+    }
+
+    #[test]
+    fn default_keybindings_parse() {
+        get_keybindings(&ModeKeybindingConfig::new(), true).unwrap();
+    }
+
+    #[test]
+    fn custom_keybindings() {
+        let bindings: ModeKeybindingConfig =
+            toml::from_str("[normal]\n  F1 = \"\"\n  ctrl-h = \"help\"\n").unwrap();
+        get_keybindings(&bindings, true).unwrap();
+        get_keybindings(&bindings, false).unwrap();
+    }
 }

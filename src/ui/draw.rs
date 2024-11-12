@@ -691,7 +691,7 @@ fn help_commands<'a>() -> Vec<Line<'a>> {
 }
 
 fn bindings(app: &App) -> Vec<Line> {
-    vec![
+    [
         WindowMode::Normal,
         WindowMode::Anywhere,
         WindowMode::Help,

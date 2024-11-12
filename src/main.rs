@@ -131,10 +131,10 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
         Box::new(json_storage)
     };
 
-    sync_from_signal(&*signal_manager, &mut *storage);
+    sync_from_signal(&*signal_manager, &mut *storage).await;
 
     let (mut app, mut app_events) = App::try_new(config, signal_manager.clone_boxed(), storage)?;
-    app.populate_names_cache();
+    app.populate_names_cache().await;
 
     // sync task can be only spawned after we start to listen to message, because it relies on
     // message sender to be running
