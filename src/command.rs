@@ -379,15 +379,16 @@ fn parse(input: &str) -> Result<Command, CommandParseError> {
             // Ok(Command::CopyMessage(MessageSelector::from_str(args.first().unwrap_or(&""))?))
         }
         Command::React(_) => {
-            let usage = E::InsufficientArgs { cmd: cmd_str.to_string(), hint: Some("Optional emoji or :emoji code:".into()) };
+            let usage = E::InsufficientArgs {
+                cmd: cmd_str.to_string(),
+                hint: Some("Optional emoji or :emoji code:".into()),
+            };
             match args.first() {
                 None => Ok(Command::React(None)),
-                Some(&s) => {
-                    match to_emoji(s) {
-                        Some(em) => Ok(Command::React(Some(em.into()))),
-                        None => Err(usage)
-                    }
-                }
+                Some(&s) => match to_emoji(s) {
+                    Some(em) => Ok(Command::React(Some(em.into()))),
+                    None => Err(usage),
+                },
             }
         }
         _ => Ok(cmd),

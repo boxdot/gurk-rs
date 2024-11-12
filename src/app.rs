@@ -436,7 +436,11 @@ impl App {
         }
     }
 
-    pub async fn add_reaction(&mut self, channel_idx: usize, reaction: Option<String>) -> Option<()> {
+    pub async fn add_reaction(
+        &mut self,
+        channel_idx: usize,
+        reaction: Option<String>,
+    ) -> Option<()> {
         let reaction = reaction.or_else(|| self.take_reaction()?);
         let channel = self.storage.channel(self.channels.items[channel_idx])?;
         let message = self.selected_message()?;
