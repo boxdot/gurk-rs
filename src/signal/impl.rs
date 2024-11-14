@@ -134,7 +134,6 @@ impl SignalManager for PresageManager {
 
         let mut data_message = DataMessage {
             body: Some(message.clone()),
-            timestamp: Some(timestamp),
             quote,
             ..Default::default()
         };
