@@ -463,7 +463,7 @@ impl App {
             arrived_at,
             self.signal_manager.user_id(),
             emoji,
-            HandleReactionOptions::new().remove(true),
+            HandleReactionOptions::new().remove(remove),
         )
         .await;
 
