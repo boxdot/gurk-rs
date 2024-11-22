@@ -124,7 +124,7 @@ react
 scroll help up|down entry
 move_text previous|next character|word|line
 select_channel previous|next
-select_channel_modal previous|text
+select_channel_modal previous|next
 select_message previous|next entry
 kill_line
 kill_whole_line
