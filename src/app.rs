@@ -208,20 +208,25 @@ impl App {
     async fn resolve_name(&self, user_id: Uuid) -> Option<String> {
         if let Some(name) = self.signal_manager.profile_name(user_id).await {
             debug!(name, "resolved name as profile name");
-            Some(name)
-        } else if let Some(contact) = self.signal_manager.contact(user_id).await {
-            debug!(name = contact.name, "resolved name from contacts");
-            Some(contact.name)
-        } else if let Some(name) = self
+            return Some(name);
+        }
+        if let Some(contact) = self.signal_manager.contact(user_id).await {
+            if !contact.name.trim().is_empty() {
+                debug!(name = contact.name, "resolved name from contacts");
+                return Some(contact.name);
+            } else {
+                debug!(%user_id, "resolved empty name from contacts, skipping");
+            }
+        }
+        if let Some(name) = self
             .storage
             .name(user_id)
             .filter(|name| !name.trim().is_empty())
         {
             debug!(%name, "resolved name from storage");
-            Some(name.into_owned())
-        } else {
-            None
+            return Some(name.into_owned());
         }
+        None
     }
 
     // Resolves name of a user by their id
