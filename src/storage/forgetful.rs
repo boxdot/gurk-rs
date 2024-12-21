@@ -10,7 +10,7 @@ use super::{MessageId, Metadata, Storage};
 pub struct ForgetfulStorage;
 
 impl Storage for ForgetfulStorage {
-    fn channels<'s>(&'s self) -> Box<dyn Iterator<Item = Cow<Channel>> + 's> {
+    fn channels(&self) -> Box<dyn Iterator<Item = Cow<Channel>> + '_> {
         Box::new(std::iter::empty())
     }
 
@@ -22,10 +22,10 @@ impl Storage for ForgetfulStorage {
         Cow::Owned(channel)
     }
 
-    fn messages<'s>(
-        &'s self,
+    fn messages(
+        &self,
         _channel_id: ChannelId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + 's> {
+    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_> {
         Box::new(std::iter::empty())
     }
 
@@ -44,7 +44,7 @@ impl Storage for ForgetfulStorage {
         Cow::Owned(message)
     }
 
-    fn names<'s>(&'s self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + 's> {
+    fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + '_> {
         Box::new(std::iter::empty())
     }
 

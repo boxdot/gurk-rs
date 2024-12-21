@@ -326,7 +326,7 @@ struct SqlName {
 }
 
 impl Storage for SqliteStorage {
-    fn channels<'s>(&'s self) -> Box<dyn Iterator<Item = Cow<Channel>> + 's> {
+    fn channels(&self) -> Box<dyn Iterator<Item = Cow<Channel>> + '_> {
         let channels = self.execute(|ctx|
             Box::pin(sqlx::query_as!(
                 SqlChannel,

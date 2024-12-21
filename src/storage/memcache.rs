@@ -62,7 +62,7 @@ impl<S: Storage> MemCache<S> {
 }
 
 impl<S: Storage> Storage for MemCache<S> {
-    fn channels<'s>(&'s self) -> Box<dyn Iterator<Item = Cow<Channel>> + 's> {
+    fn channels(&self) -> Box<dyn Iterator<Item = Cow<Channel>> + '_> {
         Box::new(self.channels.iter().map(Cow::Borrowed))
     }
 
@@ -86,10 +86,10 @@ impl<S: Storage> Storage for MemCache<S> {
         self.storage.store_channel(channel)
     }
 
-    fn messages<'s>(
-        &'s self,
+    fn messages(
+        &self,
         channel_id: ChannelId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + 's> {
+    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_> {
         if let Some(messages) = self.messages.get(&channel_id) {
             Box::new(messages.iter().map(Cow::Borrowed))
         } else {
@@ -136,7 +136,7 @@ impl<S: Storage> Storage for MemCache<S> {
         self.storage.store_message(channel_id, message)
     }
 
-    fn names<'s>(&'s self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + 's> {
+    fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + '_> {
         Box::new(
             self.names
                 .iter()
