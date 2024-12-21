@@ -4,11 +4,17 @@ use std::fmt;
 
 use chrono::Datelike;
 use itertools::Itertools;
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Clear, List, ListDirection, ListItem, Paragraph};
 use ratatui::Frame;
+use ratatui::{
+    layout::{Constraint, Direction, Layout, Rect},
+    widgets::Padding,
+};
+use ratatui::{
+    style::{Color, Modifier, Style},
+    widgets::Wrap,
+};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use uuid::Uuid;
 
@@ -94,7 +100,7 @@ fn draw_select_channel_popup(f: &mut Frame, select_channel: &mut SelectChannel) 
 
 fn draw_channels(f: &mut Frame, app: &mut App, area: Rect) {
     let channel_list_width = area.width.saturating_sub(2) as usize;
-    let channels: Vec<ListItem> = app
+    let channels = app
         .channels
         .items
         .iter()
@@ -118,12 +124,23 @@ fn draw_channels(f: &mut Frame, app: &mut App, area: Rect) {
                 format!("{}{}", &channel.name[0..end], unread_messages_label)
             };
             ListItem::new(vec![Line::from(Span::raw(label))])
-        })
-        .collect();
+        });
+
     let channels = List::new(channels)
         .block(Block::default().borders(Borders::ALL).title("Channels"))
         .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray));
+    let no_channels = channels.is_empty();
     f.render_stateful_widget(channels, area, &mut app.channels.state);
+
+    if no_channels {
+        f.render_widget(
+            Paragraph::new("No channels\n(Channels will be added on incoming messages)")
+                .wrap(Wrap { trim: true })
+                .centered()
+                .block(Block::default().padding(Padding::top(area.height / 2))),
+            area,
+        );
+    };
 }
 
 fn wrap(text: &str, mut cursor: Cursor, width: usize) -> (String, Cursor, usize) {
@@ -267,8 +284,19 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     prepare_receipts(app, height);
 
     let Some(&channel_id) = app.channels.selected_item() else {
+        f.render_widget(
+            Paragraph::new("No Channel selected")
+                .block(
+                    Block::bordered()
+                        .title("Messages")
+                        .padding(Padding::top(area.height / 2)),
+                )
+                .centered(),
+            area,
+        );
         return;
     };
+
     let channel = app
         .storage
         .channel(channel_id)
