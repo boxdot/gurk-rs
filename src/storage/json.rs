@@ -151,7 +151,7 @@ impl JsonStorage {
 }
 
 impl Storage for JsonStorage {
-    fn channels<'s>(&'s self) -> Box<dyn Iterator<Item = Cow<Channel>> + 's> {
+    fn channels(&self) -> Box<dyn Iterator<Item = Cow<Channel>> + '_> {
         Box::new(
             self.data
                 .channels
@@ -194,10 +194,10 @@ impl Storage for JsonStorage {
         Cow::Owned(Channel::from(&self.data.channels.items[channel_idx]))
     }
 
-    fn messages<'s>(
-        &'s self,
+    fn messages(
+        &self,
         channel_id: ChannelId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + 's> {
+    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_> {
         if let Some(channel) = self
             .data
             .channels
@@ -283,7 +283,7 @@ impl Storage for JsonStorage {
         Cow::Borrowed(&self.data.channels.items[channel_idx].messages[idx])
     }
 
-    fn names<'s>(&'s self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + 's> {
+    fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + '_> {
         Box::new(
             self.data
                 .names
