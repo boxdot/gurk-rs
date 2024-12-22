@@ -86,7 +86,7 @@ toml = "0.8.19"
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
-unicode-width = "0.1.14"
+unicode-width = "0.2.0"
 uuid = { version = "1.11", features = ["v4"] }
 whoami = "1.5.2"
 url = "2.5.4"
