@@ -6,10 +6,10 @@ publish = false
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-anyhow = "1.0.66"
-flate2 = "1.0.24"
-pulldown-cmark = "0.11.0"
-semver = "1.0.14"
-tar = "0.4.38"
-xflags = "0.3.1"
-xshell = "0.2.2"
+anyhow = "1.0.94"
+flate2 = "1.0.35"
+pulldown-cmark = "0.12.2"
+semver = "1.0.24"
+tar = "0.4.43"
+xflags = "0.3.2"
+xshell = "0.2.7"

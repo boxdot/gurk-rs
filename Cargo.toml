@@ -32,65 +32,65 @@ presage = { git = "https://github.com/whisperfish/presage", rev = "8b9af8ee4758c
 presage-store-sled = { git = "https://github.com/whisperfish/presage", rev = "8b9af8ee4758c73550024bea8c715a893e9e4e47" }
 
 # dev feature dependencies
-prost = { version = "0.13.0", optional = true }
-base64 = { version = "0.22.0", optional = true }
+prost = { version = "0.13.4", optional = true }
+base64 = { version = "0.22.1", optional = true }
 
-aho-corasick = "1.0.0"
-anyhow = "1.0.66"
-arboard = { version = "3.2.0", features = ["wayland-data-control"] }
-async-trait = "0.1.58"
-chrono = { version = "0.4.22", default-features = false, features = ["serde"] }
-clap = { version = "4.0.19", features = ["derive"] }
+aho-corasick = "1.1.3"
+anyhow = "1.0.94"
+arboard = { version = "3.4.1", features = ["wayland-data-control"] }
+async-trait = "0.1.83"
+chrono = { version = "0.4.39", default-features = false, features = ["serde"] }
+clap = { version = "4.5.23", features = ["derive"] }
 crossterm = { version = "0.28.1", features = ["event-stream"] }
-dirs = "5.0.0"
-emojis = "0.6.1"
-futures-channel = "0.3.25"
+dirs = "5.0.1"
+emojis = "0.6.4"
+futures-channel = "0.3.31"
 hex = "0.4.3"
 hostname = "0.4.0"
-image = { version = "0.25.0", default-features = false, features = ["png"] }
+image = { version = "0.25.5", default-features = false, features = ["png"] }
 itertools = "0.13.0"
 libsqlite3-sys = { version = "0.30.1", features = [
     "bundled-sqlcipher-vendored-openssl",
 ] }
 log-panics = "2.1.0"
-mime_guess = "2.0.4"
-notify-rust = "4.5.10"
-once_cell = "1.18.0"
-opener = "0.7.0"
+mime_guess = "2.0.5"
+notify-rust = "4.11.3"
+once_cell = "1.20.2"
+opener = "0.7.2"
 phonenumber = "0.3.6"
-postcard = { version = "1.0.4", features = ["alloc"] }
-qr2term = "0.3.1"
-ratatui = "0.28.1"
-rayon = "1.7.0"
-regex = "1.9.5"
-scopeguard = "1.1.0"
-serde = { version = "1.0.147", features = ["derive"] }
-serde_json = "1.0.87"
-sqlx = { version = "0.8.1", features = [
+postcard = { version = "1.1.1", features = ["alloc"] }
+qr2term = "0.3.3"
+ratatui = "0.29.0"
+rayon = "1.10.0"
+regex = "1.11.1"
+scopeguard = "1.2.0"
+serde = { version = "1.0.216", features = ["derive"] }
+serde_json = "1.0.134"
+sqlx = { version = "0.8.2", features = [
     "sqlite",
     "runtime-tokio-rustls",
     "uuid",
     "chrono",
 ] }
-textwrap = "0.16.0"
-thiserror = "1.0.40"
-thread_local = "1.1.7"
-tokio = { version = "1.21.2", default-features = false, features = [
+textwrap = "0.16.1"
+thiserror = "2.0.9"
+thread_local = "1.1.8"
+tokio = { version = "1.42.0", default-features = false, features = [
     "rt-multi-thread",
     "macros",
     "net",
     "time",
 ] }
-tokio-stream = "0.1.11"
-toml = "0.8.0"
-tracing = "0.1.37"
-tracing-appender = "0.2.2"
-tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
-unicode-width = "0.1.10"
-uuid = { version = "1.2", features = ["v4"] }
-whoami = "1.2.3"
-url = "2.5.0"
-tempfile = "3.3.0"
+tokio-stream = "0.1.17"
+toml = "0.8.19"
+tracing = "0.1.41"
+tracing-appender = "0.2.3"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+unicode-width = "0.2.0"
+uuid = { version = "1.11", features = ["v4"] }
+whoami = "1.5.2"
+url = "2.5.4"
+tempfile = "3.14.0"
 crokey = "1.1.0"
 strum_macros = "0.26.4"
 strum = { version = "0.26.3", features = ["derive"] }
@@ -102,7 +102,7 @@ ignored = ["libsqlite3-sys"]
 [dev-dependencies]
 criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
 hex-literal = "0.4.1"
-insta = { version = "1.21.0", features = ["json"] }
+insta = { version = "1.41.1", features = ["json"] }
 quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
 
@@ -122,6 +122,3 @@ harness = false
 # signal-protocol uses a fork of this library via the patch mechanism of cargo.
 # Since it is not transitive, we have to add the patch here explicitly.
 "curve25519-dalek" = { git = 'https://github.com/signalapp/curve25519-dalek', tag = 'signal-curve25519-4.1.3' }
-# upgrade crossterm 0.27 -> 0.28 #34
-# <https://github.com/timvisee/qr2term-rs/pull/34/files>
-"qr2term" = { git = "https://github.com/boxdot/qr2term-rs", rev = "e69db9e" }
