@@ -181,7 +181,7 @@ shall be licensed as above, without any additional terms or conditions.
 
 [Signal Messenger]: https://signal.org
 [`presage`]: https://github.com/whisperfish/presage
-[`src/config.rs`]: https://github.com/boxdot/gurk-rs/blob/master/src/config.rs
+[`src/config.rs`]: https://github.com/boxdot/gurk-rs/blob/main/src/config.rs
 [chat-badge]: https://img.shields.io/badge/chat-on%20signal-brightgreen?logo=signal
 [ci-badge]: https://github.com/boxdot/gurk-rs/actions/workflows/ci.yaml/badge.svg
 [ci-link]: https://github.com/boxdot/gurk-rs/actions/workflows/ci.yaml
