@@ -8,7 +8,7 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 anyhow = "1.0.94"
 flate2 = "1.0.35"
-pulldown-cmark = "0.11.3"
+pulldown-cmark = "0.12.2"
 semver = "1.0.24"
 tar = "0.4.43"
 xflags = "0.3.2"
