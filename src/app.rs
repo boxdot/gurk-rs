@@ -318,9 +318,9 @@ impl App {
             Command::ToggleMultiline => {
                 self.is_multiline_input = !self.is_multiline_input;
             }
-            Command::React => {
+            Command::React(reaction) => {
                 if let Some(idx) = self.channels.state.selected() {
-                    self.add_reaction(idx).await;
+                    self.add_reaction(idx, reaction).await;
                 }
             }
             Command::OpenUrl => {
@@ -441,8 +441,12 @@ impl App {
         }
     }
 
-    pub async fn add_reaction(&mut self, channel_idx: usize) -> Option<()> {
-        let reaction = self.take_reaction()?;
+    pub async fn add_reaction(
+        &mut self,
+        channel_idx: usize,
+        reaction: Option<String>,
+    ) -> Option<()> {
+        let reaction = reaction.or_else(|| self.take_reaction()?);
         let channel = self.storage.channel(self.channels.items[channel_idx])?;
         let message = self.selected_message()?;
         let remove = reaction.is_none();
@@ -1653,7 +1657,7 @@ impl HandleReactionOptions {
 }
 
 /// Returns an emoji string if `s` is an emoji or if `s` is a GitHub emoji shortcode.
-fn to_emoji(s: &str) -> Option<&str> {
+pub fn to_emoji(s: &str) -> Option<&str> {
     let s = s.trim();
     if emojis::get(s).is_some() {
         Some(s)
@@ -1839,7 +1843,7 @@ pub(crate) mod tests {
             .select(Some(0));
 
         app.get_input().put_char('👍');
-        app.add_reaction(0).await;
+        app.add_reaction(0, None).await;
 
         let arrived_at = app.messages[&channel_id].items[0];
         let reactions = &app
@@ -1865,7 +1869,7 @@ pub(crate) mod tests {
         for c in ":thumbsup:".chars() {
             app.get_input().put_char(c);
         }
-        app.add_reaction(0).await;
+        app.add_reaction(0, None).await;
 
         let arrived_at = app.messages[&channel_id].items[0];
         let reactions = &app
@@ -1896,7 +1900,7 @@ pub(crate) mod tests {
             .into_owned();
         message.reactions.push((app.user_id, "👍".to_string()));
         app.storage.store_message(channel_id, message);
-        app.add_reaction(0).await;
+        app.add_reaction(0, None).await;
 
         let reactions = &app
             .storage
@@ -1919,7 +1923,7 @@ pub(crate) mod tests {
         for c in ":thumbsup".chars() {
             app.get_input().put_char(c);
         }
-        app.add_reaction(0).await;
+        app.add_reaction(0, None).await;
 
         assert_eq!(app.get_input().data, ":thumbsup");
         let arrived_at = app.messages[&channel_id].items[0];
