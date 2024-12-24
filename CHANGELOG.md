@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.6.0
+
+### Added
+
+- Render a message when there are no channels/messages ([#338])
+- Keyboard bindings for emoji reactions ([#327], [#330])
+
+### Fixes
+
+- Random state reusage ([#326]):
+  This fixes the long-stating issue [#234] about losing the Signal session and
+  losing messages between linked clients.
+- Replace reaction in UI instead of always removing it when replacing it ([#332])
+- Ignore empty names from contact store ([#336])
+
+### Internal
+
+- Respect `RUST_LOG` when specifying --verbose ([#322])
+
+[#234]: https://github.com/boxdot/gurk-rs/issues/234
+[#326]: https://github.com/boxdot/gurk-rs/pull/326
+[#332]: https://github.com/boxdot/gurk-rs/pull/332
+[#336]: https://github.com/boxdot/gurk-rs/pull/336
+[#338]: https://github.com/boxdot/gurk-rs/pull/338
+[#330]: https://github.com/boxdot/gurk-rs/pull/330
+[#327]: https://github.com/boxdot/gurk-rs/pull/327
+
+
 ## 0.5.2
 
 ### Added
