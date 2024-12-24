@@ -436,6 +436,8 @@ tab = "react"
 [message_selected]
 alt-y = "copy_message selected"
 ctrl-e = "edit_message"
+ctrl-t = "react :thumbsup:"
+ctrl-h = "react ❤️"
 
 [channel_modal]
 esc = "toggle_channel_modal"
