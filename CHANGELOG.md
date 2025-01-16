@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.1
+
+### Fixes
+
+- Don't relink implicitly when the manager cannot be loaded. (#345)
+- Update presage fixing connection to Signal servers (#350)
+
 ## 0.6.0
 
 ### Added
