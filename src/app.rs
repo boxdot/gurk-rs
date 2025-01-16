@@ -1,25 +1,14 @@
-use crate::channels::SelectChannel;
-use crate::command::{
-    get_keybindings, Command, DirectionVertical, ModeKeybinding, MoveAmountText, MoveAmountVisual,
-    MoveDirection, Widget, WindowMode,
-};
-use crate::config::Config;
-use crate::data::{BodyRange, Channel, ChannelId, Message, TypingAction, TypingSet};
-use crate::event::Event;
-use crate::input::Input;
-use crate::receipt::{Receipt, ReceiptEvent, ReceiptHandler};
-use crate::signal::{
-    Attachment, GroupIdentifierBytes, GroupMasterKeyBytes, ProfileKeyBytes, ResolvedGroup,
-    SignalManager,
-};
-use crate::storage::{MessageId, Storage};
-use crate::util::{self, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX};
+use std::borrow::Cow;
 use std::cell::Cell;
+use std::cmp::Reverse;
+use std::collections::BTreeMap;
+use std::convert::TryInto;
+use std::future::Future;
 use std::io::Cursor;
+use std::path::Path;
 
 use anyhow::{anyhow, Context as _};
 use arboard::Clipboard;
-use chrono::{DateTime, Utc};
 use crokey::Combiner;
 use crossterm::event::{KeyCode, KeyEvent};
 use image::codecs::png::PngEncoder;
@@ -39,17 +28,22 @@ use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use std::borrow::Cow;
-use std::cmp::Reverse;
-use std::collections::BTreeMap;
-use std::convert::TryInto;
-use std::future::Future;
-use std::path::Path;
-use std::time::Duration;
-
-/// Amount of time to skip contacts sync after the last sync
-const CONTACTS_SYNC_DEADLINE_SEC: i64 = 60 * 60 * 24; // 1 day
-const CONTACTS_SYNC_TIMEOUT: Duration = Duration::from_secs(20);
+use crate::channels::SelectChannel;
+use crate::command::{
+    get_keybindings, Command, DirectionVertical, ModeKeybinding, MoveAmountText, MoveAmountVisual,
+    MoveDirection, Widget, WindowMode,
+};
+use crate::config::Config;
+use crate::data::{BodyRange, Channel, ChannelId, Message, TypingAction, TypingSet};
+use crate::event::Event;
+use crate::input::Input;
+use crate::receipt::{Receipt, ReceiptEvent, ReceiptHandler};
+use crate::signal::{
+    Attachment, GroupIdentifierBytes, GroupMasterKeyBytes, ProfileKeyBytes, ResolvedGroup,
+    SignalManager,
+};
+use crate::storage::{MessageId, Storage};
+use crate::util::{self, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX};
 
 pub struct App {
     pub config: Config,
@@ -582,7 +576,7 @@ impl App {
         }
     }
 
-    pub async fn on_message(&mut self, content: Content) -> anyhow::Result<()> {
+    pub async fn on_message(&mut self, content: Box<Content>) -> anyhow::Result<()> {
         // tracing::info!(?content, "incoming");
 
         #[cfg(feature = "dev")]
@@ -1485,27 +1479,6 @@ impl App {
 
     pub fn is_help(&self) -> bool {
         self.display_help
-    }
-
-    pub fn request_contacts_sync(
-        &self,
-    ) -> Option<impl Future<Output = anyhow::Result<DateTime<Utc>>> + 'static> {
-        let now = Utc::now();
-        let metadata = self.storage.metadata();
-        let do_sync = metadata
-            .contacts_sync_request_at
-            .map(|dt| dt + chrono::Duration::seconds(CONTACTS_SYNC_DEADLINE_SEC) < now)
-            .unwrap_or(true);
-        let signal_manager = self.signal_manager.clone_boxed();
-        do_sync.then_some(async move {
-            info!(timeout =? CONTACTS_SYNC_TIMEOUT, "requesting contact sync");
-            tokio::time::timeout(
-                CONTACTS_SYNC_TIMEOUT,
-                signal_manager.request_contacts_sync(),
-            )
-            .await??;
-            Ok(Utc::now())
-        })
     }
 
     pub fn is_select_channel_shown(&self) -> bool {

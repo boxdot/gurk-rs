@@ -80,7 +80,7 @@ pub enum Event {
     Click(MouseEvent),
     Input(KeyEvent),
     Paste(String),
-    Message(Content),
+    Message(Box<Content>),
     Resize { cols: u16, rows: u16 },
     Quit(Option<anyhow::Error>),
     ContactSynced(DateTime<Utc>),
@@ -136,10 +136,6 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
     let (mut app, mut app_events) = App::try_new(config, signal_manager.clone_boxed(), storage)?;
     app.populate_names_cache().await;
 
-    // sync task can be only spawned after we start to listen to message, because it relies on
-    // message sender to be running
-    let mut contact_sync_task = app.request_contacts_sync();
-
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Event>(100);
     tokio::spawn({
         let tx = tx.clone();
@@ -185,21 +181,6 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                     }
                 }
             };
-
-            if let Some(task) = contact_sync_task.take() {
-                let inner_tx = inner_tx.clone();
-                tokio::task::spawn_local(async move {
-                    match task.await {
-                        Ok(at) => inner_tx
-                            .send(Event::ContactSynced(at))
-                            .await
-                            .expect("logic error: events channel closed"),
-                        Err(error) => {
-                            error!(%error, "failed to sync contacts");
-                        }
-                    }
-                });
-            }
 
             while let Some(message) = messages.next().await {
                 backoff.reset();

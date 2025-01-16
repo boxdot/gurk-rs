@@ -4,20 +4,23 @@ use std::pin::Pin;
 
 use anyhow::Context;
 use async_trait::async_trait;
-use presage::libsignal_service::content::{Content, ContentBody};
 use presage::libsignal_service::prelude::ProfileKey;
 use presage::libsignal_service::protocol::ServiceId;
 use presage::libsignal_service::sender::AttachmentSpec;
-use presage::manager::{ReceivingMode, Registered};
+use presage::manager::Registered;
 use presage::model::contacts::Contact;
 use presage::model::groups::Group;
 use presage::proto::data_message::{Quote, Reaction};
 use presage::proto::{AttachmentPointer, DataMessage, EditMessage, GroupContextV2, ReceiptMessage};
 use presage::store::ContentsStore;
+use presage::{
+    libsignal_service::content::{Content, ContentBody},
+    model::messages::Received,
+};
 use presage_store_sled::SledStore;
 use tokio::sync::oneshot;
-use tokio_stream::Stream;
-use tracing::error;
+use tokio_stream::{Stream, StreamExt};
+use tracing::{error, warn};
 use uuid::Uuid;
 
 use crate::data::{Channel, ChannelId, GroupData, Message};
@@ -322,10 +325,6 @@ impl SignalManager for PresageManager {
         }
     }
 
-    async fn request_contacts_sync(&self) -> anyhow::Result<()> {
-        Ok(self.manager.clone().sync_contacts().await?)
-    }
-
     async fn profile_name(&self, id: Uuid) -> Option<String> {
         let profile_key = self.manager.store().profile_key(&id).await.ok()??;
         let profile = self.manager.store().profile(id, profile_key).await.ok()??;
@@ -341,12 +340,20 @@ impl SignalManager for PresageManager {
         self.manager.store().contact_by_id(&id).await.ok()?
     }
 
-    async fn receive_messages(&mut self) -> anyhow::Result<Pin<Box<dyn Stream<Item = Content>>>> {
-        Ok(Box::pin(
-            self.manager
-                .receive_messages(ReceivingMode::Forever)
-                .await?,
-        ))
+    async fn receive_messages(
+        &mut self,
+    ) -> anyhow::Result<Pin<Box<dyn Stream<Item = Box<Content>>>>> {
+        Ok(Box::pin(self.manager.receive_messages().await?.filter_map(
+            |received| match received {
+                Received::Content(content) => Some(content),
+                Received::QueueEmpty => None,
+                Received::Contacts => {
+                    // TODO: <https://github.com/boxdot/gurk-rs/issues/349>
+                    warn!("Received contacts, but not implemented yet");
+                    None
+                }
+            },
+        )))
     }
 
     async fn contacts(&self) -> Box<dyn Iterator<Item = Contact>> {

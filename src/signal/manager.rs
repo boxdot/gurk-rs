@@ -58,11 +58,11 @@ pub trait SignalManager {
         profile_key: ProfileKeyBytes,
     ) -> Option<String>;
 
-    async fn request_contacts_sync(&self) -> anyhow::Result<()>;
-
     async fn contact(&self, id: Uuid) -> Option<Contact>;
 
-    async fn receive_messages(&mut self) -> anyhow::Result<Pin<Box<dyn Stream<Item = Content>>>>;
+    async fn receive_messages(
+        &mut self,
+    ) -> anyhow::Result<Pin<Box<dyn Stream<Item = Box<Content>>>>>;
 
     async fn contacts(&self) -> Box<dyn Iterator<Item = Contact>>;
     async fn groups(&self) -> Box<dyn Iterator<Item = (GroupMasterKeyBytes, Group)>>;
