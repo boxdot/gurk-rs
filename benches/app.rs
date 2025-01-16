@@ -36,7 +36,7 @@ pub fn bench_on_message(c: &mut Criterion) {
                 || (test_app(), data.clone()),
                 |(mut app, data)| async move {
                     for content in data {
-                        app.on_message(content).await.unwrap();
+                        app.on_message(Box::new(content)).await.unwrap();
                     }
                 },
                 BatchSize::SmallInput,

@@ -126,10 +126,6 @@ impl SignalManager for SignalManagerMock {
         None
     }
 
-    async fn request_contacts_sync(&self) -> anyhow::Result<()> {
-        Ok(())
-    }
-
     async fn profile_name(&self, _id: Uuid) -> Option<String> {
         None
     }
@@ -138,7 +134,9 @@ impl SignalManager for SignalManagerMock {
         None
     }
 
-    async fn receive_messages(&mut self) -> anyhow::Result<Pin<Box<dyn Stream<Item = Content>>>> {
+    async fn receive_messages(
+        &mut self,
+    ) -> anyhow::Result<Pin<Box<dyn Stream<Item = Box<Content>>>>> {
         Ok(Box::pin(tokio_stream::empty()))
     }
 
