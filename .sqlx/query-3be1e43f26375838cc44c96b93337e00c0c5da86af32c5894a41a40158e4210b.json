@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                        SELECT id AS \"id: _\", name, group_master_key, group_revision, group_members AS \"group_members: _\"\n                        FROM channels\n                        WHERE id = ?\n                    ",
+  "query": "\n                        SELECT\n                            id AS \"id: _\",\n                            name,\n                            group_master_key,\n                            group_revision,\n                            group_members AS \"group_members: _\"\n                        FROM channels\n                        WHERE id = ?\n                    ",
   "describe": {
     "columns": [
       {
@@ -40,5 +40,5 @@
       true
     ]
   },
-  "hash": "91d45ef1f3eed83def5241fa027573bc217fad6419b52bcad53b899de7fe6cf4"
+  "hash": "3be1e43f26375838cc44c96b93337e00c0c5da86af32c5894a41a40158e4210b"
 }

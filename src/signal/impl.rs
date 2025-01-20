@@ -20,6 +20,7 @@ use presage::{
 use presage_store_sled::SledStore;
 use tokio::sync::oneshot;
 use tokio_stream::{Stream, StreamExt};
+use tokio_util::task::LocalPoolHandle;
 use tracing::{error, warn};
 use uuid::Uuid;
 
@@ -33,18 +34,25 @@ use super::{
 
 pub(super) struct PresageManager {
     manager: presage::Manager<SledStore, Registered>,
+    local_pool: LocalPoolHandle,
 }
 
 impl PresageManager {
-    pub(super) fn new(manager: presage::Manager<SledStore, Registered>) -> Self {
-        Self { manager }
+    pub(super) fn new(
+        manager: presage::Manager<SledStore, Registered>,
+        local_pool: LocalPoolHandle,
+    ) -> Self {
+        Self {
+            manager,
+            local_pool,
+        }
     }
 }
 
 #[async_trait(?Send)]
 impl SignalManager for PresageManager {
     fn clone_boxed(&self) -> Box<dyn SignalManager> {
-        Box::new(Self::new(self.manager.clone()))
+        Box::new(Self::new(self.manager.clone(), self.local_pool.clone()))
     }
 
     fn user_id(&self) -> Uuid {
@@ -102,7 +110,7 @@ impl SignalManager for PresageManager {
         };
 
         let mut manager = self.manager.clone();
-        tokio::task::spawn_local(async move {
+        self.local_pool.spawn_pinned(move || async move {
             let body = ContentBody::ReceiptMessage(data_message);
             if let Err(error) = manager
                 .send_message(ServiceId::Aci(sender_uuid.into()), body, now_timestamp)
@@ -162,7 +170,7 @@ impl SignalManager for PresageManager {
         match channel.id {
             ChannelId::User(uuid) => {
                 let mut manager = self.manager.clone();
-                tokio::task::spawn_local(async move {
+                self.local_pool.spawn_pinned(move || async move {
                     if let Err(error) =
                         upload_attachments(&manager, attachments, &mut data_message).await
                     {
@@ -202,7 +210,7 @@ impl SignalManager for PresageManager {
                         ..Default::default()
                     });
 
-                    tokio::task::spawn_local(async move {
+                    self.local_pool.spawn_pinned(move || async move {
                         if let Err(error) =
                             upload_attachments(&manager, attachments, &mut data_message).await
                         {
@@ -271,7 +279,7 @@ impl SignalManager for PresageManager {
             (ChannelId::User(uuid), _) => {
                 let mut manager = self.manager.clone();
                 let body = ContentBody::DataMessage(data_message);
-                tokio::task::spawn_local(async move {
+                self.local_pool.spawn_pinned(move || async move {
                     if let Err(e) = manager
                         .send_message(ServiceId::Aci(uuid.into()), body, timestamp)
                         .await
@@ -291,7 +299,7 @@ impl SignalManager for PresageManager {
                     ..Default::default()
                 });
 
-                tokio::task::spawn_local(async move {
+                self.local_pool.spawn_pinned(move || async move {
                     if let Err(e) = manager
                         .send_message_to_group(&master_key_bytes, data_message, timestamp)
                         .await

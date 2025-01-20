@@ -61,7 +61,6 @@ phonenumber = "0.3.6"
 postcard = { version = "1.1.1", features = ["alloc"] }
 qr2term = "0.3.3"
 ratatui = "0.29.0"
-rayon = "1.10.0"
 regex = "1.11.1"
 scopeguard = "1.2.0"
 serde = { version = "1.0.216", features = ["derive"] }
@@ -74,7 +73,6 @@ sqlx = { version = "0.8.2", features = [
 ] }
 textwrap = "0.16.1"
 thiserror = "2.0.9"
-thread_local = "1.1.8"
 tokio = { version = "1.42.0", default-features = false, features = [
     "rt-multi-thread",
     "macros",
@@ -94,6 +92,7 @@ tempfile = "3.14.0"
 crokey = "1.1.0"
 strum_macros = "0.26.4"
 strum = { version = "0.26.3", features = ["derive"] }
+tokio-util = { version = "0.7.13", features = ["rt"] }
 
 [package.metadata.cargo-machete]
 # not used directly; brings sqlcipher capabilities to sqlite

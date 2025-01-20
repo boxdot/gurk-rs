@@ -23,6 +23,7 @@ use presage::libsignal_service::content::Content;
 use ratatui::{backend::CrosstermBackend, Terminal};
 use tokio::select;
 use tokio_stream::StreamExt;
+use tokio_util::task::LocalPoolHandle;
 use tracing::debug;
 use tracing::{error, info};
 
@@ -43,7 +44,7 @@ struct Args {
     relink: bool,
 }
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main(worker_threads = 2)]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
@@ -62,9 +63,7 @@ async fn main() -> anyhow::Result<()> {
 
     log_panics::init();
 
-    tokio::task::LocalSet::new()
-        .run_until(run_single_threaded(args.relink))
-        .await
+    run(args.relink).await
 }
 
 async fn is_online() -> bool {
@@ -88,8 +87,10 @@ pub enum Event {
     AppEvent(gurk::event::Event),
 }
 
-async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
-    let (mut signal_manager, config) = signal::ensure_linked_device(relink).await?;
+async fn run(relink: bool) -> anyhow::Result<()> {
+    let local_pool = LocalPoolHandle::new(2);
+    let (mut signal_manager, config) =
+        signal::ensure_linked_device(relink, local_pool.clone()).await?;
 
     let mut storage: Box<dyn Storage> = if config.sqlite.enabled {
         debug!(
@@ -102,6 +103,7 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
             config.passphrase.clone(),
             config.sqlite.preserve_unencrypted,
         )
+        .await
         .with_context(|| {
             format!(
                 "failed to open sqlite data storage at: {}",
@@ -156,7 +158,8 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
     });
 
     let inner_tx = tx.clone();
-    tokio::task::spawn_local(async move {
+
+    local_pool.spawn_pinned(|| async move {
         let mut backoff = Backoff::new();
         loop {
             let mut messages = if !is_online().await {
@@ -171,7 +174,8 @@ async fn run_single_threaded(relink: bool) -> anyhow::Result<()> {
                     Err(e) => {
                         let e = e.context(
                             "failed to initialize the stream of Signal messages.\n\
-                            Maybe the device was unlinked? Please try to restart with '--relink` flag.",
+                            Maybe the device was unlinked? Please try to restart with \
+                            '--relink` flag.",
                         );
                         inner_tx
                             .send(Event::Quit(Some(e)))
