@@ -136,6 +136,7 @@ end_of_line
 delete_character previous
 edit_message
 open_url
+open_file
 ```
 
 ### Example configuration
