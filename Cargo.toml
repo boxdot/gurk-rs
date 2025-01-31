@@ -28,8 +28,8 @@ debug = true
 dev = ["prost", "base64"]
 
 [dependencies]
-presage = { git = "https://github.com/whisperfish/presage", rev = "35c2c98ba782fb212ad6cd3356fd4807e5d5a8eb" }
-presage-store-sled = { git = "https://github.com/whisperfish/presage", rev = "35c2c98ba782fb212ad6cd3356fd4807e5d5a8eb" }
+presage = { git = "https://github.com/whisperfish/presage", rev = "4377bdbfc7a94fcbf349cde7ceff9616c43f0830" }
+presage-store-sled = { git = "https://github.com/whisperfish/presage", rev = "4377bdbfc7a94fcbf349cde7ceff9616c43f0830" }
 
 # dev feature dependencies
 prost = { version = "0.13.4", optional = true }
