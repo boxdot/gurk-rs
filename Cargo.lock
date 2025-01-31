@@ -2410,7 +2410,7 @@ dependencies = [
 [[package]]
 name = "libsignal-service"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/libsignal-service-rs?rev=19c0c78da7a7479954634580a5e5081e7a8f2897#19c0c78da7a7479954634580a5e5081e7a8f2897"
+source = "git+https://github.com/whisperfish/libsignal-service-rs?rev=43aa16f2c49d34b21f42733d81a5c9739d9a1ed4#43aa16f2c49d34b21f42733d81a5c9739d9a1ed4"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -3367,7 +3367,7 @@ checksum = "94e851c7654eed9e68d7d27164c454961a616cf8c203d500607ef22c737b51bb"
 [[package]]
 name = "presage"
 version = "0.7.0-dev"
-source = "git+https://github.com/whisperfish/presage?rev=35c2c98ba782fb212ad6cd3356fd4807e5d5a8eb#35c2c98ba782fb212ad6cd3356fd4807e5d5a8eb"
+source = "git+https://github.com/whisperfish/presage?rev=4377bdbfc7a94fcbf349cde7ceff9616c43f0830#4377bdbfc7a94fcbf349cde7ceff9616c43f0830"
 dependencies = [
  "base64",
  "bytes",
@@ -3389,7 +3389,7 @@ dependencies = [
 [[package]]
 name = "presage-store-cipher"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/presage?rev=35c2c98ba782fb212ad6cd3356fd4807e5d5a8eb#35c2c98ba782fb212ad6cd3356fd4807e5d5a8eb"
+source = "git+https://github.com/whisperfish/presage?rev=4377bdbfc7a94fcbf349cde7ceff9616c43f0830#4377bdbfc7a94fcbf349cde7ceff9616c43f0830"
 dependencies = [
  "blake3",
  "chacha20poly1305",
@@ -3406,7 +3406,7 @@ dependencies = [
 [[package]]
 name = "presage-store-sled"
 version = "0.6.0-dev"
-source = "git+https://github.com/whisperfish/presage?rev=35c2c98ba782fb212ad6cd3356fd4807e5d5a8eb#35c2c98ba782fb212ad6cd3356fd4807e5d5a8eb"
+source = "git+https://github.com/whisperfish/presage?rev=4377bdbfc7a94fcbf349cde7ceff9616c43f0830#4377bdbfc7a94fcbf349cde7ceff9616c43f0830"
 dependencies = [
  "async-trait",
  "base64",
@@ -3480,7 +3480,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0f3e5beed80eb580c68e2c600937ac2c4eedabdfd5ef1e5b7ea4f3fba84497b"
 dependencies = [
  "heck",
- "itertools 0.10.5",
+ "itertools 0.13.0",
  "log",
  "multimap",
  "once_cell",
@@ -3500,7 +3500,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "157c5a9d7ea5c2ed2d9fb8f495b64759f7816c7eaea54ba3978f0d63000162e3"
 dependencies = [
  "anyhow",
- "itertools 0.10.5",
+ "itertools 0.13.0",
  "proc-macro2",
  "quote",
  "syn 2.0.91",
