@@ -6,6 +6,7 @@ pub mod test;
 use anyhow::{bail, Context as _};
 use presage::{libsignal_service::configuration::SignalServers, model::identity::OnNewIdentity};
 use presage_store_sled::{MigrationConflictStrategy, SledStore};
+use tokio_util::task::LocalPoolHandle;
 
 use crate::config::{self, Config};
 
@@ -31,7 +32,8 @@ pub type GroupIdentifierBytes = [u8; GROUP_IDENTIFIER_LEN];
 ///    path.
 pub async fn ensure_linked_device(
     relink: bool,
-) -> anyhow::Result<(Box<dyn SignalManager>, Config)> {
+    local_pool: LocalPoolHandle,
+) -> anyhow::Result<(Box<dyn SignalManager + Send>, Config)> {
     let config = Config::load_installed()?;
 
     let db_path = config
@@ -54,7 +56,7 @@ pub async fn ensure_linked_device(
             match presage::Manager::load_registered(store.clone()).await {
                 Ok(manager) => {
                     // done loading manager from store
-                    return Ok((Box::new(PresageManager::new(manager)), config));
+                    return Ok((Box::new(PresageManager::new(manager, local_pool)), config));
                 }
                 Err(e) => {
                     bail!("error loading manager. Try again later or run with --relink to force relink: {}", e)
@@ -127,5 +129,5 @@ pub async fn ensure_linked_device(
         config
     };
 
-    Ok((Box::new(PresageManager::new(manager)), config))
+    Ok((Box::new(PresageManager::new(manager, local_pool)), config))
 }
