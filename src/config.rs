@@ -10,8 +10,8 @@ use crate::command::ModeKeybindingConfig;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
     /// Path to the JSON file (incl. filename) storing channels and messages.
-    #[serde(default = "default_data_path")]
-    pub data_path: PathBuf,
+    #[serde(default = "default_data_json_path", rename = "data_path")]
+    pub deprecated_data_path: PathBuf,
     /// Path to the Signal database containing the linked device data.
     #[serde(default = "default_signal_db_path")]
     pub signal_db_path: PathBuf,
@@ -69,12 +69,24 @@ impl DeveloperConfig {
     }
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct LoadedConfig {
+    pub(crate) config: Config,
+    pub(crate) deprecated_keys: Vec<DeprecatedConfigKey>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct DeprecatedConfigKey {
+    pub(crate) key: &'static str,
+    pub(crate) message: &'static str,
+}
+
 impl Config {
     /// Create new config with default paths from the given user.
     pub fn with_user(user: User) -> Self {
         Config {
             user,
-            data_path: default_data_path(),
+            deprecated_data_path: default_data_json_path(),
             signal_db_path: default_signal_db_path(),
             first_name_only: false,
             show_receipts: true,
@@ -98,7 +110,7 @@ impl Config {
     /// 4. $HOME/.gurk.toml
     ///
     /// If no config is found returns `None`.
-    pub fn load_installed() -> anyhow::Result<Option<Self>> {
+    pub(crate) fn load_installed() -> anyhow::Result<Option<LoadedConfig>> {
         installed_config().map(Self::load).transpose()
     }
 
@@ -122,19 +134,40 @@ impl Config {
         }
 
         // make sure data_path exists
-        let data_path = self
-            .data_path
-            .parent()
-            .ok_or_else(|| anyhow!("invalid data path: no parent dir"))?;
+        let data_path = default_data_dir();
         fs::create_dir_all(data_path).context("could not create data dir")?;
 
         self.save(path)
     }
 
-    fn load(path: impl AsRef<Path>) -> anyhow::Result<Config> {
+    fn load(path: impl AsRef<Path>) -> anyhow::Result<LoadedConfig> {
         let content = std::fs::read_to_string(path)?;
         let config = toml::de::from_str(&content)?;
-        Ok(config)
+
+        // check for deprecated keys
+        let config_value: toml::Value = toml::de::from_str(&content)?;
+        let mut deprecated_keys = Vec::new();
+        if config_value
+            .get("sqlite")
+            .map(|v| v.get("enabled").is_some())
+            .unwrap_or(false)
+        {
+            deprecated_keys.push(DeprecatedConfigKey {
+                key: "sqlite.enabled",
+                message: "sqlite is now enabled by default",
+            });
+        }
+        if config_value.get("data_path").is_some() {
+            deprecated_keys.push(DeprecatedConfigKey {
+                key: "data_path",
+                message: "is not used anymore, and is migrated to sqlite.url",
+            });
+        }
+
+        Ok(LoadedConfig {
+            config,
+            deprecated_keys,
+        })
     }
 
     fn save(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
@@ -151,8 +184,6 @@ impl Config {
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct SqliteConfig {
-    #[serde(default = "default_true")]
-    pub enabled: bool,
     #[serde(default = "SqliteConfig::default_db_url")]
     pub url: Url,
     /// Don't delete the unencrypted db, after applying encryption to it
@@ -165,7 +196,6 @@ pub struct SqliteConfig {
 impl Default for SqliteConfig {
     fn default() -> Self {
         Self {
-            enabled: false,
             url: Self::default_db_url(),
             preserve_unencrypted: false,
         }
@@ -229,7 +259,7 @@ fn default_data_dir() -> PathBuf {
     }
 }
 
-fn default_data_path() -> PathBuf {
+fn default_data_json_path() -> PathBuf {
     default_data_dir().join("gurk.data.json")
 }
 
@@ -256,7 +286,7 @@ mod tests {
         assert!(!signal_db_path.exists());
 
         Config {
-            data_path,
+            deprecated_data_path: data_path,
             signal_db_path,
             ..Config::with_user(example_user())
         }
@@ -270,10 +300,13 @@ mod tests {
         let config_path = dir.path().join("some-dir/some-other-dir/gurk.toml");
 
         config.save_new_at(&config_path)?;
-        let loaded_config = Config::load(config_path)?;
+        let LoadedConfig {
+            config: loaded_config,
+            deprecated_keys: _,
+        } = Config::load(config_path)?;
         assert_eq!(config, loaded_config);
 
-        assert!(config.data_path.parent().unwrap().exists()); // data path parent is created
+        assert!(config.deprecated_data_path.parent().unwrap().exists()); // data path parent is created
         assert!(!config.signal_db_path.exists()); // signal path is not touched
 
         Ok(())
@@ -286,7 +319,7 @@ mod tests {
         let file = NamedTempFile::new()?;
 
         assert!(config.save_new_at(file.path()).is_err());
-        assert!(!config.data_path.parent().unwrap().exists()); // data path parent is not touched
+        assert!(!config.deprecated_data_path.parent().unwrap().exists()); // data path parent is not touched
         assert!(!config.signal_db_path.exists()); // signal path is not touched
 
         Ok(())
