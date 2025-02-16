@@ -1,7 +1,7 @@
 [package]
 name = "gurk"
 description = "Signal messenger client for terminal"
-version = "0.6.1"
+version = "0.6.2"
 authors = ["boxdot <d@zerovolt.org>"]
 edition = "2021"
 keywords = ["signal", "tui"]
