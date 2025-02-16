@@ -303,10 +303,10 @@ mod tests {
         let LoadedConfig {
             config: loaded_config,
             deprecated_keys: _,
-        } = Config::load(config_path)?;
+        } = Config::load(&config_path)?;
         assert_eq!(config, loaded_config);
 
-        assert!(config.deprecated_data_path.parent().unwrap().exists()); // data path parent is created
+        assert!(config_path.parent().unwrap().exists()); // data path parent is created
         assert!(!config.signal_db_path.exists()); // signal path is not touched
 
         Ok(())
