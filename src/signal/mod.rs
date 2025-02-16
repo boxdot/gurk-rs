@@ -10,10 +10,10 @@ use futures_channel::oneshot;
 use image::Luma;
 use presage::{libsignal_service::configuration::SignalServers, model::identity::OnNewIdentity};
 use presage_store_sled::{MigrationConflictStrategy, SledStore};
-use tracing::error;
+use tracing::{error, warn};
 use url::Url;
 
-use crate::config::{self, Config};
+use crate::config::{self, Config, DeprecatedConfigKey, LoadedConfig};
 
 pub use self::manager::{Attachment, ResolvedGroup, SignalManager};
 use self::r#impl::PresageManager;
@@ -39,6 +39,20 @@ pub async fn ensure_linked_device(
     relink: bool,
 ) -> anyhow::Result<(Box<dyn SignalManager>, Config)> {
     let config = Config::load_installed()?;
+
+    // warn about deprecated keys
+    let config = config.map(
+        |LoadedConfig {
+             config,
+             deprecated_keys,
+         }| {
+            for DeprecatedConfigKey { key, message } in deprecated_keys {
+                warn!(key, message, "deprecated config key");
+                println!("deprecated config key: {key}, {message}");
+            }
+            config
+        },
+    );
 
     let db_path = config
         .as_ref()
