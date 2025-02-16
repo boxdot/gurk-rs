@@ -28,6 +28,7 @@ struct MetadataDef {
     needs_receipt: bool,
     unidentified_sender: bool,
     server_guid: Option<Uuid>,
+    was_plaintext: bool,
 }
 
 mod service_id {
@@ -61,6 +62,7 @@ impl From<Metadata> for MetadataDef {
             needs_receipt: metadata.needs_receipt,
             unidentified_sender: metadata.unidentified_sender,
             server_guid: metadata.server_guid,
+            was_plaintext: metadata.was_plaintext,
         }
     }
 }
