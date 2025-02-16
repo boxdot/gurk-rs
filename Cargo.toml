@@ -94,6 +94,7 @@ tempfile = "3.14.0"
 crokey = "1.1.0"
 strum_macros = "0.26.4"
 strum = { version = "0.26.3", features = ["derive"] }
+qrcode = { version = "0.14.1", default-features = false, features = ["image"] }
 
 [package.metadata.cargo-machete]
 # not used directly; brings sqlcipher capabilities to sqlite
