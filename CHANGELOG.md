@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.2
+
+- Add command for opening file attachments (#356)
+- Render qr code into a temporary PNG file (#364)
+
+### Fixes
+
+- Bump presage to fix linking (HTTP 409: Conflict) (#358)
+- Security upgrade presage (#362)
+
+[#356]: https://github.com/boxdot/gurk-rs/pull/356
+[#358]: https://github.com/boxdot/gurk-rs/pull/358
+[#362]: https://github.com/boxdot/gurk-rs/pull/362
+[#364]: https://github.com/boxdot/gurk-rs/pull/364
+
 ## 0.6.1
 
 ### Fixes
