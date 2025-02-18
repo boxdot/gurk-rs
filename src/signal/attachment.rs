@@ -1,10 +1,15 @@
-use std::path::{Path, PathBuf};
+use std::{
+    borrow::Cow,
+    path::{Path, PathBuf},
+    sync::LazyLock,
+};
 
 use anyhow::Context;
 use chrono::Local;
 use mime_guess::mime::{APPLICATION_OCTET_STREAM, IMAGE_JPEG};
 use mime_guess::{get_mime_extensions, Mime};
 use presage::proto::AttachmentPointer;
+use regex::Regex;
 use tracing::info;
 
 use crate::signal::Attachment;
@@ -30,7 +35,7 @@ pub(super) fn save(
         .parse()
         .unwrap_or(APPLICATION_OCTET_STREAM);
 
-    let name = derive_name(&pointer, digest, &mime);
+    let name = derive_name(pointer.file_name, digest, &mime);
 
     let date = pointer
         .upload_timestamp
@@ -78,8 +83,16 @@ fn conflict_free_filename(filedir: &Path, name: String) -> PathBuf {
     filepath
 }
 
-fn derive_name(pointer: &AttachmentPointer, digest: &[u8], mime: &Mime) -> String {
-    pointer.file_name.clone().unwrap_or_else(|| {
+static INVALID_CHARS: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"[\x00-\x1F\x7F-\x9F<>"\s{}\^⟨⟩`]"#).unwrap());
+
+fn derive_name(file_name: Option<String>, digest: &[u8], mime: &Mime) -> String {
+    if let Some(name) = file_name {
+        match INVALID_CHARS.replace_all(&name, "-") {
+            Cow::Owned(name) => name,
+            Cow::Borrowed(_) => name,
+        }
+    } else {
         let mut name = hex::encode(&digest[..DIGEST_BYTES_LEN]);
         let extension = if mime == &IMAGE_JPEG {
             // special case due to: <https://github.com/abonander/mime_guess/issues/59>
@@ -94,7 +107,7 @@ fn derive_name(pointer: &AttachmentPointer, digest: &[u8], mime: &Mime) -> Strin
             name.push_str(extension);
         };
         name
-    })
+    }
 }
 
 #[cfg(test)]
@@ -201,6 +214,18 @@ mod tests {
         assert_eq!(
             attachment.filename,
             tempdir.path().join("files/2023-12-21/d51e9a35.pdf")
+        );
+    }
+
+    #[test]
+    fn test_derive_name() {
+        assert_eq!(
+            derive_name(
+                Some("Screenshot 2000-00-00 at 12.00.00.png".to_owned()),
+                &[],
+                &IMAGE_JPEG,
+            ),
+            "Screenshot-2000-00-00-at-12.00.00.png"
         );
     }
 }
