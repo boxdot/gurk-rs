@@ -360,7 +360,7 @@ impl App {
                             }
                         } else {
                             // input is empty
-                            self.try_open_url();
+                            self.try_open_url_or_file();
                         }
                     } else if self.select_channel.is_shown {
                         if let Some(channel_id) = self.select_channel.selected_channel_id().copied()
@@ -387,6 +387,10 @@ impl App {
             }
         }
         Ok(())
+    }
+
+    fn try_open_url_or_file(&mut self) -> Option<()> {
+        self.try_open_url().or_else(|| self.try_open_file())
     }
 
     /// Tries to open the first url in the selected message.
