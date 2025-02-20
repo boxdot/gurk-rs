@@ -8,7 +8,7 @@ use tempfile::tempdir;
 use tracing::info;
 use url::Url;
 
-pub(super) fn encrypt_db(
+pub(super) async fn encrypt_db(
     url: &Url,
     passphrase: &str,
     preserve_unencrypted: bool,
@@ -22,46 +22,34 @@ pub(super) fn encrypt_db(
 
     info!(%url, "encrypting db");
 
-    std::thread::scope(|s| {
-        s.spawn(|| -> anyhow::Result<()> {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .unwrap();
-            rt.block_on(async {
-                let tempdir = tempdir().context("failed to create temp dir")?;
-                let dest = tempdir.path().join("encrypted.db");
+    let tempdir = tempdir().context("failed to create temp dir")?;
+    let dest = tempdir.path().join("encrypted.db");
 
-                let mut conn = SqliteConnection::connect_with(&opts).await?;
-                sqlx::raw_sql(&format!(
-                    "
-                       ATTACH DATABASE '{}' AS encrypted KEY '{passphrase}';
-                       SELECT sqlcipher_export('encrypted');
-                       DETACH DATABASE encrypted;
-                    ",
-                    dest.display(),
-                ))
-                .execute(&mut conn)
-                .await
-                .context("failed to encrypt db")?;
+    let mut conn = SqliteConnection::connect_with(&opts).await?;
+    sqlx::raw_sql(&format!(
+        "
+           ATTACH DATABASE '{}' AS encrypted KEY '{passphrase}';
+           SELECT sqlcipher_export('encrypted');
+           DETACH DATABASE encrypted;
+        ",
+        dest.display(),
+    ))
+    .execute(&mut conn)
+    .await
+    .context("failed to encrypt db")?;
+    conn.close().await?;
 
-                let origin = url.path();
-                if preserve_unencrypted {
-                    let backup = format!("{origin}.backup");
-                    std::fs::copy(origin, &backup).with_context(|| {
-                        format!("failed to backup the unencrypted database at: {backup}")
-                    })?;
-                }
+    let origin = url.path();
+    if preserve_unencrypted {
+        let backup = format!("{origin}.backup");
+        std::fs::copy(origin, &backup)
+            .with_context(|| format!("failed to backup the unencrypted database at: {backup}"))?;
+    }
 
-                std::fs::copy(dest, origin)
-                    .with_context(|| format!("failed to replace unencrypted db at: {origin}"))?;
+    std::fs::copy(dest, origin)
+        .with_context(|| format!("failed to replace unencrypted db at: {origin}"))?;
 
-                Ok(())
-            })
-        })
-        .join()
-        .expect("encryption failed")
-    })
+    Ok(())
 }
 
 pub(super) fn is_sqlite_encrypted_heuristics(url: &Url) -> Option<bool> {
@@ -79,19 +67,21 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn test_encrypt_unencrypted() -> anyhow::Result<()> {
+    #[tokio::test]
+    async fn test_encrypt_unencrypted() {
         let tempdir = tempdir().unwrap();
         let path = tempdir.path().join("data.sqlite");
         let url: Url = format!("sqlite://{}", path.display()).parse().unwrap();
 
-        let _ = SqliteStorage::open(&url, None).unwrap();
+        let _ = SqliteStorage::open(&url, None).await.unwrap();
         assert!(path.exists());
         assert_eq!(is_sqlite_encrypted_heuristics(&url), Some(false));
 
         let preserve_unencrypted = true;
         let passphrase = "secret".to_owned();
-        encrypt_db(&url, &passphrase, preserve_unencrypted).unwrap();
+        encrypt_db(&url, &passphrase, preserve_unencrypted)
+            .await
+            .unwrap();
 
         assert!(path.exists());
         assert_eq!(is_sqlite_encrypted_heuristics(&url), Some(true));
@@ -99,8 +89,6 @@ mod tests {
         let backup_url: Url = format!("{url}.backup").parse().unwrap();
         assert_eq!(is_sqlite_encrypted_heuristics(&backup_url), Some(false));
 
-        let _ = SqliteStorage::open(&url, Some(passphrase)).unwrap();
-
-        Ok(())
+        let _ = SqliteStorage::open(&url, Some(passphrase)).await.unwrap();
     }
 }

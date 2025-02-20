@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                        SELECT\n                            contacts_sync_request_at AS \"contacts_sync_request_at: _\",\n                            fully_migrated AS \"fully_migrated: _\"\n                        FROM metadata WHERE id = 0 LIMIT 1\n                    ",
+  "query": "\n                    SELECT\n                        contacts_sync_request_at AS \"contacts_sync_request_at: _\",\n                        fully_migrated AS \"fully_migrated: _\"\n                    FROM metadata WHERE id = 0 LIMIT 1\n                ",
   "describe": {
     "columns": [
       {
@@ -22,5 +22,5 @@
       true
     ]
   },
-  "hash": "2bc76ef53084496ad0751b92391b0cfea8098a9c509887d20a0706bd2f339ead"
+  "hash": "a0c94eee2d58cfe789a13cd50482d5bf0fa7b9ee6891fabde769defb9f6e38d3"
 }
