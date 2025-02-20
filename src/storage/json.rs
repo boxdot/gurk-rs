@@ -151,15 +151,13 @@ impl JsonStorage {
 }
 
 impl Storage for JsonStorage {
-    fn channels(&self) -> Box<dyn Iterator<Item = Cow<Channel>> + '_> {
-        Box::new(
-            self.data
-                .channels
-                .items
-                .iter()
-                .map(Into::into)
-                .map(Cow::Owned),
-        )
+    fn channels(&self) -> impl Iterator<Item = Cow<Channel>> {
+        self.data
+            .channels
+            .items
+            .iter()
+            .map(Into::into)
+            .map(Cow::Owned)
     }
 
     fn channel(&self, channel_id: ChannelId) -> Option<Cow<Channel>> {
@@ -194,50 +192,36 @@ impl Storage for JsonStorage {
         Cow::Owned(Channel::from(&self.data.channels.items[channel_idx]))
     }
 
-    fn messages(
-        &self,
-        channel_id: ChannelId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_> {
-        if let Some(channel) = self
-            .data
+    fn messages(&self, channel_id: ChannelId) -> impl DoubleEndedIterator<Item = Cow<Message>> {
+        self.data
             .channels
             .items
             .iter()
             .find(|ch| ch.id == channel_id)
-        {
-            Box::new(
+            .into_iter()
+            .flat_map(|channel| {
                 channel
                     .messages
                     .iter()
                     .filter(|message| !message.is_edit())
-                    .map(Cow::Borrowed),
-            )
-        } else {
-            Box::new(std::iter::empty())
-        }
+                    .map(Cow::Borrowed)
+            })
     }
 
-    fn edits(
-        &self,
-        message_id: MessageId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_> {
-        if let Some(channel) = self
-            .data
+    fn edits(&self, message_id: MessageId) -> impl DoubleEndedIterator<Item = Cow<Message>> {
+        self.data
             .channels
             .items
             .iter()
             .find(|ch| ch.id == message_id.channel_id)
-        {
-            Box::new(
+            .into_iter()
+            .flat_map(move |channel| {
                 channel
                     .messages
                     .iter()
                     .filter(move |message| message.edit == Some(message_id.arrived_at))
-                    .map(Cow::Borrowed),
-            )
-        } else {
-            Box::new(std::iter::empty())
-        }
+                    .map(Cow::Borrowed)
+            })
     }
 
     fn message(&self, message_id: MessageId) -> Option<Cow<Message>> {
@@ -283,13 +267,11 @@ impl Storage for JsonStorage {
         Cow::Borrowed(&self.data.channels.items[channel_idx].messages[idx])
     }
 
-    fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + '_> {
-        Box::new(
-            self.data
-                .names
-                .iter()
-                .map(|(id, name)| (*id, name.as_str().into())),
-        )
+    fn names(&self) -> impl Iterator<Item = (Uuid, Cow<str>)> {
+        self.data
+            .names
+            .iter()
+            .map(|(id, name)| (*id, name.as_str().into()))
     }
 
     fn name(&self, id: Uuid) -> Option<Cow<str>> {

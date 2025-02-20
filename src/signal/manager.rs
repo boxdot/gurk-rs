@@ -1,9 +1,7 @@
 //! Abstraction of a Signal client
 
 use std::path::PathBuf;
-use std::pin::Pin;
 
-use async_trait::async_trait;
 use presage::libsignal_service::content::Content;
 use presage::libsignal_service::sender::AttachmentSpec;
 use presage::model::contacts::Contact;
@@ -20,10 +18,8 @@ use crate::receipt::Receipt;
 use super::{GroupMasterKeyBytes, ProfileKeyBytes};
 
 /// Abstract functionalities of Signal required by the app, that is, dependency inversion
-#[async_trait(?Send)]
-pub trait SignalManager {
-    fn clone_boxed(&self) -> Box<dyn SignalManager>;
-
+#[expect(async_fn_in_trait, reason = "this trait is only used in the main app")]
+pub trait SignalManager: Clone {
     fn user_id(&self) -> Uuid;
 
     async fn resolve_group(
@@ -60,12 +56,11 @@ pub trait SignalManager {
 
     async fn contact(&self, id: Uuid) -> Option<Contact>;
 
-    async fn receive_messages(
-        &mut self,
-    ) -> anyhow::Result<Pin<Box<dyn Stream<Item = Box<Content>>>>>;
+    async fn receive_messages(&mut self) -> anyhow::Result<impl Stream<Item = Box<Content>>>;
 
-    async fn contacts(&self) -> Box<dyn Iterator<Item = Contact>>;
-    async fn groups(&self) -> Box<dyn Iterator<Item = (GroupMasterKeyBytes, Group)>>;
+    async fn contacts(&self) -> impl Iterator<Item = Contact>;
+
+    async fn groups(&self) -> impl Iterator<Item = (GroupMasterKeyBytes, Group)>;
 }
 
 pub struct ResolvedGroup {

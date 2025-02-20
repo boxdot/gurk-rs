@@ -5,21 +5,23 @@ use ratatui::style::Color;
 use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
 
-use crate::app::App;
-use crate::storage::MessageId;
+use crate::storage::{MessageId, Storage};
+use crate::{app::App, signal::SignalManager};
+#[cfg(test)]
+use crate::{signal::test::SignalManagerMock, storage::ForgetfulStorage};
 
 /// Once constructed for a channel, resolves uuid to name and color
 ///
 /// Construction takes time, lookup (resolving) is fast
-pub struct NameResolver<'a> {
-    app: Option<&'a App>,
+pub struct NameResolver<'a, S, M> {
+    app: Option<&'a App<S, M>>,
     names_and_colors: HashMap<Uuid, (String, Color)>,
     max_name_width: usize,
 }
 
-impl<'a> NameResolver<'a> {
+impl<'a, S: Storage, M: SignalManager> NameResolver<'a, S, M> {
     pub fn compute(
-        app: &'a App,
+        app: &'a App<S, M>,
         relevant_message_ids: impl IntoIterator<Item = MessageId>,
     ) -> Self {
         let mut names_and_colors: HashMap<Uuid, (String, Color)> = Default::default();
@@ -77,11 +79,14 @@ impl<'a> NameResolver<'a> {
     pub(super) fn max_name_width(&self) -> usize {
         self.max_name_width
     }
+}
 
+#[cfg(test)]
+impl NameResolver<'static, ForgetfulStorage, SignalManagerMock> {
     /// Resolver with a single user
     #[cfg(test)]
-    pub fn single_user(user_id: Uuid, username: String, color: Color) -> NameResolver<'static> {
-        NameResolver {
+    pub fn single_user(user_id: Uuid, username: String, color: Color) -> Self {
+        Self {
             app: None,
             names_and_colors: [(user_id, (username, color))].into_iter().collect(),
             max_name_width: 6,
@@ -89,7 +94,7 @@ impl<'a> NameResolver<'a> {
     }
 }
 
-impl App {
+impl<S: Storage, M: SignalManager> App<S, M> {
     fn name_and_color(&self, id: Uuid) -> (String, Color) {
         let name = self.name_by_id_cached(id);
         let color = user_color(&name);

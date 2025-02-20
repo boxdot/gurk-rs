@@ -28,7 +28,7 @@ pub use sql::SqliteStorage;
 /// converted and/or serialized.
 pub trait Storage {
     /// Channels in no particular order
-    fn channels(&self) -> Box<dyn Iterator<Item = Cow<Channel>> + '_>;
+    fn channels(&self) -> impl Iterator<Item = Cow<Channel>>;
     /// Gets the channel by id
     fn channel(&self, channel_id: ChannelId) -> Option<Cow<Channel>>;
     /// Stores the given `channel` and returns it back
@@ -37,19 +37,13 @@ pub trait Storage {
     /// Messages sorted by arrived_at in ascending order
     ///
     /// No edited messages must be included.
-    fn messages(
-        &self,
-        channel_id: ChannelId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_>;
+    fn messages(&self, channel_id: ChannelId) -> impl DoubleEndedIterator<Item = Cow<Message>>;
     /// Gets the message by id
     fn message(&self, message_id: MessageId) -> Option<Cow<Message>>;
 
     fn message_channel(&self, arrived_at: u64) -> Option<ChannelId>;
 
-    fn edits(
-        &self,
-        message_id: MessageId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_>;
+    fn edits(&self, message_id: MessageId) -> impl DoubleEndedIterator<Item = Cow<Message>>;
 
     /// Stores the message for the given `channel_id` and returns it back
     ///
@@ -101,7 +95,7 @@ pub trait Storage {
     }
 
     /// Names of contacts
-    fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + '_>;
+    fn names(&self) -> impl Iterator<Item = (Uuid, Cow<str>)>;
     /// Gets the name for the given contact `id`
     fn name(&self, id: Uuid) -> Option<Cow<str>>;
     /// Stores a name for the given contact `id`

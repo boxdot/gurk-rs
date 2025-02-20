@@ -44,10 +44,10 @@ use crate::signal::{
 use crate::storage::{MessageId, Storage};
 use crate::util::{self, ATTACHMENT_REGEX, LazyRegex, StatefulList, URL_REGEX};
 
-pub struct App {
+pub struct App<S, M> {
     pub config: Config,
-    signal_manager: Box<dyn SignalManager>,
-    pub storage: Box<dyn Storage>,
+    signal_manager: M,
+    pub storage: S,
     pub channels: StatefulList<ChannelId>,
     pub messages: BTreeMap<ChannelId, StatefulList<u64 /* arrived at*/>>,
     pub help_scroll: (u16, u16),
@@ -68,11 +68,11 @@ pub struct App {
     pub mode_keybindings: ModeKeybinding,
 }
 
-impl App {
+impl<S: Storage, M: SignalManager> App<S, M> {
     pub fn try_new(
         config: Config,
-        signal_manager: Box<dyn SignalManager>,
-        storage: Box<dyn Storage>,
+        signal_manager: M,
+        storage: S,
     ) -> anyhow::Result<(Self, mpsc::UnboundedReceiver<Event>)> {
         let user_id = signal_manager.user_id();
 
@@ -304,7 +304,7 @@ impl App {
             // Command::DeleteMessage => unimplemented!("{command:?}"),
             Command::ToggleChannelModal => {
                 if !self.select_channel.is_shown {
-                    self.select_channel.reset(&*self.storage);
+                    self.select_channel.reset(&self.storage);
                 }
                 self.select_channel.is_shown = !self.select_channel.is_shown;
             }
@@ -983,7 +983,7 @@ impl App {
     }
 
     pub fn step_receipts(&mut self) {
-        self.receipt_handler.step(self.signal_manager.as_ref());
+        self.receipt_handler.step(&self.signal_manager);
     }
 
     fn handle_typing(
@@ -1710,8 +1710,10 @@ pub(crate) mod tests {
     use std::cell::RefCell;
     use std::rc::Rc;
 
+    pub(crate) type TestApp = App<MemCache<ForgetfulStorage>, SignalManagerMock>;
+
     pub(crate) fn test_app() -> (
-        App,
+        TestApp,
         mpsc::UnboundedReceiver<Event>,
         Rc<RefCell<Vec<Message>>>,
     ) {
@@ -1754,12 +1756,8 @@ pub(crate) mod tests {
             name: "Tyler Durden".to_string(),
             phone_number: "+0000000000".to_string(),
         };
-        let (mut app, events) = App::try_new(
-            Config::with_user(user),
-            Box::new(signal_manager),
-            Box::new(storage),
-        )
-        .unwrap();
+        let (mut app, events) =
+            App::try_new(Config::with_user(user), signal_manager, storage).unwrap();
         app.channels.state.select(Some(0));
 
         (app, events, sent_messages)

@@ -18,20 +18,20 @@ use ratatui::{
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use uuid::Uuid;
 
-use crate::app::App;
-use crate::channels::SelectChannel;
 use crate::command::{Command, WindowMode};
 use crate::cursor::Cursor;
 use crate::data::{AssociatedValue, Message};
 use crate::receipt::{Receipt, ReceiptEvent};
 use crate::storage::MessageId;
 use crate::util::utc_timestamp_msec_to_local;
+use crate::{app::App, storage::Storage};
+use crate::{channels::SelectChannel, signal::SignalManager};
 
 use super::CHANNEL_VIEW_RATIO;
 use super::name_resolver::NameResolver;
 
 /// The main function drawing the UI for each frame
-pub fn draw(f: &mut Frame, app: &mut App) {
+pub fn draw(f: &mut Frame, app: &mut App<impl Storage, impl SignalManager>) {
     if app.is_help() {
         // Display shortcut panel
         let chunks = Layout::default()
@@ -98,7 +98,7 @@ fn draw_select_channel_popup(f: &mut Frame, select_channel: &mut SelectChannel) 
     f.render_stateful_widget(list, chunks[1], &mut select_channel.state);
 }
 
-fn draw_channels(f: &mut Frame, app: &mut App, area: Rect) {
+fn draw_channels(f: &mut Frame, app: &mut App<impl Storage, impl SignalManager>, area: Rect) {
     let channel_list_width = area.width.saturating_sub(2) as usize;
     let channels = app
         .channels
@@ -189,7 +189,7 @@ fn wrap(text: &str, mut cursor: Cursor, width: usize) -> (String, Cursor, usize)
     (res, cursor, line + 1)
 }
 
-fn draw_chat(f: &mut Frame, app: &mut App, area: Rect) {
+fn draw_chat(f: &mut Frame, app: &mut App<impl Storage, impl SignalManager>, area: Rect) {
     let text_width = area.width.saturating_sub(2) as usize;
     let (wrapped_input, cursor, num_input_lines) =
         wrap(&app.input.data, app.input.cursor.clone(), text_width);
@@ -225,7 +225,7 @@ fn draw_chat(f: &mut Frame, app: &mut App, area: Rect) {
     }
 }
 
-fn prepare_receipts(app: &mut App, height: usize) {
+fn prepare_receipts(app: &mut App<impl Storage, impl SignalManager>, height: usize) {
     let user_id = app.user_id;
     let channel_id = match app.channels.selected_item() {
         Some(channel_id) => *channel_id,
@@ -273,7 +273,7 @@ fn prepare_receipts(app: &mut App, height: usize) {
     }
 }
 
-fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
+fn draw_messages(f: &mut Frame, app: &mut App<impl Storage, impl SignalManager>, area: Rect) {
     // area without borders
     let height = area.height.saturating_sub(2) as usize;
     if height == 0 {
@@ -481,7 +481,7 @@ fn display_receipt(receipt: Receipt, show: ShowReceipt) -> &'static str {
 
 #[allow(clippy::too_many_arguments)]
 fn display_message(
-    names: &NameResolver,
+    names: &NameResolver<impl Storage, impl SignalManager>,
     msg: &Message,
     prefix: &str,
     width: usize,
@@ -606,7 +606,11 @@ fn display_message(
     Some(ListItem::new(Text::from(spans)))
 }
 
-fn replace_mentions(msg: &Message, names: &NameResolver, text: String) -> String {
+fn replace_mentions(
+    msg: &Message,
+    names: &NameResolver<impl Storage, impl SignalManager>,
+    text: String,
+) -> String {
     if msg.body_ranges.is_empty() {
         return text;
     }
@@ -718,7 +722,7 @@ fn help_commands<'a>() -> Vec<Line<'a>> {
     v
 }
 
-fn bindings(app: &App) -> Vec<Line> {
+fn bindings(app: &App<impl Storage, impl SignalManager>) -> Vec<Line> {
     [
         WindowMode::Normal,
         WindowMode::Anywhere,
@@ -732,7 +736,10 @@ fn bindings(app: &App) -> Vec<Line> {
     .concat()
 }
 
-fn bindings_mode<'a>(app: &App, mode: &WindowMode) -> Vec<Line<'a>> {
+fn bindings_mode<'a>(
+    app: &App<impl Storage, impl SignalManager>,
+    mode: &WindowMode,
+) -> Vec<Line<'a>> {
     let bindings = if let Some(kb) = app.mode_keybindings.get(mode) {
         kb.iter()
             .map(|(kc, cmd)| {
@@ -769,7 +776,7 @@ fn bindings_mode<'a>(app: &App, mode: &WindowMode) -> Vec<Line<'a>> {
     v
 }
 
-fn draw_help(f: &mut Frame, app: &mut App, area: Rect) {
+fn draw_help(f: &mut Frame, app: &mut App<impl Storage, impl SignalManager>, area: Rect) {
     let mut command_bindings = help_commands();
     command_bindings.extend(bindings(app));
     let command_bindings = Paragraph::new(Text::from(command_bindings))
@@ -778,7 +785,10 @@ fn draw_help(f: &mut Frame, app: &mut App, area: Rect) {
     f.render_widget(command_bindings, area);
 }
 
-fn displayed_quote(names: &NameResolver, quote: &Message) -> Option<String> {
+fn displayed_quote(
+    names: &NameResolver<impl Storage, impl SignalManager>,
+    quote: &Message,
+) -> Option<String> {
     let (name, _) = names.resolve(quote.from_id);
     let text = format!("({}) {}", name, quote.message.as_ref()?);
     Some(replace_mentions(quote, names, text))
@@ -833,7 +843,7 @@ mod tests {
         }
     }
 
-    fn name_resolver() -> NameResolver<'static> {
+    fn name_resolver() -> NameResolver<'static, impl Storage, impl SignalManager> {
         NameResolver::single_user(USER_ID, "boxdot".to_string(), Color::Green)
     }
 
