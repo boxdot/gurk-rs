@@ -37,6 +37,7 @@ pub(super) async fn encrypt_db(
     .execute(&mut conn)
     .await
     .context("failed to encrypt db")?;
+    conn.close().await?;
 
     let origin = url.path();
     if preserve_unencrypted {
