@@ -1,7 +1,7 @@
 //! Encoding/decoding of types to/from Sql
 
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
 use sqlx::sqlite::SqliteValueRef;
