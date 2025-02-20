@@ -3,11 +3,10 @@ use std::cell::Cell;
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
-use std::future::Future;
 use std::io::Cursor;
 use std::path::Path;
 
-use anyhow::{anyhow, Context as _};
+use anyhow::{Context as _, anyhow};
 use arboard::Clipboard;
 use crokey::Combiner;
 use crossterm::event::{KeyCode, KeyEvent};
@@ -17,12 +16,12 @@ use itertools::Itertools;
 use notify_rust::Notification;
 use presage::libsignal_service::content::{Content, ContentBody, Metadata};
 use presage::libsignal_service::sender::AttachmentSpec;
+use presage::proto::{AttachmentPointer, DataMessage, ReceiptMessage, SyncMessage, TypingMessage};
 use presage::proto::{
+    GroupContextV2,
     data_message::{Reaction, Sticker},
     sync_message::Sent,
-    GroupContextV2,
 };
-use presage::proto::{AttachmentPointer, DataMessage, ReceiptMessage, SyncMessage, TypingMessage};
 use regex::Regex;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
@@ -30,8 +29,8 @@ use uuid::Uuid;
 
 use crate::channels::SelectChannel;
 use crate::command::{
-    get_keybindings, Command, DirectionVertical, ModeKeybinding, MoveAmountText, MoveAmountVisual,
-    MoveDirection, Widget, WindowMode,
+    Command, DirectionVertical, ModeKeybinding, MoveAmountText, MoveAmountVisual, MoveDirection,
+    Widget, WindowMode, get_keybindings,
 };
 use crate::config::Config;
 use crate::data::{BodyRange, Channel, ChannelId, Message, TypingAction, TypingSet};
@@ -43,7 +42,7 @@ use crate::signal::{
     SignalManager,
 };
 use crate::storage::{MessageId, Storage};
-use crate::util::{self, LazyRegex, StatefulList, ATTACHMENT_REGEX, URL_REGEX};
+use crate::util::{self, ATTACHMENT_REGEX, LazyRegex, StatefulList, URL_REGEX};
 
 pub struct App {
     pub config: Config,
@@ -371,7 +370,7 @@ impl App {
                                 .items
                                 .iter()
                                 .enumerate()
-                                .find(|(_, &id)| id == channel_id)
+                                .find(|(_, id)| **id == channel_id)
                                 .context("channel disappeared during channel select popup")?;
                             self.channels.state.select(Some(idx));
                         }

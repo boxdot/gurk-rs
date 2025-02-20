@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::cell::Cell;
-use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::time::Instant;
