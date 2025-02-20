@@ -92,7 +92,7 @@ async fn run(relink: bool) -> anyhow::Result<()> {
     let (mut signal_manager, config) =
         signal::ensure_linked_device(relink, local_pool.clone()).await?;
 
-    let mut storage: Box<dyn Storage> = if config.sqlite.enabled {
+    let mut storage: Box<dyn Storage> = {
         debug!(
             %config.sqlite.url,
             encrypt = config.passphrase.is_some(),
@@ -112,9 +112,10 @@ async fn run(relink: bool) -> anyhow::Result<()> {
         })?;
         if sqlite_storage.is_empty() || !(sqlite_storage.metadata().fully_migrated.unwrap_or(false))
         {
-            if let Ok(json_storage) =
-                JsonStorage::new(&config.data_path, config::fallback_data_path().as_deref())
-            {
+            if let Ok(json_storage) = JsonStorage::new(
+                &config.deprecated_data_path,
+                config::fallback_data_path().as_deref(),
+            ) {
                 println!(
                     "converting JSON storage to SQLite storage at {}",
                     config.sqlite.url
@@ -127,10 +128,6 @@ async fn run(relink: bool) -> anyhow::Result<()> {
             }
         }
         Box::new(MemCache::new(sqlite_storage))
-    } else {
-        let json_storage =
-            JsonStorage::new(&config.data_path, config::fallback_data_path().as_deref())?;
-        Box::new(json_storage)
     };
 
     sync_from_signal(&*signal_manager, &mut *storage).await;

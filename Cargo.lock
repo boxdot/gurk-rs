@@ -1697,7 +1697,7 @@ checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
 
 [[package]]
 name = "gurk"
-version = "0.6.1"
+version = "0.6.2"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -1730,6 +1730,7 @@ dependencies = [
  "presage-store-sled",
  "prost",
  "qr2term",
+ "qrcode",
  "quickcheck",
  "quickcheck_macros",
  "ratatui",
@@ -2341,7 +2342,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -2409,7 +2410,7 @@ dependencies = [
 [[package]]
 name = "libsignal-service"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/libsignal-service-rs?rev=19c0c78da7a7479954634580a5e5081e7a8f2897#19c0c78da7a7479954634580a5e5081e7a8f2897"
+source = "git+https://github.com/whisperfish/libsignal-service-rs?rev=82d70f6720e762898f34ae76b0894b0297d9b2f8#82d70f6720e762898f34ae76b0894b0297d9b2f8"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -3366,7 +3367,7 @@ checksum = "94e851c7654eed9e68d7d27164c454961a616cf8c203d500607ef22c737b51bb"
 [[package]]
 name = "presage"
 version = "0.7.0-dev"
-source = "git+https://github.com/whisperfish/presage?rev=35c2c98ba782fb212ad6cd3356fd4807e5d5a8eb#35c2c98ba782fb212ad6cd3356fd4807e5d5a8eb"
+source = "git+https://github.com/whisperfish/presage?rev=473c70d#473c70db3048ec871f6cef1faf6a97d0fdb9c082"
 dependencies = [
  "base64",
  "bytes",
@@ -3388,7 +3389,7 @@ dependencies = [
 [[package]]
 name = "presage-store-cipher"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/presage?rev=35c2c98ba782fb212ad6cd3356fd4807e5d5a8eb#35c2c98ba782fb212ad6cd3356fd4807e5d5a8eb"
+source = "git+https://github.com/whisperfish/presage?rev=473c70d#473c70db3048ec871f6cef1faf6a97d0fdb9c082"
 dependencies = [
  "blake3",
  "chacha20poly1305",
@@ -3405,7 +3406,7 @@ dependencies = [
 [[package]]
 name = "presage-store-sled"
 version = "0.6.0-dev"
-source = "git+https://github.com/whisperfish/presage?rev=35c2c98ba782fb212ad6cd3356fd4807e5d5a8eb#35c2c98ba782fb212ad6cd3356fd4807e5d5a8eb"
+source = "git+https://github.com/whisperfish/presage?rev=473c70d#473c70db3048ec871f6cef1faf6a97d0fdb9c082"
 dependencies = [
  "async-trait",
  "base64",
@@ -3479,7 +3480,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0f3e5beed80eb580c68e2c600937ac2c4eedabdfd5ef1e5b7ea4f3fba84497b"
 dependencies = [
  "heck",
- "itertools 0.10.5",
+ "itertools 0.13.0",
  "log",
  "multimap",
  "once_cell",
@@ -3499,7 +3500,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "157c5a9d7ea5c2ed2d9fb8f495b64759f7816c7eaea54ba3978f0d63000162e3"
 dependencies = [
  "anyhow",
- "itertools 0.10.5",
+ "itertools 0.13.0",
  "proc-macro2",
  "quote",
  "syn 2.0.91",
@@ -3548,6 +3549,9 @@ name = "qrcode"
 version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
+dependencies = [
+ "image",
+]
 
 [[package]]
 name = "quick-xml"
@@ -5436,7 +5440,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

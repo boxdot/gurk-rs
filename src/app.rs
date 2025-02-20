@@ -320,6 +320,9 @@ impl App {
             Command::OpenUrl => {
                 self.try_open_url();
             }
+            Command::OpenFile => {
+                self.try_open_file();
+            }
             Command::DeleteCharacter(MoveDirection::Previous) => {
                 self.get_input().on_backspace();
             }
@@ -357,7 +360,7 @@ impl App {
                             }
                         } else {
                             // input is empty
-                            self.try_open_url();
+                            self.try_open_url_or_file();
                         }
                     } else if self.select_channel.is_shown {
                         if let Some(channel_id) = self.select_channel.selected_channel_id().copied()
@@ -386,6 +389,10 @@ impl App {
         Ok(())
     }
 
+    fn try_open_url_or_file(&mut self) -> Option<()> {
+        self.try_open_url().or_else(|| self.try_open_file())
+    }
+
     /// Tries to open the first url in the selected message.
     ///
     /// Does nothing if no message is selected and no url is contained in the message.
@@ -402,6 +409,25 @@ impl App {
             .message(MessageId::new(*channel_id, *arrived_at))?;
         let re = self.url_regex.compiled();
         open_url(&message, re)?;
+        self.reset_message_selection();
+        Some(())
+    }
+
+    /// Tries to open the first file attachment in the selected message.
+    ///
+    /// Does nothing if no message is selected and the message contains no attachments.
+    fn try_open_file(&mut self) -> Option<()> {
+        // Note: to make the borrow checker happy, we have to use distinct fields here, and no
+        // methods that borrow self mutably.
+        let channel_id = self.channels.selected_item()?;
+        let messages = self.messages.get(channel_id)?;
+        let idx = messages.state.selected()?;
+        let idx = messages.items.len().checked_sub(idx + 1)?;
+        let arrived_at = messages.items.get(idx)?;
+        let message = self
+            .storage
+            .message(MessageId::new(*channel_id, *arrived_at))?;
+        open_file(&message)?;
         self.reset_message_selection();
         Some(())
     }
@@ -1650,6 +1676,15 @@ fn open_url(message: &Message, url_regex: &Regex) -> Option<()> {
     Some(())
 }
 
+fn open_file(message: &Message) -> Option<()> {
+    let attachment = message.attachments.first()?;
+    let file: &Path = attachment.filename.as_ref();
+    if let Err(error) = opener::open(file) {
+        let path = file.display().to_string();
+        error!(path, %error, "failed to open");
+    }
+    Some(())
+}
 fn notification_text_for_attachments(attachments: &[Attachment]) -> Option<String> {
     match attachments.len() {
         0 => None,

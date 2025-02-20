@@ -3,12 +3,18 @@ mod r#impl;
 mod manager;
 pub mod test;
 
-use anyhow::{bail, Context as _};
+use std::path::Path;
+
+use anyhow::{anyhow, bail, Context as _};
+use futures_channel::oneshot;
+use image::Luma;
 use presage::{libsignal_service::configuration::SignalServers, model::identity::OnNewIdentity};
 use presage_store_sled::{MigrationConflictStrategy, SledStore};
 use tokio_util::task::LocalPoolHandle;
+use tracing::{error, warn};
+use url::Url;
 
-use crate::config::{self, Config};
+use crate::config::{self, Config, DeprecatedConfigKey, LoadedConfig};
 
 pub use self::manager::{Attachment, ResolvedGroup, SignalManager};
 use self::r#impl::PresageManager;
@@ -35,6 +41,20 @@ pub async fn ensure_linked_device(
     local_pool: LocalPoolHandle,
 ) -> anyhow::Result<(Box<dyn SignalManager + Send>, Config)> {
     let config = Config::load_installed()?;
+
+    // warn about deprecated keys
+    let config = config.map(
+        |LoadedConfig {
+             config,
+             deprecated_keys,
+         }| {
+            for DeprecatedConfigKey { key, message } in deprecated_keys {
+                warn!(key, message, "deprecated config key");
+                println!("deprecated config key: {key}, {message}");
+            }
+            config
+        },
+    );
 
     let db_path = config
         .as_ref()
@@ -80,25 +100,25 @@ pub async fn ensure_linked_device(
     let device_name = format!("gurk{at_hostname}");
     println!("Linking new device with device name: {device_name}");
 
-    let (tx, rx) = futures_channel::oneshot::channel();
-    let (mut manager, _) = tokio::try_join!(
-        async move {
-            presage::Manager::link_secondary_device(
-                store,
-                SignalServers::Production,
-                device_name.clone(),
-                tx,
-            )
-            .await
-            .map_err(anyhow::Error::from)
-        },
-        async move {
-            match rx.await {
-                Ok(url) => qr2term::print_qr(url.to_string()).context("failed to generated qr"),
-                Err(e) => bail!("error linking device: {}", e),
-            }
-        }
-    )?;
+    let (tx, rx) = oneshot::channel();
+
+    let link_task = async move {
+        presage::Manager::link_secondary_device(
+            store,
+            SignalServers::Production,
+            device_name.clone(),
+            tx,
+        )
+        .await
+        .map_err(anyhow::Error::from)
+    };
+
+    let tempdir = tempfile::tempdir().context("failed to create tempdir")?;
+    let path = tempdir.path().join("qrcode.png");
+    let qrcode_task = gen_qr_code(rx, &path);
+
+    let (mut manager, _) = tokio::try_join!(link_task, qrcode_task)?;
+    drop(tempdir); // make sure tempdir is dropped *after* qrcode_task
 
     // get profile
     let phone_number = manager
@@ -130,4 +150,28 @@ pub async fn ensure_linked_device(
     };
 
     Ok((Box::new(PresageManager::new(manager, local_pool)), config))
+}
+
+async fn gen_qr_code(rx: oneshot::Receiver<Url>, path: &Path) -> anyhow::Result<()> {
+    let url = rx
+        .await
+        .map_err(|e| anyhow!("error linking device {}", e))?;
+
+    if let Err(error) = save_qr_code_png(&url, path) {
+        error!(%error, "failed to generate PNG QR code");
+    } else {
+        println!("QR code saved to {}", path.display());
+    }
+
+    qr2term::print_qr(url.to_string()).context("failed to generated qr")?;
+
+    Ok(())
+}
+
+fn save_qr_code_png(url: &Url, path: &Path) -> anyhow::Result<()> {
+    let image = qrcode::QrCode::new(url.to_string())?
+        .render::<Luma<u8>>()
+        .build();
+    image.save(&path)?;
+    Ok(())
 }
