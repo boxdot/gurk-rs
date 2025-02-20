@@ -21,7 +21,7 @@ pub(crate) struct ItemData {
 }
 
 impl SelectChannel {
-    pub fn reset(&mut self, storage: &dyn Storage) {
+    pub fn reset(&mut self, storage: &impl Storage) {
         self.input.take();
         self.state = Default::default();
 

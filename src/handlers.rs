@@ -6,11 +6,11 @@ use presage::proto::sync_message::{Read, Sent};
 use presage::proto::{DataMessage, EditMessage, SyncMessage};
 use tracing::debug;
 
-use crate::app::App;
 use crate::data::{ChannelId, Message};
 use crate::storage::MessageId;
+use crate::{app::App, signal::SignalManager, storage::Storage};
 
-impl App {
+impl<S: Storage, M: SignalManager> App<S, M> {
     pub(super) fn handle_sync_message(
         &mut self,
         metadata: Metadata,

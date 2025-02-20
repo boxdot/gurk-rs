@@ -143,7 +143,7 @@ impl ReceiptHandler {
         true
     }
 
-    pub fn step(&mut self, signal_manager: &dyn SignalManager) -> bool {
+    pub fn step(&mut self, signal_manager: &impl SignalManager) -> bool {
         if !self.do_tick() {
             return false;
         }

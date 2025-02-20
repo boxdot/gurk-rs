@@ -1,7 +1,5 @@
-use std::pin::Pin;
 use std::{cell::RefCell, rc::Rc};
 
-use async_trait::async_trait;
 use presage::libsignal_service::content::Content;
 use presage::libsignal_service::prelude::AttachmentIdentifier;
 use presage::libsignal_service::sender::AttachmentSpec;
@@ -20,6 +18,7 @@ use crate::util::utc_now_timestamp_msec;
 use super::{Attachment, GroupMasterKeyBytes, ProfileKeyBytes, ResolvedGroup, SignalManager};
 
 /// Signal manager mock which does not send any messages.
+#[derive(Clone)]
 pub struct SignalManagerMock {
     user_id: Uuid,
     pub sent_messages: Rc<RefCell<Vec<Message>>>,
@@ -40,7 +39,6 @@ impl Default for SignalManagerMock {
     }
 }
 
-#[async_trait(?Send)]
 impl SignalManager for SignalManagerMock {
     fn user_id(&self) -> Uuid {
         self.user_id
@@ -134,24 +132,15 @@ impl SignalManager for SignalManagerMock {
         None
     }
 
-    async fn receive_messages(
-        &mut self,
-    ) -> anyhow::Result<Pin<Box<dyn Stream<Item = Box<Content>>>>> {
-        Ok(Box::pin(tokio_stream::empty()))
+    async fn receive_messages(&mut self) -> anyhow::Result<impl Stream<Item = Box<Content>>> {
+        Ok(tokio_stream::empty())
     }
 
-    fn clone_boxed(&self) -> Box<dyn SignalManager> {
-        Box::new(Self {
-            user_id: self.user_id,
-            sent_messages: self.sent_messages.clone(),
-        })
+    async fn contacts(&self) -> impl Iterator<Item = Contact> {
+        std::iter::empty()
     }
 
-    async fn contacts(&self) -> Box<dyn Iterator<Item = Contact>> {
-        Box::new(std::iter::empty())
-    }
-
-    async fn groups(&self) -> Box<dyn Iterator<Item = (GroupMasterKeyBytes, Group)>> {
-        Box::new(std::iter::empty())
+    async fn groups(&self) -> impl Iterator<Item = (GroupMasterKeyBytes, Group)> {
+        std::iter::empty()
     }
 }

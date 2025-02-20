@@ -1,14 +1,14 @@
 use std::path::Path;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use gurk::app::App;
 use gurk::config::{Config, User};
 use gurk::signal::test::SignalManagerMock;
 use gurk::storage::{ForgetfulStorage, MemCache};
+use gurk::{app::App, signal::SignalManager, storage::Storage};
 use presage::libsignal_service::content::Content;
 use tracing::info;
 
-fn test_app() -> App {
+fn test_app() -> App<impl Storage, impl SignalManager> {
     let (app, _) = App::try_new(
         Config {
             notifications: false,
@@ -17,8 +17,8 @@ fn test_app() -> App {
                 phone_number: "+0000000000".to_string(),
             })
         },
-        Box::new(SignalManagerMock::new()),
-        Box::new(MemCache::new(ForgetfulStorage)),
+        SignalManagerMock::new(),
+        MemCache::new(ForgetfulStorage),
     )
     .unwrap();
     app

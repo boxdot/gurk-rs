@@ -1,9 +1,6 @@
 //! Implementation of [`crate::signal::SignalManager`] via `presage`
 
-use std::pin::Pin;
-
 use anyhow::Context;
-use async_trait::async_trait;
 use presage::libsignal_service::prelude::ProfileKey;
 use presage::libsignal_service::protocol::ServiceId;
 use presage::libsignal_service::sender::AttachmentSpec;
@@ -32,6 +29,7 @@ use super::{
     Attachment, GroupMasterKeyBytes, ProfileKeyBytes, ResolvedGroup, SignalManager, attachment,
 };
 
+#[derive(Clone)]
 pub(super) struct PresageManager {
     manager: presage::Manager<SledStore, Registered>,
     local_pool: LocalPoolHandle,
@@ -49,12 +47,7 @@ impl PresageManager {
     }
 }
 
-#[async_trait(?Send)]
 impl SignalManager for PresageManager {
-    fn clone_boxed(&self) -> Box<dyn SignalManager> {
-        Box::new(Self::new(self.manager.clone(), self.local_pool.clone()))
-    }
-
     fn user_id(&self) -> Uuid {
         self.manager.registration_data().service_ids.aci
     }
@@ -348,11 +341,12 @@ impl SignalManager for PresageManager {
         self.manager.store().contact_by_id(&id).await.ok()?
     }
 
-    async fn receive_messages(
-        &mut self,
-    ) -> anyhow::Result<Pin<Box<dyn Stream<Item = Box<Content>>>>> {
-        Ok(Box::pin(self.manager.receive_messages().await?.filter_map(
-            |received| match received {
+    async fn receive_messages(&mut self) -> anyhow::Result<impl Stream<Item = Box<Content>>> {
+        Ok(self
+            .manager
+            .receive_messages()
+            .await?
+            .filter_map(|received| match received {
                 Received::Content(content) => Some(content),
                 Received::QueueEmpty => None,
                 Received::Contacts => {
@@ -360,32 +354,27 @@ impl SignalManager for PresageManager {
                     warn!("Received contacts, but not implemented yet");
                     None
                 }
-            },
-        )))
+            }))
     }
 
-    async fn contacts(&self) -> Box<dyn Iterator<Item = Contact>> {
-        Box::new(
-            self.manager
-                .store()
-                .contacts()
-                .await
-                .into_iter()
-                .flatten()
-                .flatten(),
-        )
+    async fn contacts(&self) -> impl Iterator<Item = Contact> {
+        self.manager
+            .store()
+            .contacts()
+            .await
+            .into_iter()
+            .flatten()
+            .flatten()
     }
 
-    async fn groups(&self) -> Box<dyn Iterator<Item = (GroupMasterKeyBytes, Group)>> {
-        Box::new(
-            self.manager
-                .store()
-                .groups()
-                .await
-                .into_iter()
-                .flatten()
-                .flatten(),
-        )
+    async fn groups(&self) -> impl Iterator<Item = (GroupMasterKeyBytes, Group)> {
+        self.manager
+            .store()
+            .groups()
+            .await
+            .into_iter()
+            .flatten()
+            .flatten()
     }
 }
 
