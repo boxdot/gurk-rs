@@ -1,6 +1,6 @@
 use std::borrow::Cow;
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
@@ -351,7 +351,7 @@ impl Storage for JsonStorage {
 mod tests {
     use chrono::{DateTime, Utc};
     use tempfile::NamedTempFile;
-    use uuid::{uuid, Uuid};
+    use uuid::{Uuid, uuid};
 
     use crate::data::TypingSet;
 

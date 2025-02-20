@@ -527,7 +527,7 @@ fn parse_keybindings(kbc: &KeybindingConfig) -> Result<Keybinding, CommandParseE
 mod tests {
     use toml;
 
-    use super::{get_keybindings, ModeKeybindingConfig, DEFAULT_KEYBINDINGS};
+    use super::{DEFAULT_KEYBINDINGS, ModeKeybindingConfig, get_keybindings};
 
     #[test]
     fn default_keybindings_deserialize() {

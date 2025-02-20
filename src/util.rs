@@ -43,11 +43,7 @@ impl<T> StatefulList<T> {
         let i = match self.state.selected() {
             Some(i) => {
                 if i + 1 >= self.items.len() {
-                    if MESSAGE_SCROLL_BACK {
-                        0
-                    } else {
-                        i
-                    }
+                    if MESSAGE_SCROLL_BACK { 0 } else { i }
                 } else {
                     i + 1
                 }
@@ -115,8 +111,7 @@ pub fn is_phone_number(s: impl AsRef<str>) -> bool {
 }
 
 // Based on Alacritty, APACHE-2.0 License
-pub const URL_REGEX: &str =
-    "(ipfs:|ipns:|magnet:|mailto:|gemini:|gopher:|https:|http:|news:|file:|git:|ssh:|ftp:)\
+pub const URL_REGEX: &str = "(ipfs:|ipns:|magnet:|mailto:|gemini:|gopher:|https:|http:|news:|file:|git:|ssh:|ftp:)\
      [^\u{0000}-\u{001F}\u{007F}-\u{009F}<>\"\\s{-}\\^⟨⟩`]+";
 pub const ATTACHMENT_REGEX: &str = "file:[^\u{0000}-\u{001F}\u{007F}-\u{009F}<>\"\\s{-}\\^⟨⟩`]+";
 

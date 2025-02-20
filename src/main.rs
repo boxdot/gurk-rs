@@ -1,7 +1,7 @@
 //! Signal Messenger client for terminal
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use anyhow::Context;
@@ -13,14 +13,14 @@ use crossterm::{
         KeyEventKind, MouseButton, MouseEvent, MouseEventKind,
     },
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use gurk::app::App;
 use gurk::backoff::Backoff;
-use gurk::storage::{sync_from_signal, JsonStorage, MemCache, SqliteStorage, Storage};
+use gurk::storage::{JsonStorage, MemCache, SqliteStorage, Storage, sync_from_signal};
 use gurk::{config, signal, ui};
 use presage::libsignal_service::content::Content;
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{Terminal, backend::CrosstermBackend};
 use tokio::select;
 use tokio_stream::StreamExt;
 use tokio_util::task::LocalPoolHandle;

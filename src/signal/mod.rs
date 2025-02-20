@@ -5,7 +5,7 @@ pub mod test;
 
 use std::path::Path;
 
-use anyhow::{anyhow, bail, Context as _};
+use anyhow::{Context as _, anyhow, bail};
 use futures_channel::oneshot;
 use image::Luma;
 use presage::{libsignal_service::configuration::SignalServers, model::identity::OnNewIdentity};
@@ -16,8 +16,8 @@ use url::Url;
 
 use crate::config::{self, Config, DeprecatedConfigKey, LoadedConfig};
 
-pub use self::manager::{Attachment, ResolvedGroup, SignalManager};
 use self::r#impl::PresageManager;
+pub use self::manager::{Attachment, ResolvedGroup, SignalManager};
 
 // TODO: these should be either re-exported from presage/libsignal-service
 const PROFILE_KEY_LEN: usize = 32;
@@ -79,7 +79,10 @@ pub async fn ensure_linked_device(
                     return Ok((Box::new(PresageManager::new(manager, local_pool)), config));
                 }
                 Err(e) => {
-                    bail!("error loading manager. Try again later or run with --relink to force relink: {}", e)
+                    bail!(
+                        "error loading manager. Try again later or run with --relink to force relink: {}",
+                        e
+                    )
                 }
             };
         }

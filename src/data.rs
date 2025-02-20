@@ -49,7 +49,7 @@ pub struct GroupData {
 impl Channel {
     pub fn reset_writing(&mut self, user: Uuid) -> bool {
         match &mut self.typing {
-            TypingSet::GroupTyping(ref mut hash_set) => hash_set.remove(&user),
+            TypingSet::GroupTyping(hash_set) => hash_set.remove(&user),
             TypingSet::SingleTyping(true) => {
                 self.typing = TypingSet::SingleTyping(false);
                 true

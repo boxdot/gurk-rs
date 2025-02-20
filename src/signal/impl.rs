@@ -29,7 +29,7 @@ use crate::receipt::Receipt;
 use crate::util::utc_now_timestamp_msec;
 
 use super::{
-    attachment, Attachment, GroupMasterKeyBytes, ProfileKeyBytes, ResolvedGroup, SignalManager,
+    Attachment, GroupMasterKeyBytes, ProfileKeyBytes, ResolvedGroup, SignalManager, attachment,
 };
 
 pub(super) struct PresageManager {
