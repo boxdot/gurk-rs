@@ -104,6 +104,15 @@ libraries that are not available on crates.io.
   * `ctrl+j / Up / PgUp` Previous line
   * `ctrl+k / Down / PgDown` Next line
 
+## Configuration
+
+Upon startup, `gurk` tries to load configuration from one of the default locations:
+    
+1. `$XDG_CONFIG_HOME/gurk/gurk.toml`
+2. `$XDG_CONFIG_HOME/gurk.toml`
+3. `$HOME/.config/gurk/gurk.toml`
+4. `$HOME/.gurk.toml`
+
 ## Custom keybindings
 The default keybindings can be overwritten at startup by configuring
 keybindings in `gurk.toml` using the format `keybindings.<mode>.<keycombination> =
