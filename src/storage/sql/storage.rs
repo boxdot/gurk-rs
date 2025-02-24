@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use sqlx::{ConnectOptions, query, query_as, query_scalar};
+use sqlx::{ConnectOptions, Either, query, query_as, query_scalar};
 use sqlx::{
     SqlitePool,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous},
@@ -228,7 +228,7 @@ struct SqlName {
 }
 
 impl Storage for SqliteStorage {
-    fn channels(&self) -> Box<dyn Iterator<Item = Cow<Channel>> + '_> {
+    fn channels(&self) -> impl Iterator<Item = Cow<Channel>> {
         let channels = block_async_in_place(
             query_as!(
                 SqlChannel,
@@ -244,13 +244,11 @@ impl Storage for SqliteStorage {
             )
             .fetch_all(&self.pool),
         );
-        Box::new(
-            channels
-                .ok_logged()
-                .into_iter()
-                .flatten()
-                .filter_map(|channel| channel.convert().ok_logged().map(Cow::Owned)),
-        )
+        channels
+            .ok_logged()
+            .into_iter()
+            .flatten()
+            .filter_map(|channel| channel.convert().ok_logged().map(Cow::Owned))
     }
 
     fn channel(&self, channel_id: ChannelId) -> Option<Cow<Channel>> {
@@ -308,10 +306,7 @@ impl Storage for SqliteStorage {
         Cow::Owned(channel)
     }
 
-    fn messages(
-        &self,
-        channel_id: ChannelId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_> {
+    fn messages(&self, channel_id: ChannelId) -> impl DoubleEndedIterator<Item = Cow<Message>> {
         let channel_id = &channel_id;
         let messages = block_async_in_place(
             query_as!(
@@ -342,19 +337,14 @@ impl Storage for SqliteStorage {
             )
             .fetch_all(&self.pool),
         );
-        Box::new(
-            messages
-                .ok_logged()
-                .into_iter()
-                .flatten()
-                .filter_map(|message| message.convert().ok_logged().map(Cow::Owned)),
-        )
+        messages
+            .ok_logged()
+            .into_iter()
+            .flatten()
+            .filter_map(|message| message.convert().ok_logged().map(Cow::Owned))
     }
 
-    fn edits(
-        &self,
-        message_id: MessageId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_> {
+    fn edits(&self, message_id: MessageId) -> impl DoubleEndedIterator<Item = Cow<Message>> {
         let channel_id = &message_id.channel_id;
         let arrived_at: Option<i64> = message_id
             .arrived_at
@@ -362,7 +352,7 @@ impl Storage for SqliteStorage {
             .map_err(|_| MessageConvertError::InvalidTimestamp)
             .ok_logged();
         let Some(arrived_at) = arrived_at else {
-            return Box::new(std::iter::empty());
+            return Either::Right(std::iter::empty());
         };
         let messages = block_async_in_place(
             query_as!(
@@ -394,7 +384,7 @@ impl Storage for SqliteStorage {
             )
             .fetch_all(&self.pool),
         );
-        Box::new(
+        Either::Left(
             messages
                 .ok_logged()
                 .into_iter()
@@ -508,7 +498,7 @@ impl Storage for SqliteStorage {
         Cow::Owned(message)
     }
 
-    fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + '_> {
+    fn names(&self) -> impl Iterator<Item = (Uuid, Cow<str>)> {
         let names = block_async_in_place(
             query_as!(
                 SqlName,
@@ -516,12 +506,11 @@ impl Storage for SqliteStorage {
             )
             .fetch_all(&self.pool),
         );
-        let names = names
+        names
             .ok_logged()
             .into_iter()
             .flatten()
-            .map(|SqlName { id, name }| (id, Cow::Owned(name)));
-        Box::new(names)
+            .map(|SqlName { id, name }| (id, Cow::Owned(name)))
     }
 
     fn name(&self, id: Uuid) -> Option<Cow<str>> {

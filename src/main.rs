@@ -1,8 +1,8 @@
 //! Signal Messenger client for terminal
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
+use std::{pin::pin, sync::Arc};
 
 use anyhow::Context;
 use chrono::{DateTime, Utc};
@@ -15,9 +15,9 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use gurk::app::App;
 use gurk::backoff::Backoff;
 use gurk::storage::{JsonStorage, MemCache, SqliteStorage, Storage, sync_from_signal};
+use gurk::{app::App, signal::SignalManager};
 use gurk::{config, signal, ui};
 use presage::libsignal_service::content::Content;
 use ratatui::{Terminal, backend::CrosstermBackend};
@@ -92,7 +92,7 @@ async fn run(relink: bool) -> anyhow::Result<()> {
     let (mut signal_manager, config) =
         signal::ensure_linked_device(relink, local_pool.clone()).await?;
 
-    let mut storage: Box<dyn Storage> = {
+    let mut storage = {
         debug!(
             %config.sqlite.url,
             encrypt = config.passphrase.is_some(),
@@ -127,12 +127,12 @@ async fn run(relink: bool) -> anyhow::Result<()> {
                 info!(?stats, "converted");
             }
         }
-        Box::new(MemCache::new(sqlite_storage))
+        MemCache::new(sqlite_storage)
     };
 
-    sync_from_signal(&*signal_manager, &mut *storage).await;
+    sync_from_signal(&signal_manager, &mut storage).await;
 
-    let (mut app, mut app_events) = App::try_new(config, signal_manager.clone_boxed(), storage)?;
+    let (mut app, mut app_events) = App::try_new(config, signal_manager.clone(), storage)?;
     app.populate_names_cache().await;
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Event>(100);
@@ -183,6 +183,7 @@ async fn run(relink: bool) -> anyhow::Result<()> {
                 }
             };
 
+            let mut messages = pin!(messages);
             while let Some(message) = messages.next().await {
                 backoff.reset();
                 inner_tx

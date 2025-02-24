@@ -39,7 +39,7 @@ pub type GroupIdentifierBytes = [u8; GROUP_IDENTIFIER_LEN];
 pub async fn ensure_linked_device(
     relink: bool,
     local_pool: LocalPoolHandle,
-) -> anyhow::Result<(Box<dyn SignalManager + Send>, Config)> {
+) -> anyhow::Result<(impl SignalManager + Send, Config)> {
     let config = Config::load_installed()?;
 
     // warn about deprecated keys
@@ -76,7 +76,7 @@ pub async fn ensure_linked_device(
             match presage::Manager::load_registered(store.clone()).await {
                 Ok(manager) => {
                     // done loading manager from store
-                    return Ok((Box::new(PresageManager::new(manager, local_pool)), config));
+                    return Ok((PresageManager::new(manager, local_pool), config));
                 }
                 Err(e) => {
                     bail!(
@@ -152,7 +152,7 @@ pub async fn ensure_linked_device(
         config
     };
 
-    Ok((Box::new(PresageManager::new(manager, local_pool)), config))
+    Ok((PresageManager::new(manager, local_pool), config))
 }
 
 async fn gen_qr_code(rx: oneshot::Receiver<Url>, path: &Path) -> anyhow::Result<()> {

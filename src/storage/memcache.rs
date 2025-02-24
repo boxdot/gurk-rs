@@ -62,8 +62,8 @@ impl<S: Storage> MemCache<S> {
 }
 
 impl<S: Storage> Storage for MemCache<S> {
-    fn channels(&self) -> Box<dyn Iterator<Item = Cow<Channel>> + '_> {
-        Box::new(self.channels.iter().map(Cow::Borrowed))
+    fn channels(&self) -> impl Iterator<Item = Cow<Channel>> {
+        self.channels.iter().map(Cow::Borrowed)
     }
 
     fn channel(&self, channel_id: ChannelId) -> Option<Cow<Channel>> {
@@ -86,21 +86,14 @@ impl<S: Storage> Storage for MemCache<S> {
         self.storage.store_channel(channel)
     }
 
-    fn messages(
-        &self,
-        channel_id: ChannelId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_> {
-        if let Some(messages) = self.messages.get(&channel_id) {
-            Box::new(messages.iter().map(Cow::Borrowed))
-        } else {
-            Box::new(std::iter::empty())
-        }
+    fn messages(&self, channel_id: ChannelId) -> impl DoubleEndedIterator<Item = Cow<Message>> {
+        self.messages
+            .get(&channel_id)
+            .into_iter()
+            .flat_map(|messages| messages.iter().map(Cow::Borrowed))
     }
 
-    fn edits(
-        &self,
-        message_id: MessageId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_> {
+    fn edits(&self, message_id: MessageId) -> impl DoubleEndedIterator<Item = Cow<Message>> {
         self.storage.edits(message_id) // Edits are not cached
     }
 
@@ -136,12 +129,10 @@ impl<S: Storage> Storage for MemCache<S> {
         self.storage.store_message(channel_id, message)
     }
 
-    fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + '_> {
-        Box::new(
-            self.names
-                .iter()
-                .map(|(id, name)| (*id, name.as_str().into())),
-        )
+    fn names(&self) -> impl Iterator<Item = (Uuid, Cow<str>)> {
+        self.names
+            .iter()
+            .map(|(id, name)| (*id, name.as_str().into()))
     }
 
     fn name(&self, id: Uuid) -> Option<Cow<str>> {

@@ -12,7 +12,7 @@ pub struct Stats {
     pub names: usize,
 }
 
-pub fn copy(from: &dyn Storage, to: &mut dyn Storage) -> Stats {
+pub fn copy(from: &impl Storage, to: &mut impl Storage) -> Stats {
     let mut stats = Stats::default();
 
     to.store_metadata(from.metadata().into_owned());
@@ -42,7 +42,7 @@ pub fn copy(from: &dyn Storage, to: &mut dyn Storage) -> Stats {
 ///
 /// Note: At the moment, there is no group sync implemented in presage, so only contacts are
 /// synced fully.
-pub async fn sync_from_signal(manager: &dyn SignalManager, storage: &mut dyn Storage) {
+pub async fn sync_from_signal(manager: &impl SignalManager, storage: &mut impl Storage) {
     for contact in manager.contacts().await {
         if contact.name.is_empty() {
             // not sure what to do with contacts without a name
