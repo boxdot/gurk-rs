@@ -1,9 +1,9 @@
-use std::{borrow::Cow, future::Future};
+use std::borrow::Cow;
 
-use sqlx::{query, query_as, query_scalar, ConnectOptions};
+use sqlx::{ConnectOptions, query, query_as, query_scalar};
 use sqlx::{
-    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous},
     SqlitePool,
+    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous},
 };
 use tokio::{runtime::Handle, task};
 use tracing::info;
