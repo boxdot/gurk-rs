@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Context};
+use anyhow::{Context, anyhow, bail};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -269,7 +269,7 @@ fn default_true() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::{tempdir, NamedTempFile, TempDir};
+    use tempfile::{NamedTempFile, TempDir, tempdir};
 
     fn example_user() -> User {
         User {

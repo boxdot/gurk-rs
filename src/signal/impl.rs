@@ -33,7 +33,7 @@ use crate::{
 };
 
 use super::{
-    attachment, Attachment, GroupMasterKeyBytes, ProfileKeyBytes, ResolvedGroup, SignalManager,
+    Attachment, GroupMasterKeyBytes, ProfileKeyBytes, ResolvedGroup, SignalManager, attachment,
 };
 
 pub(super) struct PresageManager {

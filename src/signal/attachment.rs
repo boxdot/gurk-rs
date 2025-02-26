@@ -7,7 +7,7 @@ use std::{
 use anyhow::Context;
 use chrono::Local;
 use mime_guess::mime::{APPLICATION_OCTET_STREAM, IMAGE_JPEG};
-use mime_guess::{get_mime_extensions, Mime};
+use mime_guess::{Mime, get_mime_extensions};
 use presage::proto::AttachmentPointer;
 use regex::Regex;
 use tracing::info;
