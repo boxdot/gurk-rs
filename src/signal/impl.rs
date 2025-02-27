@@ -18,15 +18,19 @@ use presage::{
     model::messages::Received,
 };
 use presage_store_sled::SledStore;
+use sha2::Digest;
 use tokio::sync::oneshot;
 use tokio_stream::{Stream, StreamExt};
 use tokio_util::task::LocalPoolHandle;
 use tracing::{error, warn};
 use uuid::Uuid;
 
-use crate::data::{Channel, ChannelId, GroupData, Message};
 use crate::receipt::Receipt;
 use crate::util::utc_now_timestamp_msec;
+use crate::{
+    config,
+    data::{Channel, ChannelId, GroupData, Message},
+};
 
 use super::{
     Attachment, GroupMasterKeyBytes, ProfileKeyBytes, ResolvedGroup, SignalManager, attachment,
@@ -96,10 +100,7 @@ impl SignalManager for PresageManager {
         attachment_pointer: AttachmentPointer,
     ) -> anyhow::Result<Attachment> {
         let attachment_data = self.manager.get_attachment(&attachment_pointer).await?;
-        let data_dir = dirs::data_dir()
-            .context("could not find data directory")?
-            .join("gurk");
-        attachment::save(data_dir, attachment_pointer, attachment_data)
+        attachment::save(config::data_dir(), attachment_pointer, &attachment_data)
     }
 
     fn send_receipt(&self, sender_uuid: Uuid, timestamps: Vec<u64>, receipt: Receipt) {
@@ -150,19 +151,28 @@ impl SignalManager for PresageManager {
         };
 
         if has_attachments {
-            // TODO: Temporary solution until we start rendering attachments
-            let attachment_message: String = format!(
-                "<attached: {}>",
-                attachments
-                    .iter()
-                    .map(|(a, _)| a.file_name.clone().unwrap_or(a.content_type.clone()))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-            if message.is_empty() {
-                message = attachment_message
-            } else {
-                message = message + "\n" + &attachment_message
+            let data_dir = config::data_dir();
+            for (spec, data) in &attachments {
+                let attachment_pointer = AttachmentPointer {
+                    content_type: Some(spec.content_type.clone()),
+                    size: Some(spec.length as u32),
+                    digest: Some(sha2::Sha256::digest(data).to_vec()),
+                    file_name: spec.file_name.clone(),
+                    width: spec.width,
+                    height: spec.height,
+                    upload_timestamp: Some(utc_now_timestamp_msec()),
+                    ..Default::default()
+                };
+                match attachment::save(&data_dir, attachment_pointer, data) {
+                    Ok(attachment) => {
+                        let line_break = if message.is_empty() { "" } else { "\n" };
+                        message +=
+                            &format!("{line_break}<file://{}>", attachment.filename.display());
+                    }
+                    Err(error) => {
+                        error!(%error, "failed to save attachment");
+                    }
+                }
             }
         }
 

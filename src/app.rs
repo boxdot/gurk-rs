@@ -7,7 +7,8 @@ use std::io::Cursor;
 use std::path::Path;
 
 use anyhow::{Context as _, anyhow};
-use arboard::Clipboard;
+use arboard::{Clipboard, ImageData};
+use chrono::{DateTime, Local, TimeZone};
 use crokey::Combiner;
 use crossterm::event::{KeyCode, KeyEvent};
 use image::codecs::png::PngEncoder;
@@ -42,7 +43,7 @@ use crate::signal::{
     SignalManager,
 };
 use crate::storage::{MessageId, Storage};
-use crate::util::{self, ATTACHMENT_REGEX, LazyRegex, StatefulList, URL_REGEX};
+use crate::util::{self, ATTACHMENT_REGEX, StatefulList, URL_REGEX};
 
 pub struct App {
     pub config: Config,
@@ -53,8 +54,6 @@ pub struct App {
     pub help_scroll: (u16, u16),
     pub user_id: Uuid,
     pub should_quit: bool,
-    url_regex: LazyRegex,
-    attachment_regex: LazyRegex,
     display_help: bool,
     receipt_handler: ReceiptHandler,
     pub input: Input,
@@ -116,8 +115,6 @@ impl App {
             messages,
             help_scroll: (0, 0),
             should_quit: false,
-            url_regex: LazyRegex::new(URL_REGEX),
-            attachment_regex: LazyRegex::new(ATTACHMENT_REGEX),
             display_help: false,
             receipt_handler: ReceiptHandler::new(),
             input: Default::default(),
@@ -406,8 +403,7 @@ impl App {
         let message = self
             .storage
             .message(MessageId::new(*channel_id, *arrived_at))?;
-        let re = self.url_regex.compiled();
-        open_url(&message, re)?;
+        open_url(&message, &URL_REGEX)?;
         self.reset_message_selection();
         Some(())
     }
@@ -517,7 +513,9 @@ impl App {
 
     fn send_input(&mut self, channel_idx: usize) {
         let input = self.take_input();
-        let (input, attachments) = self.extract_attachments(&input);
+        let (input, attachments) = Self::extract_attachments(&input, Local::now(), || {
+            self.clipboard.as_mut().map(|c| c.get_image())
+        });
         let channel_id = self.channels.items[channel_idx];
         let channel = self
             .storage
@@ -1410,24 +1408,37 @@ impl App {
         }
     }
 
-    fn extract_attachments(&mut self, input: &str) -> (String, Vec<(AttachmentSpec, Vec<u8>)>) {
+    fn extract_attachments<Tz: TimeZone>(
+        input: &str,
+        at: DateTime<Tz>,
+        mut get_clipboard_img: impl FnMut() -> Option<Result<ImageData<'static>, arboard::Error>>,
+    ) -> (String, Vec<(AttachmentSpec, Vec<u8>)>)
+    where
+        Tz::Offset: std::fmt::Display,
+    {
         let mut offset = 0;
         let mut clean_input = String::new();
 
-        let re = self.attachment_regex.compiled();
-        let attachments = re.find_iter(input).filter_map(|m| {
+        let attachments = ATTACHMENT_REGEX.find_iter(input).filter_map(|m| {
             let path_str = m.as_str().strip_prefix("file://")?;
 
-            let (contents, content_type, file_name) = if path_str.starts_with("clip") {
-                let img = self.clipboard.as_mut()?.get_image().ok()?;
+            clean_input.push_str(input[offset..m.start()].trim_end());
+            offset = m.end();
 
-                let png: ImageBuffer<Rgba<_>, _> =
-                    ImageBuffer::from_raw(img.width as _, img.height as _, img.bytes)?;
+            Some(if path_str.starts_with("clip") {
+                // clipboard
+                let img = get_clipboard_img()?
+                    .inspect_err(|error| error!(%error, "failed to get clipboard image"))
+                    .ok()?;
+
+                let width: u32 = img.width.try_into().ok()?;
+                let height: u32 = img.height.try_into().ok()?;
 
                 let mut bytes = Vec::new();
                 let mut cursor = Cursor::new(&mut bytes);
                 let encoder = PngEncoder::new(&mut cursor);
 
+                let png: ImageBuffer<Rgba<_>, _> = ImageBuffer::from_raw(width, height, img.bytes)?;
                 let data: Vec<_> = png.into_raw().iter().map(|b| b.swap_bytes()).collect();
                 encoder
                     .write_image(
@@ -1436,41 +1447,42 @@ impl App {
                         img.height as _,
                         image::ExtendedColorType::Rgba8,
                     )
+                    .inspect_err(|error| error!(%error, "failed to encode image"))
                     .ok()?;
 
-                (
-                    bytes,
-                    "image/png".to_string(),
-                    Some("clipboard.png".to_string()),
-                )
+                let file_name = format!("screenshot-{}.png", at.format("%Y-%m-%dT%H:%M:%S%z"));
+
+                let spec = AttachmentSpec {
+                    content_type: "image/png".to_owned(),
+                    length: bytes.len(),
+                    file_name: Some(file_name),
+                    width: Some(width),
+                    height: Some(height),
+                    ..Default::default()
+                };
+                (spec, bytes)
             } else {
+                // path
+
+                // TODO: Show error to user if the file does not exist. This would prevent not
+                // sending the attachment in the end.
+
                 let path = Path::new(path_str);
-                let contents = std::fs::read(path).ok()?;
+                let bytes = std::fs::read(path).ok()?;
                 let content_type = mime_guess::from_path(path)
                     .first()
                     .map(|mime| mime.essence_str().to_string())
                     .unwrap_or_default();
                 let file_name = path.file_name().map(|f| f.to_string_lossy().into());
+                let spec = AttachmentSpec {
+                    content_type,
+                    length: bytes.len(),
+                    file_name,
+                    ..Default::default()
+                };
 
-                (contents, content_type, file_name)
-            };
-
-            clean_input.push_str(input[offset..m.start()].trim_end());
-            offset = m.end();
-
-            let spec = AttachmentSpec {
-                content_type,
-                length: contents.len(),
-                file_name,
-                preview: None,
-                voice_note: None,
-                borderless: None,
-                width: None,
-                height: None,
-                caption: None,
-                blur_hash: None,
-            };
-            Some((spec, contents))
+                (spec, bytes)
+            })
         });
 
         let attachments = attachments.collect();
@@ -1700,15 +1712,16 @@ fn add_emoji_from_sticker(body: &mut Option<String>, sticker: Option<Sticker>) {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::*;
+    use chrono::FixedOffset;
+    use std::cell::RefCell;
+    use std::rc::Rc;
 
     use crate::config::User;
     use crate::data::GroupData;
     use crate::signal::test::SignalManagerMock;
     use crate::storage::{ForgetfulStorage, MemCache};
 
-    use std::cell::RefCell;
-    use std::rc::Rc;
+    use super::*;
 
     pub(crate) fn test_app() -> (
         App,
@@ -1949,5 +1962,46 @@ pub(crate) mod tests {
         assert_eq!(to_emoji(":rocket:"), Some("🚀"));
         assert_eq!(to_emoji("☝🏿"), Some("☝🏿"));
         assert_eq!(to_emoji("a"), None);
+    }
+
+    #[test]
+    fn test_extract_attachments() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let image_png = tempdir.path().join("image.png");
+        let image_jpg = tempdir.path().join("image.jpg");
+
+        std::fs::write(&image_png, b"some png data").unwrap();
+        std::fs::write(&image_jpg, b"some jpg data").unwrap();
+
+        let clipboard_image = ImageData {
+            width: 1,
+            height: 1,
+            bytes: vec![0, 0, 0, 0].into(), // RGBA single pixel
+        };
+
+        let message = format!(
+            "Hello, file://{} file://{} World! file://clip",
+            image_png.display(),
+            image_jpg.display(),
+        );
+
+        let at_str = "2023-01-01T00:00:00+0200";
+        let at: DateTime<FixedOffset> = at_str.parse().unwrap();
+
+        let (cleaned_message, specs) =
+            App::extract_attachments(&message, at, || Some(Ok(clipboard_image.clone())));
+        assert_eq!(cleaned_message, "Hello, World!");
+        dbg!(&specs);
+
+        assert_eq!(specs.len(), 3);
+        assert_eq!(specs[0].0.content_type, "image/png");
+        assert_eq!(specs[0].0.file_name, Some("image.png".into()));
+        assert_eq!(specs[1].0.content_type, "image/jpeg");
+        assert_eq!(specs[1].0.file_name, Some("image.jpg".into()));
+        assert_eq!(specs[2].0.content_type, "image/png");
+        assert_eq!(
+            specs[2].0.file_name,
+            Some(format!("screenshot-{at_str}.png"))
+        );
     }
 }

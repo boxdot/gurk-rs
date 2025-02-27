@@ -20,7 +20,7 @@ const DIGEST_BYTES_LEN: usize = 4;
 pub(super) fn save(
     data_dir: impl AsRef<Path>,
     pointer: AttachmentPointer,
-    data: Vec<u8>,
+    data: &[u8],
 ) -> anyhow::Result<Attachment> {
     let base_dir = data_dir.as_ref().join("files");
 
@@ -154,7 +154,7 @@ mod tests {
         let attachment = save(
             tempdir.path(),
             attachment_pointer("image/jpeg", &digest, Some("image.jpeg"), upload_timestamp),
-            vec![42],
+            &[42],
         )
         .unwrap();
 
@@ -172,7 +172,7 @@ mod tests {
         let attachment = save(
             tempdir.path(),
             attachment_pointer("image/jpeg", &digest, Some("image.jpeg"), upload_timestamp),
-            vec![42],
+            &[42],
         )
         .unwrap();
         assert_eq!(
@@ -184,7 +184,7 @@ mod tests {
         let attachment = save(
             tempdir.path(),
             attachment_pointer("image/jpeg", &digest, None, upload_timestamp),
-            vec![42],
+            &[42],
         )
         .unwrap();
         assert_eq!(
@@ -196,7 +196,7 @@ mod tests {
         let attachment = save(
             tempdir.path(),
             attachment_pointer("application/octet-stream", &digest, None, upload_timestamp),
-            vec![42],
+            &[42],
         )
         .unwrap();
         assert_eq!(
@@ -208,7 +208,7 @@ mod tests {
         let attachment = save(
             tempdir.path(),
             attachment_pointer("application/pdf", &digest, None, upload_timestamp),
-            vec![42],
+            &[42],
         )
         .unwrap();
         assert_eq!(

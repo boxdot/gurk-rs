@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 use chrono::{DateTime, Local};
 use phonenumber::PhoneNumber;
 use ratatui::widgets::ListState;
@@ -111,38 +113,18 @@ pub fn is_phone_number(s: impl AsRef<str>) -> bool {
 }
 
 // Based on Alacritty, APACHE-2.0 License
-pub const URL_REGEX: &str = "(ipfs:|ipns:|magnet:|mailto:|gemini:|gopher:|https:|http:|news:|file:|git:|ssh:|ftp:)\
-     [^\u{0000}-\u{001F}\u{007F}-\u{009F}<>\"\\s{-}\\^⟨⟩`]+";
-pub const ATTACHMENT_REGEX: &str = "file:[^\u{0000}-\u{001F}\u{007F}-\u{009F}<>\"\\s{-}\\^⟨⟩`]+";
+pub(crate) static URL_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        "(ipfs:|ipns:|magnet:|mailto:|gemini:|gopher:|https:|http:|news:|file:|git:|ssh:|ftp:)\
+     [^\u{0000}-\u{001F}\u{007F}-\u{009F}<>\"\\s{-}\\^⟨⟩`]+",
+    )
+    .unwrap()
+});
 
-/// Regex which is compiled on demand, to avoid expensive computations at startup.
-///
-/// Based on Alacritty, APACHE-2.0 License
-#[derive(Clone, Debug)]
-pub enum LazyRegex {
-    Pattern(&'static str),
-    Compiled(Box<Regex>),
-}
-
-impl LazyRegex {
-    pub fn new(pattern: &'static str) -> Self {
-        Self::Pattern(pattern)
-    }
-
-    /// Get a reference to the compiled regex.
-    ///
-    /// Compiles regex on the first call.
-    pub fn compiled(&mut self) -> &Regex {
-        if let Self::Pattern(pattern) = self {
-            let regex = Regex::new(pattern).expect("invalid regex");
-            *self = Self::Compiled(Box::new(regex));
-        }
-        match self {
-            Self::Compiled(regex) => regex,
-            Self::Pattern(_) => unreachable!(),
-        }
-    }
-}
+// Based on Alacritty, APACHE-2.0 License
+pub(crate) static ATTACHMENT_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new("file:[^\u{0000}-\u{001F}\u{007F}-\u{009F}<>\"\\s{-}\\^⟨⟩`]+").unwrap()
+});
 
 #[cfg(test)]
 mod tests {
