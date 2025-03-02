@@ -1,6 +1,32 @@
 # Changelog
 
+## 0.6.3
+
+### Added
+
+- Store uploaded attachments in gurk's data directory (#375)
+- Show deprecated config keys on start (#365, #377)
+
+### Fixes
+
+- Attachments opening handling (#371)
+  - Remove invalid characters from attachment file names
+  - Open attachment in selected message on Enter
+
+### Internal
+
+- Sqlite is the default data storage backend (#365, #377)
+- Upgrade to edition 2024 (#372)
+
+[#365]: https://github.com/boxdot/gurk-rs/pull/365
+[#371]: https://github.com/boxdot/gurk-rs/pull/371
+[#372]: https://github.com/boxdot/gurk-rs/pull/372
+[#375]: https://github.com/boxdot/gurk-rs/pull/375
+[#377]: https://github.com/boxdot/gurk-rs/pull/377
+
 ## 0.6.2
+
+### Added
 
 - Add command for opening file attachments (#356)
 - Render qr code into a temporary PNG file (#364)
