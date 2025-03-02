@@ -14,7 +14,7 @@ use tokio_util::task::LocalPoolHandle;
 use tracing::{error, warn};
 use url::Url;
 
-use crate::config::{self, Config, DeprecatedConfigKey, LoadedConfig};
+use crate::config::{self, Config, DeprecatedConfigKey, DeprecatedKeys, LoadedConfig};
 
 use self::r#impl::PresageManager;
 pub use self::manager::{Attachment, ResolvedGroup, SignalManager};
@@ -46,11 +46,14 @@ pub async fn ensure_linked_device(
     let config = config.map(
         |LoadedConfig {
              config,
-             deprecated_keys,
+             deprecated_keys: DeprecatedKeys { file_path, keys },
          }| {
-            for DeprecatedConfigKey { key, message } in deprecated_keys {
-                warn!(key, message, "deprecated config key");
-                println!("deprecated config key: {key}, {message}");
+            if !keys.is_empty() {
+                println!("In '{}':", file_path.display());
+                for DeprecatedConfigKey { key, message } in keys {
+                    warn!(key, message, "deprecated config key");
+                    println!("deprecated config key: {key}, {message}");
+                }
             }
             config
         },
