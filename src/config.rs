@@ -72,7 +72,13 @@ impl DeveloperConfig {
 #[derive(Debug, Clone)]
 pub(crate) struct LoadedConfig {
     pub(crate) config: Config,
-    pub(crate) deprecated_keys: Vec<DeprecatedConfigKey>,
+    pub(crate) deprecated_keys: DeprecatedKeys,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct DeprecatedKeys {
+    pub(crate) file_path: PathBuf,
+    pub(crate) keys: Vec<DeprecatedConfigKey>,
 }
 
 #[derive(Debug, Clone)]
@@ -141,28 +147,33 @@ impl Config {
     }
 
     fn load(path: impl AsRef<Path>) -> anyhow::Result<LoadedConfig> {
+        let path = path.as_ref();
         let content = std::fs::read_to_string(path)?;
         let config = toml::de::from_str(&content)?;
 
         // check for deprecated keys
         let config_value: toml::Value = toml::de::from_str(&content)?;
-        let mut deprecated_keys = Vec::new();
+        let mut keys = Vec::new();
         if config_value
             .get("sqlite")
             .map(|v| v.get("enabled").is_some())
             .unwrap_or(false)
         {
-            deprecated_keys.push(DeprecatedConfigKey {
+            keys.push(DeprecatedConfigKey {
                 key: "sqlite.enabled",
                 message: "sqlite is now enabled by default",
             });
         }
         if config_value.get("data_path").is_some() {
-            deprecated_keys.push(DeprecatedConfigKey {
+            keys.push(DeprecatedConfigKey {
                 key: "data_path",
                 message: "is not used anymore, and is migrated to sqlite.url",
             });
         }
+        let deprecated_keys = DeprecatedKeys {
+            file_path: path.to_path_buf(),
+            keys,
+        };
 
         Ok(LoadedConfig {
             config,
