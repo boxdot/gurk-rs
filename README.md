@@ -31,8 +31,8 @@ cargo install --git https://github.com/boxdot/gurk-rs gurk
 
 ## Arch Linux
 
-- Official repository: [`gurk`](https://archlinux.org/packages/extra/x86_64/gurk)
-- AUR: [`gurk-bin`](https://aur.archlinux.org/packages/gurk-bin) and [`gurk-git`](https://aur.archlinux.org/packages/gurk-bin)
+- Official repository, tagged releases: [`gurk`](https://archlinux.org/packages/extra/x86_64/gurk)
+- AUR source build from Git HEAD: [`gurk-git`](https://aur.archlinux.org/packages/gurk-bin)
 
 ## Nix/NixOS
 
