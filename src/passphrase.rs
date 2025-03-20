@@ -23,7 +23,7 @@ impl AsRef<str> for Passphrase {
 
 impl fmt::Debug for Passphrase {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("Passphrase").finish_non_exhaustive()
+        f.write_str("Passphrase(<redacted>)")
     }
 }
 
@@ -51,7 +51,7 @@ mod tests {
 
     #[test]
     fn test_passphrase_debug() {
-        let passphrase = Passphrase::new("secret".to_owned());
-        assert_eq!(format!("{:?}", passphrase), "Passphrase(..)");
+        let passphrase = Passphrase::new("secret").unwrap();
+        assert_eq!(format!("{:?}", passphrase), "Passphrase(<redacted>)");
     }
 }
