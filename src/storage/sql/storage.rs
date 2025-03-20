@@ -10,14 +10,16 @@ use tracing::info;
 use url::Url;
 use uuid::Uuid;
 
-use crate::data::{BodyRange, Channel, ChannelId, GroupData, Message, TypingSet};
-use crate::receipt::Receipt;
 use crate::signal::Attachment;
 use crate::storage::copy::{self, Stats};
 use crate::storage::{MessageId, Metadata, Storage};
+use crate::{
+    data::{BodyRange, Channel, ChannelId, GroupData, Message, TypingSet},
+    storage::sql::encrypt::is_sqlite_encrypted_heuristics,
+};
+use crate::{receipt::Receipt, storage::sql::encrypt::encrypt_db};
 
 use super::encoding::BlobData;
-use super::encrypt::{encrypt_db, is_sqlite_encrypted_heuristics};
 use super::util::ResultExt as _;
 
 const METADATA_ID: i64 = 0;
@@ -28,6 +30,23 @@ pub struct SqliteStorage {
 }
 
 impl SqliteStorage {
+    pub async fn open(url: &Url, passphrase: Option<String>) -> sqlx::Result<Self> {
+        let opts: SqliteConnectOptions = url.as_str().parse()?;
+        let mut opts = opts
+            .create_if_missing(true)
+            .journal_mode(SqliteJournalMode::Wal)
+            .synchronous(SqliteSynchronous::Full)
+            .disable_statement_logging();
+        if let Some(passphrase) = passphrase {
+            opts = opts.pragma("key", passphrase);
+        }
+
+        let pool = SqlitePool::connect_with(opts.clone()).await?;
+        sqlx::migrate!().run(&pool).await?;
+
+        Ok(Self { opts, pool })
+    }
+
     pub async fn maybe_encrypt_and_open(
         url: &Url,
         passphrase: Option<String>,
@@ -50,23 +69,6 @@ impl SqliteStorage {
             Self::open(url, None).await?
         };
         Ok(db)
-    }
-
-    pub async fn open(url: &Url, passphrase: Option<String>) -> sqlx::Result<Self> {
-        let opts: SqliteConnectOptions = url.as_str().parse()?;
-        let mut opts = opts
-            .create_if_missing(true)
-            .journal_mode(SqliteJournalMode::Wal)
-            .synchronous(SqliteSynchronous::Full)
-            .disable_statement_logging();
-        if let Some(passphrase) = passphrase {
-            opts = opts.pragma("key", passphrase);
-        }
-
-        let pool = SqlitePool::connect_with(opts.clone()).await?;
-        sqlx::migrate!().run(&pool).await?;
-
-        Ok(Self { opts, pool })
     }
 
     pub async fn copy_from(&mut self, from: &impl Storage) -> sqlx::Result<Stats> {

@@ -7,14 +7,13 @@ use std::path::{Path, PathBuf};
 
 use crate::command::ModeKeybindingConfig;
 
+const GURK_DB_NAME: &str = "gurk.sqlite";
+const SIGNAL_DB_NAME: &str = "signal.sqlite";
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
-    /// Path to the JSON file (incl. filename) storing channels and messages.
-    #[serde(default = "default_data_json_path", rename = "data_path")]
-    pub deprecated_data_path: PathBuf,
-    /// Path to the Signal database containing the linked device data.
-    #[serde(default = "default_signal_db_path")]
-    pub signal_db_path: PathBuf,
+    #[serde(default = "data_dir")]
+    pub data_dir: PathBuf,
     /// Whether only to show the first name of a contact
     #[serde(default)]
     pub first_name_only: bool,
@@ -31,10 +30,8 @@ pub struct Config {
     #[cfg(feature = "dev")]
     #[serde(default, skip_serializing_if = "DeveloperConfig::is_default")]
     pub developer: DeveloperConfig,
-    #[serde(default)]
-    pub sqlite: SqliteConfig,
-    #[serde(default)]
     /// If set, enables encryption of the key store and messages database
+    #[serde(default)]
     pub passphrase: Option<String>,
     /// If set, the full message text will be colored, not only the author name
     #[serde(default)]
@@ -91,16 +88,14 @@ impl Config {
     /// Create new config with default paths from the given user.
     pub fn with_user(user: User) -> Self {
         Config {
+            data_dir: data_dir(),
             user,
-            deprecated_data_path: default_data_json_path(),
-            signal_db_path: default_signal_db_path(),
             first_name_only: false,
             show_receipts: true,
             notifications: true,
             bell: true,
             #[cfg(feature = "dev")]
             developer: Default::default(),
-            sqlite: Default::default(),
             passphrase: None,
             colored_messages: false,
             default_keybindings: true,
@@ -191,6 +186,14 @@ impl Config {
         fs::write(path, content)?;
         Ok(())
     }
+
+    pub fn gurk_db_path(&self) -> PathBuf {
+        self.data_dir.join(GURK_DB_NAME)
+    }
+
+    pub fn signal_db_path(&self) -> PathBuf {
+        self.data_dir.join(SIGNAL_DB_NAME)
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -200,7 +203,7 @@ pub struct SqliteConfig {
     /// Don't delete the unencrypted db, after applying encryption to it
     ///
     /// Useful for testing.
-    #[serde(default, rename = "_preserve_unencryped")]
+    #[serde(default, rename = "_preserve_unencrypted")]
     pub preserve_unencrypted: bool,
 }
 
@@ -254,8 +257,8 @@ fn installed_config() -> Option<PathBuf> {
 }
 
 /// Path to store the signal database containing the data for the linked device.
-pub fn default_signal_db_path() -> PathBuf {
-    data_dir().join("signal-db")
+pub(crate) fn default_signal_db_path() -> PathBuf {
+    data_dir().join(GURK_DB_NAME)
 }
 
 /// Fallback to legacy data path location
@@ -267,10 +270,6 @@ pub(crate) fn data_dir() -> PathBuf {
     let data_dir =
         dirs::data_dir().expect("data directory not found, $XDG_DATA_HOME and $HOME are unset?");
     data_dir.join("gurk")
-}
-
-fn default_data_json_path() -> PathBuf {
-    data_dir().join("gurk.data.json")
 }
 
 fn default_true() -> bool {
@@ -290,14 +289,10 @@ mod tests {
     }
 
     fn example_config_with_random_paths(dir: &TempDir) -> Config {
-        let data_path = dir.path().join("some-data-dir/some-other-dir/data.json");
-        assert!(!data_path.parent().unwrap().exists());
-        let signal_db_path = dir.path().join("some-signal-db-dir/some-other-dir");
-        assert!(!signal_db_path.exists());
-
+        let data_dir = dir.path().join("some-data-dir/some-other-dir");
+        assert!(!data_dir.parent().unwrap().exists());
         Config {
-            deprecated_data_path: data_path,
-            signal_db_path,
+            data_dir,
             ..Config::with_user(example_user())
         }
     }
@@ -317,7 +312,7 @@ mod tests {
         assert_eq!(config, loaded_config);
 
         assert!(config_path.parent().unwrap().exists()); // data path parent is created
-        assert!(!config.signal_db_path.exists()); // signal path is not touched
+        assert!(!config.signal_db_path().exists()); // signal path is not touched
 
         Ok(())
     }
@@ -329,8 +324,7 @@ mod tests {
         let file = NamedTempFile::new()?;
 
         assert!(config.save_new_at(file.path()).is_err());
-        assert!(!config.deprecated_data_path.parent().unwrap().exists()); // data path parent is not touched
-        assert!(!config.signal_db_path.exists()); // signal path is not touched
+        assert!(!config.signal_db_path().exists()); // signal path is not touched
 
         Ok(())
     }
