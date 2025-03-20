@@ -9,14 +9,13 @@
 
 ## Pre-compiled binary
 
-Download a pre-compiled binary from [Releases] for following targets:
+Download a pre-compiled binary from [Releases].
 
-* `x86-64 Linux GNU`
-* `x86-64 Linux musl`
-* `aarch64 Linux GNU`
-* `aarch64 Linux musl` (>= `v0.2.4` only)
-* `x86-64 Darwin`
-* `aarch64 Darwin`
+Or, if you have [`cargo-binstall`](https://github.com/cargo-bins/cargo-binstall):
+
+```shell
+cargo binstall --git https://github.com/boxdot/gurk-rs gurk
+```
 
 ## From source (using `cargo`)
 
@@ -108,7 +107,7 @@ libraries that are not available on crates.io.
 ## Configuration
 
 Upon startup, `gurk` tries to load configuration from one of the default locations:
-    
+
 1. `$XDG_CONFIG_HOME/gurk/gurk.toml`
 2. `$XDG_CONFIG_HOME/gurk.toml`
 3. `$HOME/.config/gurk/gurk.toml`
