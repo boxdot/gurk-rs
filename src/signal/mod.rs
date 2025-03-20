@@ -3,13 +3,14 @@ mod r#impl;
 mod manager;
 pub mod test;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, anyhow, bail};
 use futures_channel::oneshot;
 use image::Luma;
-use presage::{libsignal_service::configuration::SignalServers, model::identity::OnNewIdentity};
-use presage_store_sled::{MigrationConflictStrategy, SledStore};
+use presage::libsignal_service::configuration::SignalServers;
+use presage_store_sqlite::{OnNewIdentity, SqliteConnectOptions, SqliteStore};
+use sqlx::sqlite::SqliteJournalMode;
 use tokio_util::task::LocalPoolHandle;
 use tracing::{error, warn};
 use url::Url;
@@ -59,35 +60,27 @@ pub async fn ensure_linked_device(
         },
     );
 
-    let db_path = config
+    let signal_db_path = config
         .as_ref()
-        .map(|c| c.signal_db_path.clone())
+        .map(|c| c.signal_db_path())
         .unwrap_or_else(config::default_signal_db_path);
     let passphrase = config
         .as_ref()
         .and_then(|config| config.passphrase.as_ref());
-    let store = SledStore::open_with_passphrase(
-        db_path,
-        passphrase,
-        MigrationConflictStrategy::BackupAndDrop,
-        OnNewIdentity::Trust,
-    )
-    .await?;
+
+    let signal_db_opts = sqlite_options(signal_db_path, passphrase.map(|s| s.as_str()))?;
+    let store = SqliteStore::open_with_options(signal_db_opts, OnNewIdentity::Trust).await?;
 
     if !relink {
         if let Some(config) = config.clone() {
-            match presage::Manager::load_registered(store.clone()).await {
-                Ok(manager) => {
-                    // done loading manager from store
-                    return Ok((Box::new(PresageManager::new(manager, local_pool)), config));
-                }
-                Err(e) => {
-                    bail!(
-                        "error loading manager. Try again later or run with --relink to force relink: {}",
-                        e
-                    )
-                }
-            };
+            let manager = presage::Manager::load_registered(store.clone())
+                .await
+                .context(
+                    "Failed to load Signal Manager. \
+                    Try again later or run with --relink to force relink",
+                )?;
+            // done loading manager from store
+            return Ok((Box::new(PresageManager::new(manager, local_pool)), config));
         }
     }
 
@@ -156,6 +149,20 @@ pub async fn ensure_linked_device(
     };
 
     Ok((Box::new(PresageManager::new(manager, local_pool)), config))
+}
+
+fn sqlite_options(path: PathBuf, passphrase: Option<&str>) -> anyhow::Result<SqliteConnectOptions> {
+    let opts: SqliteConnectOptions = Url::from_file_path(path)
+        .expect("invalid signal db path")
+        .to_string()
+        .parse()?;
+    let mut opts = opts
+        .create_if_missing(true)
+        .journal_mode(SqliteJournalMode::Wal);
+    if let Some(passphrase) = passphrase {
+        opts = opts.pragma("key", passphrase.to_owned());
+    };
+    Ok(opts)
 }
 
 async fn gen_qr_code(rx: oneshot::Receiver<Url>, path: &Path) -> anyhow::Result<()> {

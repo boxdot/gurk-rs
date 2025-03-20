@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use anyhow::Context;
+use anyhow::{Context, anyhow};
 use chrono::{DateTime, Utc};
 use clap::Parser;
 use crossterm::{
@@ -17,8 +17,8 @@ use crossterm::{
 };
 use gurk::app::App;
 use gurk::backoff::Backoff;
-use gurk::storage::{JsonStorage, MemCache, SqliteStorage, Storage, sync_from_signal};
-use gurk::{config, signal, ui};
+use gurk::storage::{MemCache, SqliteStorage, Storage, sync_from_signal};
+use gurk::{signal, ui};
 use presage::libsignal_service::content::Content;
 use ratatui::{Terminal, backend::CrosstermBackend};
 use tokio::select;
@@ -26,6 +26,7 @@ use tokio_stream::StreamExt;
 use tokio_util::task::LocalPoolHandle;
 use tracing::debug;
 use tracing::{error, info};
+use url::Url;
 
 const TARGET_FPS: u64 = 144;
 const RECEIPT_TICK_PERIOD: u64 = 144;
@@ -93,41 +94,19 @@ async fn run(relink: bool) -> anyhow::Result<()> {
         signal::ensure_linked_device(relink, local_pool.clone()).await?;
 
     let mut storage: Box<dyn Storage> = {
+        let path = config.gurk_db_path();
         debug!(
-            %config.sqlite.url,
+            path =% path.display(),
             encrypt = config.passphrase.is_some(),
-            "opening sqlite"
+            "opening sqlite data storage"
         );
-        let mut sqlite_storage = SqliteStorage::maybe_encrypt_and_open(
-            &config.sqlite.url,
-            config.passphrase.clone(),
-            config.sqlite.preserve_unencrypted,
-        )
-        .await
-        .with_context(|| {
-            format!(
-                "failed to open sqlite data storage at: {}",
-                config.sqlite.url
-            )
-        })?;
-        if sqlite_storage.is_empty() || !(sqlite_storage.metadata().fully_migrated.unwrap_or(false))
-        {
-            if let Ok(json_storage) = JsonStorage::new(
-                &config.deprecated_data_path,
-                config::fallback_data_path().as_deref(),
-            ) {
-                println!(
-                    "converting JSON storage to SQLite storage at {}",
-                    config.sqlite.url
-                );
-                let stats = sqlite_storage.copy_from(&json_storage).await?;
-                let mut metadata = sqlite_storage.metadata().into_owned();
-                metadata.fully_migrated = Some(true);
-                sqlite_storage.store_metadata(metadata);
-                info!(?stats, "converted");
-            }
-        }
-        Box::new(MemCache::new(sqlite_storage))
+        let url = Url::from_file_path(&path).map_err(|_| anyhow!("invalid sqlite path"))?;
+        let storage = SqliteStorage::open(&url, config.passphrase.clone())
+            .await
+            .with_context(|| {
+                format!("failed to open sqlite data storage at: {}", path.display())
+            })?;
+        Box::new(MemCache::new(storage))
     };
 
     sync_from_signal(&*signal_manager, &mut *storage).await;
