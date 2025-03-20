@@ -5,7 +5,7 @@ use url::Url;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::command::ModeKeybindingConfig;
+use crate::{command::ModeKeybindingConfig, passphrase::Passphrase};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
@@ -35,7 +35,7 @@ pub struct Config {
     pub sqlite: SqliteConfig,
     #[serde(default)]
     /// If set, enables encryption of the key store and messages database
-    pub passphrase: Option<String>,
+    pub passphrase: Option<Passphrase>,
     /// If set, the full message text will be colored, not only the author name
     #[serde(default)]
     pub colored_messages: bool,
@@ -118,6 +118,11 @@ impl Config {
     /// If no config is found returns `None`.
     pub(crate) fn load_installed() -> anyhow::Result<Option<LoadedConfig>> {
         installed_config().map(Self::load).transpose()
+    }
+
+    pub fn load_installed_passphrase() -> anyhow::Result<Option<Passphrase>> {
+        let loaded = Self::load_installed()?;
+        Ok(loaded.and_then(|c| c.config.passphrase))
     }
 
     /// Saves a new config file in case it does not exist.

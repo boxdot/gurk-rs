@@ -10,11 +10,14 @@ use tracing::info;
 use url::Url;
 use uuid::Uuid;
 
-use crate::data::{BodyRange, Channel, ChannelId, GroupData, Message, TypingSet};
 use crate::receipt::Receipt;
 use crate::signal::Attachment;
 use crate::storage::copy::{self, Stats};
 use crate::storage::{MessageId, Metadata, Storage};
+use crate::{
+    data::{BodyRange, Channel, ChannelId, GroupData, Message, TypingSet},
+    passphrase::Passphrase,
+};
 
 use super::encoding::BlobData;
 use super::encrypt::{encrypt_db, is_sqlite_encrypted_heuristics};
@@ -30,38 +33,47 @@ pub struct SqliteStorage {
 impl SqliteStorage {
     pub async fn maybe_encrypt_and_open(
         url: &Url,
-        passphrase: Option<String>,
+        passphrase: &Passphrase,
         preserve_unencrypted: bool,
     ) -> anyhow::Result<Self> {
         info!(%url, "loading sql app data");
 
-        let db = if let Some(passphrase) = passphrase {
-            match is_sqlite_encrypted_heuristics(url) {
-                // encrypted or does not exist
-                Some(true) | None => Self::open(url, Some(passphrase)).await?,
-                // not encrypted => encrypt
-                Some(false) => {
-                    encrypt_db(url, &passphrase, preserve_unencrypted).await?;
-                    Self::open(url, Some(passphrase)).await?
-                }
+        let db = match is_sqlite_encrypted_heuristics(url) {
+            // encrypted or does not exist
+            Some(true) | None => Self::open(url, passphrase).await?,
+            // not encrypted => encrypt
+            Some(false) => {
+                encrypt_db(url, passphrase, preserve_unencrypted).await?;
+                Self::open(url, passphrase).await?
             }
-        } else {
-            // not encrypted without passphrase => stays unencrypted
-            Self::open(url, None).await?
         };
+
         Ok(db)
     }
 
-    pub async fn open(url: &Url, passphrase: Option<String>) -> sqlx::Result<Self> {
+    pub async fn open(url: &Url, passphrase: &Passphrase) -> sqlx::Result<Self> {
         let opts: SqliteConnectOptions = url.as_str().parse()?;
-        let mut opts = opts
+        let opts = opts
+            .create_if_missing(true)
+            .journal_mode(SqliteJournalMode::Wal)
+            .synchronous(SqliteSynchronous::Full)
+            .disable_statement_logging()
+            .pragma("key", passphrase.as_ref().to_owned());
+
+        let pool = SqlitePool::connect_with(opts.clone()).await?;
+        sqlx::migrate!().run(&pool).await?;
+
+        Ok(Self { opts, pool })
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn open_unenrypted(url: &Url) -> sqlx::Result<Self> {
+        let opts: SqliteConnectOptions = url.as_str().parse()?;
+        let opts = opts
             .create_if_missing(true)
             .journal_mode(SqliteJournalMode::Wal)
             .synchronous(SqliteSynchronous::Full)
             .disable_statement_logging();
-        if let Some(passphrase) = passphrase {
-            opts = opts.pragma("key", passphrase);
-        }
 
         let pool = SqlitePool::connect_with(opts.clone()).await?;
         sqlx::migrate!().run(&pool).await?;
@@ -618,7 +630,9 @@ mod tests {
 
     async fn fixtures() -> SqliteStorage {
         let url: Url = "sqlite::memory:".parse().unwrap();
-        let mut storage = SqliteStorage::open(&url, None).await.unwrap();
+        let mut storage = SqliteStorage::open(&url, &Passphrase::new("secret").unwrap())
+            .await
+            .unwrap();
 
         let user_channel = ChannelId::User(uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd"));
         storage.store_channel(Channel {
@@ -842,23 +856,6 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_sqlite_created_unencrypted_without_passphrase() {
-        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
-
-        let tempdir = tempdir().unwrap();
-        let path = tempdir.path().join("data.db");
-        let url: Url = format!("sqlite://{}", path.display()).parse().unwrap();
-
-        assert_eq!(is_sqlite_encrypted_heuristics(&url), None);
-
-        SqliteStorage::maybe_encrypt_and_open(&url, None, false)
-            .await
-            .unwrap();
-
-        assert_eq!(is_sqlite_encrypted_heuristics(&url), Some(false));
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
     async fn test_sqlite_created_encrypted_with_passphrase() {
         let _ = tracing_subscriber::fmt().with_test_writer().try_init();
 
@@ -869,7 +866,7 @@ mod tests {
         assert_eq!(is_sqlite_encrypted_heuristics(&url), None);
 
         let secret = "secret".to_owned();
-        SqliteStorage::maybe_encrypt_and_open(&url, Some(secret), false)
+        SqliteStorage::maybe_encrypt_and_open(&url, &Passphrase::new(secret).unwrap(), false)
             .await
             .unwrap();
 

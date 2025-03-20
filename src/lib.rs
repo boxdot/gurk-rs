@@ -13,6 +13,7 @@ pub(crate) mod emoji;
 pub mod event;
 mod handlers;
 pub mod input;
+pub mod passphrase;
 pub mod receipt;
 pub mod shortcuts;
 pub mod signal;

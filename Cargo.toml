@@ -1,7 +1,7 @@
 [package]
 name = "gurk"
 description = "Signal messenger client for terminal"
-version = "0.6.4"
+version = "0.7.0-dev"
 authors = ["boxdot <d@zerovolt.org>"]
 edition = "2024"
 keywords = ["signal", "tui"]
@@ -96,6 +96,8 @@ tokio-util = { version = "0.7.13", features = ["rt"] }
 qrcode = { version = "0.14.1", default-features = false, features = ["image"] }
 sha2 = "0.10.8"
 strip-ansi-escapes = "0.2.1"
+dialoguer = "0.11.0"
+zeroize = { version = "1.8.1", features = ["derive", "serde"] }
 
 [package.metadata.cargo-machete]
 # not used directly; brings sqlcipher capabilities to sqlite

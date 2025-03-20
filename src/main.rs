@@ -15,13 +15,14 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use gurk::app::App;
-use gurk::backoff::Backoff;
+use dialoguer::Password;
 use gurk::storage::{JsonStorage, MemCache, SqliteStorage, Storage, sync_from_signal};
+use gurk::{app::App, config::Config};
+use gurk::{backoff::Backoff, passphrase::Passphrase};
 use gurk::{config, signal, ui};
 use presage::libsignal_service::content::Content;
 use ratatui::{Terminal, backend::CrosstermBackend};
-use tokio::select;
+use tokio::{runtime, select};
 use tokio_stream::StreamExt;
 use tokio_util::task::LocalPoolHandle;
 use tracing::debug;
@@ -37,16 +38,30 @@ const RECEIPT_BUDGET: Duration = Duration::from_millis(RECEIPT_TICK_PERIOD * 100
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Enables logging to `gurk.log` in the current working directory according to RUST_LOG
-    #[clap(short, long = "verbose")]
+    #[arg(short, long = "verbose")]
     verbosity: bool,
     /// Relinks the device (helpful when device was unlinked)
-    #[clap(long)]
+    #[arg(long)]
     relink: bool,
+    /// Passphrase to use for encrypting the database
+    ///
+    /// When omitted, passphrase is read from the config file, and if missing, prompted for.
+    #[arg(long, short)]
+    passphrase: Option<Passphrase>,
 }
 
-#[tokio::main(worker_threads = 2)]
-async fn main() -> anyhow::Result<()> {
-    let args = Args::parse();
+fn get_passphrase(args: &mut Args) -> anyhow::Result<Passphrase> {
+    if let Some(passphrase) = args.passphrase.take() {
+        return Ok(passphrase);
+    }
+    if let Some(passphrase) = Config::load_installed_passphrase()? {
+        return Ok(passphrase);
+    }
+    Passphrase::new(Password::new().with_prompt("Passphrase").interact()?)
+}
+
+fn main() -> anyhow::Result<()> {
+    let mut args = Args::parse();
 
     let _guard = if args.verbosity {
         let file_appender = tracing_appender::rolling::never("./", "gurk.log");
@@ -63,7 +78,13 @@ async fn main() -> anyhow::Result<()> {
 
     log_panics::init();
 
-    run(args.relink).await
+    let passphrase = get_passphrase(&mut args)?;
+
+    let runtime = runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()?;
+    runtime.block_on(run(passphrase, args.relink))
 }
 
 async fn is_online() -> bool {
@@ -87,10 +108,11 @@ pub enum Event {
     AppEvent(gurk::event::Event),
 }
 
-async fn run(relink: bool) -> anyhow::Result<()> {
+async fn run(passphrase: Passphrase, relink: bool) -> anyhow::Result<()> {
     let local_pool = LocalPoolHandle::new(2);
+
     let (mut signal_manager, config) =
-        signal::ensure_linked_device(relink, local_pool.clone()).await?;
+        signal::ensure_linked_device(relink, local_pool.clone(), &passphrase).await?;
 
     let mut storage: Box<dyn Storage> = {
         debug!(
@@ -100,7 +122,7 @@ async fn run(relink: bool) -> anyhow::Result<()> {
         );
         let mut sqlite_storage = SqliteStorage::maybe_encrypt_and_open(
             &config.sqlite.url,
-            config.passphrase.clone(),
+            &passphrase,
             config.sqlite.preserve_unencrypted,
         )
         .await
