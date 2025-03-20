@@ -93,15 +93,16 @@ impl App {
     fn name_and_color(&self, id: Uuid) -> (String, Color) {
         let name = self.name_by_id_cached(id);
         let color = user_color(&name);
-        let name = displayed_name(name, self.config.first_name_only);
+        let name =
+            strip_ansi_escapes::strip_str(displayed_name(&name, self.config.first_name_only));
         (name, color)
     }
 }
 
-fn displayed_name(name: String, first_name_only: bool) -> String {
+fn displayed_name(name: &str, first_name_only: bool) -> &str {
     if first_name_only {
         let space_pos = name.find(' ').unwrap_or(name.len());
-        name[0..space_pos].to_string()
+        &name[0..space_pos]
     } else {
         name
     }
