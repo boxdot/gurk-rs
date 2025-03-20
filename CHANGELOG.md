@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.4
+
+### Fixes
+
+- Strip ANSI escape codes from message text and user names (#386)
+
+[#386]: https://github.com/boxdot/gurk-rs/pull/386
+
 ## 0.6.3
 
 ### Added
