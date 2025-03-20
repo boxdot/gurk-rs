@@ -520,7 +520,7 @@ fn display_message(
         .subsequent_indent(prefix);
 
     // collect message text
-    let text = msg.message.clone().unwrap_or_default();
+    let text = strip_ansi_escapes::strip_str(msg.message.as_deref().unwrap_or_default());
     let mut text = replace_mentions(msg, names, text);
     add_attachments(msg, &mut text);
     if text.is_empty() {
