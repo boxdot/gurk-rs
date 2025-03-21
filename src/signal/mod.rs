@@ -14,7 +14,10 @@ use tokio_util::task::LocalPoolHandle;
 use tracing::{error, warn};
 use url::Url;
 
-use crate::config::{self, Config, DeprecatedConfigKey, DeprecatedKeys, LoadedConfig};
+use crate::{
+    config::{self, Config, DeprecatedConfigKey, DeprecatedKeys, LoadedConfig},
+    passphrase::Passphrase,
+};
 
 use self::r#impl::PresageManager;
 pub use self::manager::{Attachment, ResolvedGroup, SignalManager};
@@ -39,6 +42,7 @@ pub type GroupIdentifierBytes = [u8; GROUP_IDENTIFIER_LEN];
 pub async fn ensure_linked_device(
     relink: bool,
     local_pool: LocalPoolHandle,
+    passphrase: &Passphrase,
 ) -> anyhow::Result<(Box<dyn SignalManager + Send>, Config)> {
     let config = Config::load_installed()?;
 
@@ -63,12 +67,9 @@ pub async fn ensure_linked_device(
         .as_ref()
         .map(|c| c.signal_db_path.clone())
         .unwrap_or_else(config::default_signal_db_path);
-    let passphrase = config
-        .as_ref()
-        .and_then(|config| config.passphrase.as_ref());
     let store = SledStore::open_with_passphrase(
         db_path,
-        passphrase,
+        Some(passphrase),
         MigrationConflictStrategy::BackupAndDrop,
         OnNewIdentity::Trust,
     )

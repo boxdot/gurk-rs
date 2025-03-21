@@ -8,9 +8,11 @@ use tempfile::tempdir;
 use tracing::info;
 use url::Url;
 
+use crate::passphrase::Passphrase;
+
 pub(super) async fn encrypt_db(
     url: &Url,
-    passphrase: &str,
+    passphrase: &Passphrase,
     preserve_unencrypted: bool,
 ) -> anyhow::Result<()> {
     let opts: SqliteConnectOptions = url.as_str().parse()?;
@@ -26,6 +28,7 @@ pub(super) async fn encrypt_db(
     let dest = tempdir.path().join("encrypted.db");
 
     let mut conn = SqliteConnection::connect_with(&opts).await?;
+    let passphrase = passphrase.as_ref();
     sqlx::raw_sql(&format!(
         "
            ATTACH DATABASE '{}' AS encrypted KEY '{passphrase}';
@@ -73,12 +76,12 @@ mod tests {
         let path = tempdir.path().join("data.sqlite");
         let url: Url = format!("sqlite://{}", path.display()).parse().unwrap();
 
-        let _ = SqliteStorage::open(&url, None).await.unwrap();
+        let _ = SqliteStorage::open_unenrypted(&url).await.unwrap();
         assert!(path.exists());
         assert_eq!(is_sqlite_encrypted_heuristics(&url), Some(false));
 
         let preserve_unencrypted = true;
-        let passphrase = "secret".to_owned();
+        let passphrase = Passphrase::new("secret").unwrap();
         encrypt_db(&url, &passphrase, preserve_unencrypted)
             .await
             .unwrap();
@@ -89,6 +92,6 @@ mod tests {
         let backup_url: Url = format!("{url}.backup").parse().unwrap();
         assert_eq!(is_sqlite_encrypted_heuristics(&backup_url), Some(false));
 
-        let _ = SqliteStorage::open(&url, Some(passphrase)).await.unwrap();
+        let _ = SqliteStorage::open(&url, &passphrase).await.unwrap();
     }
 }
