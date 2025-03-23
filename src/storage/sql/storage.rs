@@ -1,10 +1,10 @@
 use std::borrow::Cow;
 
-use sqlx::{ConnectOptions, query, query_as, query_scalar};
 use sqlx::{
     SqlitePool,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous},
 };
+use sqlx::{query, query_as, query_scalar};
 use tokio::{runtime::Handle, task};
 use tracing::info;
 use url::Url;
@@ -57,8 +57,7 @@ impl SqliteStorage {
             .create_if_missing(true)
             .journal_mode(SqliteJournalMode::Wal)
             .synchronous(SqliteSynchronous::Full)
-            .disable_statement_logging()
-            .pragma("key", passphrase.as_ref().to_owned());
+            .pragma("key", passphrase.sqlite_pragma_key().to_string());
 
         let pool = SqlitePool::connect_with(opts.clone()).await?;
         sqlx::migrate!().run(&pool).await?;
@@ -72,8 +71,7 @@ impl SqliteStorage {
         let opts = opts
             .create_if_missing(true)
             .journal_mode(SqliteJournalMode::Wal)
-            .synchronous(SqliteSynchronous::Full)
-            .disable_statement_logging();
+            .synchronous(SqliteSynchronous::Full);
 
         let pool = SqlitePool::connect_with(opts.clone()).await?;
         sqlx::migrate!().run(&pool).await?;

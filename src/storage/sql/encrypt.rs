@@ -28,7 +28,8 @@ pub(super) async fn encrypt_db(
     let dest = tempdir.path().join("encrypted.db");
 
     let mut conn = SqliteConnection::connect_with(&opts).await?;
-    let passphrase = passphrase.as_ref();
+    let passphrase = passphrase.sqlite_string();
+    let passphrase = passphrase.as_str();
     sqlx::raw_sql(&format!(
         "
            ATTACH DATABASE '{}' AS encrypted KEY '{passphrase}';
