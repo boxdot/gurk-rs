@@ -99,6 +99,8 @@ strip-ansi-escapes = "0.2.1"
 dialoguer = "0.11.0"
 zeroize = { version = "1.8.1", features = ["derive", "serde"] }
 console = "0.15.11"
+
+[target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "3.2.0"
 
 [package.metadata.cargo-machete]
