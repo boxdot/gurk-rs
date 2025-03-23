@@ -1,5 +1,6 @@
 use anyhow::{Context, anyhow, bail};
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 use url::Url;
 
 use std::fs;
@@ -9,11 +10,24 @@ use crate::{command::ModeKeybindingConfig, passphrase::Passphrase};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
+    /// Directory to store messages and signal database, and attachments.
+    #[serde(
+        default = "default_data_dir",
+        skip_serializing_if = "is_default_data_dir"
+    )]
+    pub data_dir: PathBuf,
     /// Path to the JSON file (incl. filename) storing channels and messages.
-    #[serde(default = "default_data_json_path", rename = "data_path")]
+    #[serde(
+        default = "default_data_json_path",
+        rename = "data_path",
+        skip_serializing
+    )]
     pub deprecated_data_path: PathBuf,
     /// Path to the Signal database containing the linked device data.
-    #[serde(default = "default_signal_db_path")]
+    #[serde(
+        default = "default_signal_db_path",
+        skip_serializing_if = "is_default_signal_db_path"
+    )]
     pub signal_db_path: PathBuf,
     /// Whether only to show the first name of a contact
     #[serde(default)]
@@ -31,7 +45,7 @@ pub struct Config {
     #[cfg(feature = "dev")]
     #[serde(default, skip_serializing_if = "DeveloperConfig::is_default")]
     pub developer: DeveloperConfig,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "SqliteConfig::is_default")]
     pub sqlite: SqliteConfig,
     #[serde(default)]
     /// If set, enables encryption of the key store and messages database
@@ -50,9 +64,8 @@ pub struct Config {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct User {
     /// Name to be shown in the application
-    pub name: String,
-    /// Phone number used in Signal
-    pub phone_number: String,
+    #[serde(alias = "name")]
+    pub display_name: String,
 }
 
 #[cfg(feature = "dev")]
@@ -70,9 +83,22 @@ impl DeveloperConfig {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct LoadedConfig {
+pub struct LoadedConfig {
     pub(crate) config: Config,
     pub(crate) deprecated_keys: DeprecatedKeys,
+}
+
+impl LoadedConfig {
+    pub fn report_deprecated_keys(self) -> Config {
+        if !self.deprecated_keys.keys.is_empty() {
+            println!("In '{}':", self.deprecated_keys.file_path.display());
+            for DeprecatedConfigKey { key, message } in self.deprecated_keys.keys.iter() {
+                warn!(key, message, "deprecated config key");
+                println!("deprecated config key: {key}, {message}");
+            }
+        }
+        self.config
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -92,6 +118,7 @@ impl Config {
     pub fn with_user(user: User) -> Self {
         Config {
             user,
+            data_dir: default_data_dir(),
             deprecated_data_path: default_data_json_path(),
             signal_db_path: default_signal_db_path(),
             first_name_only: false,
@@ -116,7 +143,7 @@ impl Config {
     /// 4. $HOME/.gurk.toml
     ///
     /// If no config is found returns `None`.
-    pub(crate) fn load_installed() -> anyhow::Result<Option<LoadedConfig>> {
+    pub fn load_installed() -> anyhow::Result<Option<LoadedConfig>> {
         installed_config().map(Self::load).transpose()
     }
 
@@ -128,11 +155,13 @@ impl Config {
     /// Saves a new config file in case it does not exist.
     ///
     /// Also makes sure that the `config.data_path` exists.
-    pub fn save_new(&self) -> anyhow::Result<()> {
+    pub fn save_new(&self) -> anyhow::Result<PathBuf> {
         let config_dir =
             dirs::config_dir().ok_or_else(|| anyhow!("could not find default config directory"))?;
         let config_file = config_dir.join("gurk/gurk.toml");
-        self.save_new_at(config_file)
+        self.save_new_at(&config_file)
+            .with_context(|| format!("failed to save config at {}", config_file.display()))?;
+        Ok(config_file)
     }
 
     fn save_new_at(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
@@ -145,7 +174,7 @@ impl Config {
         }
 
         // make sure data_path exists
-        let data_path = data_dir();
+        let data_path = default_data_dir();
         fs::create_dir_all(data_path).context("could not create data dir")?;
 
         self.save(path)
@@ -220,10 +249,14 @@ impl Default for SqliteConfig {
 
 impl SqliteConfig {
     fn default_db_url() -> Url {
-        let path = data_dir().join("gurk.sqlite");
+        let path = default_data_dir().join("gurk.sqlite");
         format!("sqlite://{}", path.display())
             .parse()
             .expect("invalid default sqlite path")
+    }
+
+    fn is_default(&self) -> bool {
+        self == &Self::default()
     }
 }
 
@@ -259,8 +292,12 @@ fn installed_config() -> Option<PathBuf> {
 }
 
 /// Path to store the signal database containing the data for the linked device.
-pub fn default_signal_db_path() -> PathBuf {
-    data_dir().join("signal-db")
+fn default_signal_db_path() -> PathBuf {
+    default_data_dir().join("signal-db")
+}
+
+fn is_default_signal_db_path(path: &Path) -> bool {
+    path == default_signal_db_path()
 }
 
 /// Fallback to legacy data path location
@@ -268,14 +305,18 @@ pub fn fallback_data_path() -> Option<PathBuf> {
     dirs::home_dir().map(|p| p.join(".gurk.data.json"))
 }
 
-pub(crate) fn data_dir() -> PathBuf {
+fn default_data_dir() -> PathBuf {
     let data_dir =
         dirs::data_dir().expect("data directory not found, $XDG_DATA_HOME and $HOME are unset?");
     data_dir.join("gurk")
 }
 
+fn is_default_data_dir(path: &Path) -> bool {
+    path == default_data_dir()
+}
+
 fn default_data_json_path() -> PathBuf {
-    data_dir().join("gurk.data.json")
+    default_data_dir().join("gurk.data.json")
 }
 
 fn default_true() -> bool {
@@ -289,8 +330,7 @@ mod tests {
 
     fn example_user() -> User {
         User {
-            name: "Tyler Durden".to_string(),
-            phone_number: "+0000000000".to_string(),
+            display_name: "Tyler Durden".to_string(),
         }
     }
 

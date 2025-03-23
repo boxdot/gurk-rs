@@ -1,6 +1,6 @@
 //! Implementation of [`crate::signal::SignalManager`] via `presage`
 
-use std::pin::Pin;
+use std::{path::PathBuf, pin::Pin};
 
 use anyhow::Context;
 use async_trait::async_trait;
@@ -25,12 +25,9 @@ use tokio_util::task::LocalPoolHandle;
 use tracing::{error, warn};
 use uuid::Uuid;
 
+use crate::data::{Channel, ChannelId, GroupData, Message};
 use crate::receipt::Receipt;
 use crate::util::utc_now_timestamp_msec;
-use crate::{
-    config,
-    data::{Channel, ChannelId, GroupData, Message},
-};
 
 use super::{
     Attachment, GroupMasterKeyBytes, ProfileKeyBytes, ResolvedGroup, SignalManager, attachment,
@@ -38,16 +35,19 @@ use super::{
 
 pub(super) struct PresageManager {
     manager: presage::Manager<SledStore, Registered>,
+    data_dir: PathBuf,
     local_pool: LocalPoolHandle,
 }
 
 impl PresageManager {
     pub(super) fn new(
         manager: presage::Manager<SledStore, Registered>,
+        data_dir: PathBuf,
         local_pool: LocalPoolHandle,
     ) -> Self {
         Self {
             manager,
+            data_dir,
             local_pool,
         }
     }
@@ -56,7 +56,11 @@ impl PresageManager {
 #[async_trait(?Send)]
 impl SignalManager for PresageManager {
     fn clone_boxed(&self) -> Box<dyn SignalManager> {
-        Box::new(Self::new(self.manager.clone(), self.local_pool.clone()))
+        Box::new(Self::new(
+            self.manager.clone(),
+            self.data_dir.clone(),
+            self.local_pool.clone(),
+        ))
     }
 
     fn user_id(&self) -> Uuid {
@@ -100,7 +104,7 @@ impl SignalManager for PresageManager {
         attachment_pointer: AttachmentPointer,
     ) -> anyhow::Result<Attachment> {
         let attachment_data = self.manager.get_attachment(&attachment_pointer).await?;
-        attachment::save(config::data_dir(), attachment_pointer, &attachment_data)
+        attachment::save(&self.data_dir, attachment_pointer, &attachment_data)
     }
 
     fn send_receipt(&self, sender_uuid: Uuid, timestamps: Vec<u64>, receipt: Receipt) {
@@ -151,7 +155,6 @@ impl SignalManager for PresageManager {
         };
 
         if has_attachments {
-            let data_dir = config::data_dir();
             for (spec, data) in &attachments {
                 let attachment_pointer = AttachmentPointer {
                     content_type: Some(spec.content_type.clone()),
@@ -163,7 +166,7 @@ impl SignalManager for PresageManager {
                     upload_timestamp: Some(utc_now_timestamp_msec()),
                     ..Default::default()
                 };
-                match attachment::save(&data_dir, attachment_pointer, data) {
+                match attachment::save(&self.data_dir, attachment_pointer, data) {
                     Ok(attachment) => {
                         let line_break = if message.is_empty() { "" } else { "\n" };
                         message +=

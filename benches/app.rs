@@ -13,8 +13,7 @@ fn test_app() -> App {
         Config {
             notifications: false,
             ..Config::with_user(User {
-                name: "Tyler Durden".to_string(),
-                phone_number: "+0000000000".to_string(),
+                display_name: "Tyler Durden".to_string(),
             })
         },
         Box::new(SignalManagerMock::new()),
