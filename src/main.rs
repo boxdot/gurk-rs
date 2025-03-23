@@ -57,7 +57,7 @@ fn get_passphrase(args: &mut Args) -> anyhow::Result<Passphrase> {
     if let Some(passphrase) = Config::load_installed_passphrase()? {
         return Ok(passphrase);
     }
-    Passphrase::new(Password::new().with_prompt("Passphrase").interact()?)
+    Passphrase::new(Password::new().with_prompt("Enter passphrase").interact()?)
 }
 
 fn main() -> anyhow::Result<()> {
@@ -115,11 +115,7 @@ async fn run(passphrase: Passphrase, relink: bool) -> anyhow::Result<()> {
         signal::ensure_linked_device(relink, local_pool.clone(), &passphrase).await?;
 
     let mut storage: Box<dyn Storage> = {
-        debug!(
-            %config.sqlite.url,
-            encrypt = config.passphrase.is_some(),
-            "opening sqlite"
-        );
+        debug!(%config.sqlite.url, "opening sqlite");
         let mut sqlite_storage = SqliteStorage::maybe_encrypt_and_open(
             &config.sqlite.url,
             &passphrase,

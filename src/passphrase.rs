@@ -2,7 +2,7 @@ use std::{fmt, str::FromStr};
 
 use anyhow::ensure;
 use serde::{Deserialize, Deserializer, Serialize, de};
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 #[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop, Serialize)]
 pub struct Passphrase(String);
@@ -12,6 +12,14 @@ impl Passphrase {
         let passphrase = passphrase.into();
         ensure!(!passphrase.is_empty(), "passphrase cannot be empty");
         Ok(Self(passphrase))
+    }
+
+    pub(crate) fn sqlite_string(&self) -> Zeroizing<String> {
+        self.0.replace("'", "''").into()
+    }
+
+    pub(crate) fn sqlite_pragma_key(&self) -> Zeroizing<String> {
+        format!("'{}'", self.sqlite_string().as_str()).into()
     }
 }
 
