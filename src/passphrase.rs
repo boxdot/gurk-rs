@@ -55,6 +55,7 @@ impl Passphrase {
         Passphrase::new(value)
     }
 
+    #[cfg(target_os = "macos")]
     pub(crate) fn store_in_keychain(&self, user: &str) -> anyhow::Result<()> {
         use anyhow::Context;
         security_framework::passwords::set_generic_password(
