@@ -1,17 +1,69 @@
 use std::{fmt, str::FromStr};
 
 use anyhow::ensure;
+use dialoguer::{Password, theme::ColorfulTheme};
 use serde::{Deserialize, Deserializer, Serialize, de};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+
+use crate::config::Config;
+
+#[cfg(target_os = "macos")]
+const KEYCHAIN_SERVICE_NAME: &str = "gurk";
 
 #[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop, Serialize)]
 pub struct Passphrase(String);
 
 impl Passphrase {
+    /// Creates a new passphrase from a string.
+    ///
+    /// Checks that the passphrase is not empty.
     pub fn new(passphrase: impl Into<String>) -> anyhow::Result<Self> {
         let passphrase = passphrase.into();
         ensure!(!passphrase.is_empty(), "passphrase cannot be empty");
         Ok(Self(passphrase))
+    }
+
+    /// Gets the passphrase from difference sources in the following order:
+    ///
+    /// 1. CLI argument
+    /// 2. config file
+    /// 3. Keychain (macOS only)
+    /// 3. prompt for passphrase
+    pub fn get(
+        passphrase_cli: Option<Passphrase>,
+        config: &mut Config,
+    ) -> anyhow::Result<Passphrase> {
+        if let Some(passphrase) = passphrase_cli {
+            return Ok(passphrase);
+        }
+
+        if let Some(passphrase) = config.passphrase.take() {
+            return Ok(passphrase);
+        }
+
+        #[cfg(target_os = "macos")]
+        if let Ok(value) = security_framework::passwords::get_generic_password(
+            KEYCHAIN_SERVICE_NAME,
+            &config.user.display_name,
+        ) {
+            return Passphrase::new(String::from_utf8(value)?);
+        }
+
+        let value = Password::with_theme(&ColorfulTheme::default())
+            .with_prompt("Enter passphrase")
+            .interact()?;
+        Passphrase::new(value)
+    }
+
+    #[cfg(target_os = "macos")]
+    pub(crate) fn store_in_keychain(&self, user: &str) -> anyhow::Result<()> {
+        use anyhow::Context;
+        security_framework::passwords::set_generic_password(
+            KEYCHAIN_SERVICE_NAME,
+            user,
+            self.0.as_bytes(),
+        )
+        .context("Failed to store passphrase to keychain")
     }
 
     pub(crate) fn sqlite_string(&self) -> Zeroizing<String> {

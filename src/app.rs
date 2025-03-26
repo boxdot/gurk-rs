@@ -179,7 +179,7 @@ impl App {
     pub fn name_by_id_cached(&self, id: Uuid) -> String {
         if self.user_id == id {
             // it's me
-            return self.config.user.name.clone();
+            return self.config.user.display_name.clone();
         };
 
         let cache = self.names_cache.take().unwrap_or_default();
@@ -223,7 +223,7 @@ impl App {
     pub async fn name_by_id(&self, id: Uuid) -> String {
         if self.user_id == id {
             // it's me
-            self.config.user.name.clone()
+            self.config.user.display_name.clone()
         } else {
             self.name_by_id_or_cache(id, |id| self.resolve_name(id))
                 .await
@@ -1298,7 +1298,7 @@ impl App {
         } else {
             let channel = Channel {
                 id: user_id.into(),
-                name: self.config.user.name.clone(),
+                name: self.config.user.display_name.clone(),
                 group_data: None,
                 unread_messages: 0,
                 typing: TypingSet::SingleTyping(false),
@@ -1764,8 +1764,7 @@ pub(crate) mod tests {
         );
 
         let user = User {
-            name: "Tyler Durden".to_string(),
-            phone_number: "+0000000000".to_string(),
+            display_name: "Tyler Durden".to_string(),
         };
         let (mut app, events) = App::try_new(
             Config::with_user(user),

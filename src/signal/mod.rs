@@ -5,19 +5,16 @@ pub mod test;
 
 use std::path::Path;
 
-use anyhow::{Context as _, anyhow, bail};
+use anyhow::{Context as _, anyhow};
 use futures_channel::oneshot;
 use image::Luma;
 use presage::{libsignal_service::configuration::SignalServers, model::identity::OnNewIdentity};
 use presage_store_sled::{MigrationConflictStrategy, SledStore};
 use tokio_util::task::LocalPoolHandle;
-use tracing::{error, warn};
+use tracing::error;
 use url::Url;
 
-use crate::{
-    config::{self, Config, DeprecatedConfigKey, DeprecatedKeys, LoadedConfig},
-    passphrase::Passphrase,
-};
+use crate::{config::Config, passphrase::Passphrase};
 
 use self::r#impl::PresageManager;
 pub use self::manager::{Attachment, ResolvedGroup, SignalManager};
@@ -42,33 +39,11 @@ pub type GroupIdentifierBytes = [u8; GROUP_IDENTIFIER_LEN];
 pub async fn ensure_linked_device(
     relink: bool,
     local_pool: LocalPoolHandle,
+    config: &Config,
     passphrase: &Passphrase,
-) -> anyhow::Result<(Box<dyn SignalManager + Send>, Config)> {
-    let config = Config::load_installed()?;
-
-    // warn about deprecated keys
-    let config = config.map(
-        |LoadedConfig {
-             config,
-             deprecated_keys: DeprecatedKeys { file_path, keys },
-         }| {
-            if !keys.is_empty() {
-                println!("In '{}':", file_path.display());
-                for DeprecatedConfigKey { key, message } in keys {
-                    warn!(key, message, "deprecated config key");
-                    println!("deprecated config key: {key}, {message}");
-                }
-            }
-            config
-        },
-    );
-
-    let db_path = config
-        .as_ref()
-        .map(|c| c.signal_db_path.clone())
-        .unwrap_or_else(config::default_signal_db_path);
+) -> anyhow::Result<Box<dyn SignalManager + Send>> {
     let store = SledStore::open_with_passphrase(
-        db_path,
+        &config.signal_db_path,
         Some(passphrase),
         MigrationConflictStrategy::BackupAndDrop,
         OnNewIdentity::Trust,
@@ -76,24 +51,33 @@ pub async fn ensure_linked_device(
     .await?;
 
     if !relink {
-        if let Some(config) = config.clone() {
-            match presage::Manager::load_registered(store.clone()).await {
-                Ok(manager) => {
-                    // done loading manager from store
-                    return Ok((Box::new(PresageManager::new(manager, local_pool)), config));
-                }
-                Err(e) => {
-                    bail!(
-                        "error loading manager. Try again later or run with --relink to force relink: {}",
-                        e
-                    )
-                }
-            };
+        match presage::Manager::load_registered(store.clone()).await {
+            Ok(manager) => {
+                // done loading manager from store
+                Ok(Box::new(PresageManager::new(
+                    manager,
+                    config.data_dir.clone(),
+                    local_pool,
+                )))
+            }
+            Err(presage::Error::NotYetRegisteredError) => {
+                relink_device(local_pool, config, store).await
+            }
+            Err(error) => Err(error).context(
+                "error loading manager. Try again later or run with --relink to force relink",
+            ),
         }
+    } else {
+        relink_device(local_pool, config, store).await
     }
+}
 
-    // faulty manager, or no config, or explicit relink
-    // => link device
+async fn relink_device(
+    local_pool: LocalPoolHandle,
+    config: &Config,
+    store: SledStore,
+) -> anyhow::Result<Box<dyn SignalManager + Send>> {
+    // explicit relink => link device
     let at_hostname = hostname::get()
         .ok()
         .and_then(|hostname| {
@@ -124,39 +108,15 @@ pub async fn ensure_linked_device(
     let path = tempdir.path().join("qrcode.png");
     let qrcode_task = gen_qr_code(rx, &path);
 
-    let (mut manager, _) = tokio::try_join!(link_task, qrcode_task)?;
-    drop(tempdir); // make sure tempdir is dropped *after* qrcode_task
+    let (manager, _) = tokio::try_join!(link_task, qrcode_task)?;
+    drop(tempdir);
+    // make sure tempdir is dropped *after* qrcode_task
 
-    // get profile
-    let phone_number = manager
-        .registration_data()
-        .phone_number
-        .format()
-        .mode(phonenumber::Mode::E164)
-        .to_string();
-    let profile = manager
-        .retrieve_profile()
-        .await
-        .context("failed to get the user profile")?;
-    let name = profile
-        .name
-        .map(|name| name.given_name)
-        .unwrap_or_else(whoami::username);
-
-    let config = if let Some(config) = config {
-        // check that config fits the profile
-        if config.user.phone_number != phone_number {
-            bail!("Wrong phone number in the config. Please adjust it.");
-        }
-        config
-    } else {
-        let user = config::User { name, phone_number };
-        let config = config::Config::with_user(user);
-        config.save_new().context("failed to init config file")?;
-        config
-    };
-
-    Ok((Box::new(PresageManager::new(manager, local_pool)), config))
+    Ok(Box::new(PresageManager::new(
+        manager,
+        config.data_dir.clone(),
+        local_pool,
+    )))
 }
 
 async fn gen_qr_code(rx: oneshot::Receiver<Url>, path: &Path) -> anyhow::Result<()> {

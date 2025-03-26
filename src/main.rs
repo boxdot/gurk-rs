@@ -15,11 +15,13 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use dialoguer::Password;
-use gurk::storage::{JsonStorage, MemCache, SqliteStorage, Storage, sync_from_signal};
 use gurk::{app::App, config::Config};
 use gurk::{backoff::Backoff, passphrase::Passphrase};
 use gurk::{config, signal, ui};
+use gurk::{
+    onboarding,
+    storage::{JsonStorage, MemCache, SqliteStorage, Storage, sync_from_signal},
+};
 use presage::libsignal_service::content::Content;
 use ratatui::{Terminal, backend::CrosstermBackend};
 use tokio::{runtime, select};
@@ -50,16 +52,6 @@ struct Args {
     passphrase: Option<Passphrase>,
 }
 
-fn get_passphrase(args: &mut Args) -> anyhow::Result<Passphrase> {
-    if let Some(passphrase) = args.passphrase.take() {
-        return Ok(passphrase);
-    }
-    if let Some(passphrase) = Config::load_installed_passphrase()? {
-        return Ok(passphrase);
-    }
-    Passphrase::new(Password::new().with_prompt("Enter passphrase").interact()?)
-}
-
 fn main() -> anyhow::Result<()> {
     let mut args = Args::parse();
 
@@ -78,13 +70,20 @@ fn main() -> anyhow::Result<()> {
 
     log_panics::init();
 
-    let passphrase = get_passphrase(&mut args)?;
+    let (config, passphrase) = match Config::load_installed().context("failed to load config")? {
+        Some(config) => {
+            let mut config = config.report_deprecated_keys();
+            let passphrase = Passphrase::get(args.passphrase.take(), &mut config)?;
+            (config, passphrase)
+        }
+        None => onboarding::run()?,
+    };
 
     let runtime = runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
         .build()?;
-    runtime.block_on(run(passphrase, args.relink))
+    runtime.block_on(run(config, passphrase, args.relink))
 }
 
 async fn is_online() -> bool {
@@ -108,11 +107,11 @@ pub enum Event {
     AppEvent(gurk::event::Event),
 }
 
-async fn run(passphrase: Passphrase, relink: bool) -> anyhow::Result<()> {
+async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Result<()> {
     let local_pool = LocalPoolHandle::new(2);
 
-    let (mut signal_manager, config) =
-        signal::ensure_linked_device(relink, local_pool.clone(), &passphrase).await?;
+    let mut signal_manager =
+        signal::ensure_linked_device(relink, local_pool.clone(), &config, &passphrase).await?;
 
     let mut storage: Box<dyn Storage> = {
         debug!(%config.sqlite.url, "opening sqlite");
