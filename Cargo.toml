@@ -28,8 +28,8 @@ debug = true
 dev = ["prost", "base64"]
 
 [dependencies]
-presage = { git = "https://github.com/whisperfish/presage", rev = "473c70d" }
-presage-store-sled = { git = "https://github.com/whisperfish/presage", rev = "473c70d" }
+presage = { git = "https://github.com/whisperfish/presage", rev = "3f55d5f" }
+presage-store-sqlite = { git = "https://github.com/whisperfish/presage", rev = "3f55d5f" }
 
 # dev feature dependencies
 prost = { version = "0.13.4", optional = true }
@@ -120,7 +120,7 @@ harness = false
 
 # [patch."https://github.com/whisperfish/presage.git"]
 # presage = { path = "../presage/presage" }
-# presage-store-sled = { path = "../presage/presage-store-sled" }
+# presage-store-sqlite = { path = "../presage/presage-store-sqlite" }
 #
 # [patch."https://github.com/whisperfish/libsignal-service-rs"]
 # libsignal-service = { path = "../libsignal-service-rs/libsignal-service" }

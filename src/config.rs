@@ -8,6 +8,9 @@ use std::path::{Path, PathBuf};
 
 use crate::{command::ModeKeybindingConfig, passphrase::Passphrase};
 
+const GURK_DB_NAME: &str = "gurk.sqlite";
+const SIGNAL_DB_NAME: &str = "signal.sqlite";
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
     /// Directory to store messages and signal database, and attachments.
@@ -25,10 +28,11 @@ pub struct Config {
     pub deprecated_data_path: PathBuf,
     /// Path to the Signal database containing the linked device data.
     #[serde(
+        rename = "signal_db_path",
         default = "default_signal_db_path",
         skip_serializing_if = "is_default_signal_db_path"
     )]
-    pub signal_db_path: PathBuf,
+    pub deprecated_signal_db_path: PathBuf,
     /// Whether only to show the first name of a contact
     #[serde(default)]
     pub first_name_only: bool,
@@ -120,7 +124,7 @@ impl Config {
             user,
             data_dir: default_data_dir(),
             deprecated_data_path: default_data_json_path(),
-            signal_db_path: default_signal_db_path(),
+            deprecated_signal_db_path: default_signal_db_path(),
             first_name_only: false,
             show_receipts: true,
             notifications: true,
@@ -204,6 +208,13 @@ impl Config {
                 message: "is not used anymore, and is migrated to sqlite.url",
             });
         }
+        if config_value.get("signal_db_path").is_some() {
+            keys.push(DeprecatedConfigKey {
+                key: "signal_db_path",
+                message: "is not used anymore; use `data_dir` instead",
+            });
+        }
+
         let deprecated_keys = DeprecatedKeys {
             file_path: path.to_path_buf(),
             keys,
@@ -225,6 +236,14 @@ impl Config {
         fs::write(path, content)?;
         Ok(())
     }
+
+    pub fn gurk_db_path(&self) -> PathBuf {
+        self.data_dir.join(GURK_DB_NAME)
+    }
+
+    pub(crate) fn signal_db_path(&self) -> PathBuf {
+        self.data_dir.join(SIGNAL_DB_NAME)
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -234,7 +253,7 @@ pub struct SqliteConfig {
     /// Don't delete the unencrypted db, after applying encryption to it
     ///
     /// Useful for testing.
-    #[serde(default, rename = "_preserve_unencryped")]
+    #[serde(default, rename = "_preserve_unencrypted")]
     pub preserve_unencrypted: bool,
 }
 
@@ -328,22 +347,15 @@ mod tests {
     use super::*;
     use tempfile::{NamedTempFile, TempDir, tempdir};
 
-    fn example_user() -> User {
-        User {
-            display_name: "Tyler Durden".to_string(),
-        }
-    }
-
     fn example_config_with_random_paths(dir: &TempDir) -> Config {
         let data_dir = dir.path().join("some-data-dir/some-other-dir/data.json");
         assert!(!data_dir.parent().unwrap().exists());
-        let signal_db_path = dir.path().join("some-signal-db-dir/some-other-dir");
-        assert!(!signal_db_path.exists());
 
         Config {
             data_dir,
-            signal_db_path,
-            ..Config::with_user(example_user())
+            ..Config::with_user(User {
+                display_name: "Tyler Durden".to_string(),
+            })
         }
     }
 
@@ -362,7 +374,6 @@ mod tests {
         assert_eq!(config, loaded_config);
 
         assert!(config_path.parent().unwrap().exists()); // data path parent is created
-        assert!(!config.signal_db_path.exists()); // signal path is not touched
 
         Ok(())
     }
@@ -374,7 +385,6 @@ mod tests {
         let file = NamedTempFile::new()?;
 
         assert!(config.save_new_at(file.path()).is_err());
-        assert!(!config.signal_db_path.exists()); // signal path is not touched
 
         Ok(())
     }

@@ -114,7 +114,7 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
         signal::ensure_linked_device(relink, local_pool.clone(), &config, &passphrase).await?;
 
     let mut storage: Box<dyn Storage> = {
-        debug!(%config.sqlite.url, "opening sqlite");
+        debug!(%config.sqlite.url, "opening sqlite data storage");
         let mut sqlite_storage = SqliteStorage::maybe_encrypt_and_open(
             &config.sqlite.url,
             &passphrase,
