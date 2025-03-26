@@ -589,7 +589,7 @@ fn display_message(
     );
 
     if let Some(reason) = msg.send_failed.as_deref() {
-        let error = format!("[Could no send: {reason}]");
+        let error = format!("[Could not send: {reason}]");
         let error_style = Style::default().fg(Color::Red);
         spans.extend(
             textwrap::wrap(&error, &wrap_opts)
