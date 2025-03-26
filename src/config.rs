@@ -335,13 +335,13 @@ mod tests {
     }
 
     fn example_config_with_random_paths(dir: &TempDir) -> Config {
-        let data_path = dir.path().join("some-data-dir/some-other-dir/data.json");
-        assert!(!data_path.parent().unwrap().exists());
+        let data_dir = dir.path().join("some-data-dir/some-other-dir/data.json");
+        assert!(!data_dir.parent().unwrap().exists());
         let signal_db_path = dir.path().join("some-signal-db-dir/some-other-dir");
         assert!(!signal_db_path.exists());
 
         Config {
-            deprecated_data_path: data_path,
+            data_dir,
             signal_db_path,
             ..Config::with_user(example_user())
         }
@@ -374,7 +374,6 @@ mod tests {
         let file = NamedTempFile::new()?;
 
         assert!(config.save_new_at(file.path()).is_err());
-        assert!(!config.deprecated_data_path.parent().unwrap().exists()); // data path parent is not touched
         assert!(!config.signal_db_path.exists()); // signal path is not touched
 
         Ok(())
