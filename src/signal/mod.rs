@@ -51,15 +51,22 @@ pub async fn ensure_linked_device(
     .await?;
 
     if !relink {
-        let manager = presage::Manager::load_registered(store).await.context(
-            "error loading manager. Try again later or run with --relink to force relink",
-        )?;
-        // done loading manager from store
-        Ok(Box::new(PresageManager::new(
-            manager,
-            config.data_dir.clone(),
-            local_pool,
-        )))
+        match presage::Manager::load_registered(store.clone()).await {
+            Ok(manager) => {
+                // done loading manager from store
+                Ok(Box::new(PresageManager::new(
+                    manager,
+                    config.data_dir.clone(),
+                    local_pool,
+                )))
+            }
+            Err(presage::Error::NotYetRegisteredError) => {
+                relink_device(local_pool, config, store).await
+            }
+            Err(error) => Err(error).context(
+                "error loading manager. Try again later or run with --relink to force relink",
+            ),
+        }
     } else {
         relink_device(local_pool, config, store).await
     }

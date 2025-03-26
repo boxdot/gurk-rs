@@ -70,8 +70,8 @@ pub fn run() -> anyhow::Result<(Config, Passphrase)> {
         PassphraseStorage::ConfigFile => {
             config.passphrase = Some(passphrase.clone());
         }
+        #[cfg(target_os = "macos")]
         PassphraseStorage::Keychain => {
-            #[cfg(target_os = "macos")]
             passphrase.store_in_keychain(&config.user.display_name)?;
         }
         PassphraseStorage::DontStore => {}
