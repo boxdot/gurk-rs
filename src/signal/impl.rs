@@ -17,7 +17,7 @@ use presage::{
     libsignal_service::content::{Content, ContentBody},
     model::messages::Received,
 };
-use presage_store_sled::SledStore;
+use presage_store_sqlite::SqliteStore;
 use sha2::Digest;
 use tokio::sync::oneshot;
 use tokio_stream::{Stream, StreamExt};
@@ -34,14 +34,14 @@ use super::{
 };
 
 pub(super) struct PresageManager {
-    manager: presage::Manager<SledStore, Registered>,
+    manager: presage::Manager<SqliteStore, Registered>,
     data_dir: PathBuf,
     local_pool: LocalPoolHandle,
 }
 
 impl PresageManager {
     pub(super) fn new(
-        manager: presage::Manager<SledStore, Registered>,
+        manager: presage::Manager<SqliteStore, Registered>,
         data_dir: PathBuf,
         local_pool: LocalPoolHandle,
     ) -> Self {
@@ -403,7 +403,7 @@ impl SignalManager for PresageManager {
 }
 
 async fn upload_attachments(
-    manager: &presage::Manager<SledStore, Registered>,
+    manager: &presage::Manager<SqliteStore, Registered>,
     attachments: Vec<(AttachmentSpec, Vec<u8>)>,
     data_message: &mut DataMessage,
 ) -> anyhow::Result<()> {
