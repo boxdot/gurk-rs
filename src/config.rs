@@ -49,8 +49,8 @@ pub struct Config {
     #[cfg(feature = "dev")]
     #[serde(default, skip_serializing_if = "DeveloperConfig::is_default")]
     pub developer: DeveloperConfig,
-    #[serde(default, skip_serializing_if = "SqliteConfig::is_default")]
-    pub sqlite: SqliteConfig,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sqlite: Option<SqliteConfig>,
     #[serde(default)]
     /// If set, enables encryption of the key store and messages database
     pub passphrase: Option<Passphrase>,
@@ -214,6 +214,12 @@ impl Config {
                 message: "is not used anymore; use `data_dir` instead",
             });
         }
+        if config_value.get("sqlite").is_some() {
+            keys.push(DeprecatedConfigKey {
+                key: "sqlite",
+                message: "will be removed in a future version; use `<data_dir>/gurk.sqlite` instead",
+            });
+        }
 
         let deprecated_keys = DeprecatedKeys {
             file_path: path.to_path_buf(),
@@ -257,25 +263,12 @@ pub struct SqliteConfig {
     pub preserve_unencrypted: bool,
 }
 
-impl Default for SqliteConfig {
-    fn default() -> Self {
-        Self {
-            url: Self::default_db_url(),
-            preserve_unencrypted: false,
-        }
-    }
-}
-
 impl SqliteConfig {
     fn default_db_url() -> Url {
         let path = default_data_dir().join("gurk.sqlite");
         format!("sqlite://{}", path.display())
             .parse()
             .expect("invalid default sqlite path")
-    }
-
-    fn is_default(&self) -> bool {
-        self == &Self::default()
     }
 }
 
