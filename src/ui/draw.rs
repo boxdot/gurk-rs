@@ -612,7 +612,7 @@ fn replace_mentions(msg: &Message, names: &NameResolver, text: String) -> String
     }
 
     let ac = aho_corasick::AhoCorasickBuilder::new()
-        .build(std::iter::repeat("￼").take(msg.body_ranges.len())) // TODO: cache
+        .build(std::iter::repeat_n("￼", msg.body_ranges.len())) // TODO: cache
         .expect("failed to build obj replacer");
     let mut buf = String::with_capacity(text.len());
     let mut ranges = msg.body_ranges.iter();
