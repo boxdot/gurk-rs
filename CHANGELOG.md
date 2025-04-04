@@ -1,5 +1,26 @@
 # Changelog
 
+All notable changes to this project will be documented in this file.
+
+## [0.7.0] - 2025-04-04
+
+⚠️ This release requires relinking.
+
+The data is now encrypted at rest by default. As a result, a passphrase is now
+required. If not provided as a CLI argument, you will be prompted for it at
+startup. On macOS, the passphrase can be retrieved from the keychain.
+
+### 🚀 Features
+
+- Make passphrase obligatory (#389)
+- Add on-boarding flow when there is no config (#391)
+- Replace presage sled store with sqlite (#388)
+
+### 🐛 Bug Fixes
+
+- Uploading attachments via presage update (#393)
+- Typo in error message (#394)
+
 ## 0.6.4
 
 ### Fixes
