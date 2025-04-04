@@ -9,9 +9,9 @@ use anyhow::{Context as _, anyhow};
 use futures_channel::oneshot;
 use image::Luma;
 use presage::{libsignal_service::configuration::SignalServers, model::identity::OnNewIdentity};
-use presage_store_sled::{MigrationConflictStrategy, SledStore};
+use presage_store_sqlite::SqliteStore;
 use tokio_util::task::LocalPoolHandle;
-use tracing::error;
+use tracing::{error, info};
 use url::Url;
 
 use crate::{config::Config, passphrase::Passphrase};
@@ -28,27 +28,24 @@ pub type ProfileKeyBytes = [u8; PROFILE_KEY_LEN];
 pub type GroupMasterKeyBytes = [u8; GROUP_MASTER_KEY_LEN];
 pub type GroupIdentifierBytes = [u8; GROUP_IDENTIFIER_LEN];
 
-/// Makes sure that we have a linked device.
-///
-/// Either,
-///
-/// 1. links a new device (if no config file found), and writes a new config file with username
-///    and phone number, or
-/// 2. loads the config file and tries to create the Signal manager from configured Signal database
-///    path.
+/// Links a new device if manager fails with `NotYetRegisteredError` or if `relink` is true.
 pub async fn ensure_linked_device(
     relink: bool,
     local_pool: LocalPoolHandle,
     config: &Config,
     passphrase: &Passphrase,
 ) -> anyhow::Result<Box<dyn SignalManager + Send>> {
-    let store = SledStore::open_with_passphrase(
-        &config.signal_db_path,
-        Some(passphrase),
-        MigrationConflictStrategy::BackupAndDrop,
+    let path = config.signal_db_path();
+    info!(path =% path.display(), "opening signal storage");
+    let url = Url::from_file_path(&path)
+        .map_err(|_| anyhow!("failed to convert path '{}' to file url", path.display()))?;
+    let store = SqliteStore::open_with_passphrase(
+        url.as_str(),
+        Some(passphrase.as_ref()),
         OnNewIdentity::Trust,
     )
-    .await?;
+    .await
+    .with_context(|| format!("failed to open signal storage at: {}", path.display()))?;
 
     if !relink {
         match presage::Manager::load_registered(store.clone()).await {
@@ -75,7 +72,7 @@ pub async fn ensure_linked_device(
 async fn relink_device(
     local_pool: LocalPoolHandle,
     config: &Config,
-    store: SledStore,
+    store: SqliteStore,
 ) -> anyhow::Result<Box<dyn SignalManager + Send>> {
     // explicit relink => link device
     let at_hostname = hostname::get()
