@@ -22,7 +22,7 @@ jobs:
     strategy:
       matrix:
         toolchain:
-          - latest
+          - stable
           - 1.85.1 # MSRV
     runs-on: ubuntu-latest
     steps:
