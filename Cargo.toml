@@ -9,6 +9,7 @@ repository = "https://github.com/boxdot/gurk-rs"
 license = "AGPL-3.0-only"
 categories = ["command-line-utilities"]
 resolver = "2"
+rust-version = "1.85.1"
 
 [workspace]
 members = ["xtask"]
