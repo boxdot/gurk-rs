@@ -83,7 +83,7 @@ impl App {
                 .iter()
                 .position(|id| id == &channel_id)
                 .context("editing message in non-existent channel")?;
-            self.touch_channel(channel_idx);
+            self.touch_channel(channel_idx, from_id == self.user_id);
         }
 
         Ok(())

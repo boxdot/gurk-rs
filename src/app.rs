@@ -1108,6 +1108,7 @@ impl App {
             .storage
             .message(MessageId::new(channel_id, target_sent_timestamp))?
             .into_owned();
+        let from_current_user = self.user_id == message.from_id;
 
         let reaction_idx = message
             .reactions
@@ -1160,7 +1161,7 @@ impl App {
                 .iter()
                 .position(|id| id == &channel_id)
                 .expect("non-existent channel");
-            self.touch_channel(channel_idx);
+            self.touch_channel(channel_idx, from_current_user);
         }
 
         Some(())
@@ -1350,6 +1351,7 @@ impl App {
         let channel_id = self.channels.items[channel_idx];
 
         let message = self.storage.store_message(channel_id, message);
+        let from_current_user = self.user_id == message.from_id;
 
         let messages = self.messages.entry(channel_id).or_default();
         messages.items.push(message.arrived_at);
@@ -1359,11 +1361,11 @@ impl App {
             messages.state.select(Some(idx + 1));
         }
 
-        self.touch_channel(channel_idx);
+        self.touch_channel(channel_idx, from_current_user);
     }
 
-    pub(crate) fn touch_channel(&mut self, channel_idx: usize) {
-        if self.channels.state.selected() != Some(channel_idx) {
+    pub(crate) fn touch_channel(&mut self, channel_idx: usize, from_current_user: bool) {
+        if !from_current_user && self.channels.state.selected() != Some(channel_idx) {
             let channel_id = self.channels.items[channel_idx];
             let mut channel = self
                 .storage
