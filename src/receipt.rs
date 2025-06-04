@@ -1,6 +1,4 @@
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::collections::hash_map::Entry;
+use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 use tracing::error;
@@ -143,7 +141,7 @@ impl ReceiptHandler {
         true
     }
 
-    pub fn step(&mut self, signal_manager: &dyn SignalManager) -> bool {
+    pub fn step(&mut self, _signal_manager: &dyn SignalManager) -> bool {
         if !self.do_tick() {
             return false;
         }
@@ -151,25 +149,29 @@ impl ReceiptHandler {
             return false;
         }
 
-        // Get any key
-        let uuid = *self.receipt_set.keys().next().unwrap();
+        // For now, receipts are disabled
+        self.receipt_set.clear();
+        false
 
-        let j = self.receipt_set.entry(uuid);
-        match j {
-            Entry::Occupied(mut e) => {
-                let u = e.get_mut();
-                if let Some((timestamps, receipt)) = u.get_data() {
-                    signal_manager.send_receipt(uuid, timestamps, receipt);
-                    if u.is_empty() {
-                        e.remove_entry();
-                    }
-                    true
-                } else {
-                    false
-                }
-            }
-            Entry::Vacant(_) => false,
-        }
+        // // Get any key
+        // let uuid = *self.receipt_set.keys().next().unwrap();
+        //
+        // let j = self.receipt_set.entry(uuid);
+        // match j {
+        //     Entry::Occupied(mut e) => {
+        //         let u = e.get_mut();
+        //         if let Some((timestamps, receipt)) = u.get_data() {
+        //             signal_manager.send_receipt(uuid, timestamps, receipt);
+        //             if u.is_empty() {
+        //                 e.remove_entry();
+        //             }
+        //             true
+        //         } else {
+        //             false
+        //         }
+        //     }
+        //     Entry::Vacant(_) => false,
+        // }
     }
 }
 

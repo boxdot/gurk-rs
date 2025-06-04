@@ -29,8 +29,8 @@ debug = true
 dev = ["prost", "base64"]
 
 [dependencies]
-presage = { git = "https://github.com/whisperfish/presage", rev = "0da7b5774" }
-presage-store-sqlite = { git = "https://github.com/whisperfish/presage", rev = "0da7b5774" }
+presage = { git = "https://github.com/whisperfish/presage", rev = "d3a760088" }
+presage-store-sqlite = { git = "https://github.com/whisperfish/presage", rev = "d3a760088" }
 
 # dev feature dependencies
 prost = { version = "0.13.4", optional = true }
@@ -124,7 +124,7 @@ harness = false
 # presage-store-sqlite = { path = "../presage/presage-store-sqlite" }
 #
 # [patch."https://github.com/whisperfish/libsignal-service-rs"]
-# libsignal-service = { path = "../libsignal-service-rs/libsignal-service" }
+# libsignal-service = { path = "../libsignal-service-rs" }
 
 [patch.crates-io]
 # signal-protocol uses a fork of this library via the patch mechanism of cargo.
