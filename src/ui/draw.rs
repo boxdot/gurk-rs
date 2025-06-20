@@ -18,7 +18,6 @@ use ratatui::{
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use uuid::Uuid;
 
-use crate::app::App;
 use crate::channels::SelectChannel;
 use crate::command::{Command, WindowMode};
 use crate::cursor::Cursor;
@@ -26,6 +25,7 @@ use crate::data::{AssociatedValue, Message};
 use crate::receipt::{Receipt, ReceiptEvent};
 use crate::storage::MessageId;
 use crate::util::utc_timestamp_msec_to_local;
+use crate::{app::App, config::Theme};
 
 use super::CHANNEL_VIEW_RATIO;
 use super::name_resolver::NameResolver;
@@ -205,7 +205,8 @@ fn draw_chat(f: &mut Frame, app: &mut App, area: Rect) {
         .direction(Direction::Vertical)
         .split(area);
 
-    draw_messages(f, app, chunks[0]);
+    let theme = app.config.ui.theme;
+    theme.draw_messages(f, app, chunks[0]);
 
     let title = match (app.is_editing(), app.is_multiline_input) {
         (true, true) => "Input (Editing, Multiline)",
@@ -273,166 +274,358 @@ fn prepare_receipts(app: &mut App, height: usize) {
     }
 }
 
-fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
-    // area without borders
-    let height = area.height.saturating_sub(2) as usize;
-    if height == 0 {
-        return;
-    }
-    let width = area.width.saturating_sub(2) as usize;
-
-    prepare_receipts(app, height);
-
-    let Some(&channel_id) = app.channels.selected_item() else {
-        f.render_widget(
-            Paragraph::new("No Channel selected")
-                .block(
-                    Block::bordered()
-                        .title("Messages")
-                        .padding(Padding::top(area.height / 2)),
-                )
-                .centered(),
-            area,
-        );
-        return;
-    };
-
-    let channel = app
-        .storage
-        .channel(channel_id)
-        .expect("non-existent channel");
-
-    let writing_people = app.writing_people(&channel);
-
-    // Calculate the offset in messages we start rendering with.
-    // `offset` includes the selected message (if any), and is at most height-many messages to
-    // the selected message, since we can't render more than height-many of them.
-    let messages = &app.messages[&channel_id];
-    let offset = if let Some(selected) = messages.state.selected() {
-        messages
-            .rendered
-            .offset
-            .clamp(selected.saturating_sub(height), selected)
-    } else {
-        messages.rendered.offset
-    };
-    let messages_to_render = messages
-        .items
-        .iter()
-        .rev()
-        .skip(offset)
-        .take(height)
-        .copied();
-
-    let names = NameResolver::compute(
-        app,
-        messages_to_render
-            .clone()
-            .map(|arrived_at| MessageId::new(channel_id, arrived_at)),
-    );
-    let max_username_width = names.max_name_width();
-
-    // message display options
-    const TIME_WIDTH: usize = 6; // width of "00:00 "
-    const DELIMITER_WIDTH: usize = 2;
-    let mut prefix_width = TIME_WIDTH + max_username_width + DELIMITER_WIDTH;
-    if app.config.show_receipts {
-        prefix_width += RECEIPT_WIDTH;
-    }
-    let prefix = " ".repeat(prefix_width);
-
-    // The day of the message at the bottom of the viewport
-    let mut previous_msg_day =
-        utc_timestamp_msec_to_local(messages_to_render.clone().next().unwrap_or_default())
-            .num_days_from_ce();
-
-    let messages_from_offset = messages_to_render
-        .flat_map(|arrived_at| {
-            let Some(msg) = app.storage.message(MessageId::new(channel_id, arrived_at)) else {
-                return [None, None];
-            };
-            let date_division = display_date_line(msg.arrived_at, &mut previous_msg_day, width);
-            let show_receipt = ShowReceipt::from_msg(&msg, app.user_id, app.config.show_receipts);
-            let msg = display_message(
-                &names,
-                &msg,
-                &prefix,
-                width,
-                height,
-                show_receipt,
-                app.config.colored_messages,
-            );
-            [date_division, msg]
-        })
-        .flatten();
-
-    // counters to accumulate messages as long they fit into the list height,
-    // or up to the selected message
-    let mut items_height = 0;
-    let selected = messages.state.selected().unwrap_or(0);
-
-    let mut items: Vec<ListItem<'static>> = messages_from_offset
-        .enumerate()
-        .take_while(|(idx, item)| {
-            items_height += item.height();
-            items_height <= height || offset + *idx <= selected
-        })
-        .map(|(_, item)| item)
-        .collect();
-
-    // calculate the new offset by counting the messages down:
-    // we known that we either stopped at the last fitting message or at the selected message
-    let mut items_height = height;
-    let mut first_idx = 0;
-    for (idx, item) in items.iter().enumerate().rev() {
-        if item.height() <= items_height {
-            items_height -= item.height();
-            first_idx = idx;
-        } else {
-            break;
+impl Theme {
+    fn draw_messages(&self, f: &mut Frame, app: &mut App, area: Rect) {
+        match self {
+            Theme::Default => self.draw_messages_default(f, app, area),
+            Theme::Condensed => self.draw_messages_condensed(f, app, area),
         }
     }
-    let offset = offset + first_idx;
-    items = items.split_off(first_idx);
 
-    // add unread messages line
-    let unread_messages = channel.unread_messages as usize;
-    if unread_messages > 0 && unread_messages < items.len() {
-        let new_message_line = "-".repeat(prefix_width)
-            + "new messages"
-            + &"-".repeat(width.saturating_sub(prefix_width));
-        items.insert(unread_messages, ListItem::new(Span::from(new_message_line)));
+    fn draw_messages_default(&self, f: &mut Frame, app: &mut App, area: Rect) {
+        // area without borders
+        let height = area.height.saturating_sub(2) as usize;
+        if height == 0 {
+            return;
+        }
+        let width = area.width.saturating_sub(2) as usize;
+
+        prepare_receipts(app, height);
+
+        let Some(&channel_id) = app.channels.selected_item() else {
+            f.render_widget(
+                Paragraph::new("No Channel selected")
+                    .block(
+                        Block::bordered()
+                            .title("Messages")
+                            .padding(Padding::top(area.height / 2)),
+                    )
+                    .centered(),
+                area,
+            );
+            return;
+        };
+
+        let channel = app
+            .storage
+            .channel(channel_id)
+            .expect("non-existent channel");
+
+        let writing_people = app.writing_people(&channel);
+
+        // Calculate the offset in messages we start rendering with.
+        // `offset` includes the selected message (if any), and is at most height-many messages to
+        // the selected message, since we can't render more than height-many of them.
+        let messages = &app.messages[&channel_id];
+        let offset = if let Some(selected) = messages.state.selected() {
+            messages
+                .rendered
+                .offset
+                .clamp(selected.saturating_sub(height), selected)
+        } else {
+            messages.rendered.offset
+        };
+        let messages_to_render = messages
+            .items
+            .iter()
+            .rev()
+            .skip(offset)
+            .take(height)
+            .copied();
+
+        let names = NameResolver::compute(
+            app,
+            messages_to_render
+                .clone()
+                .map(|arrived_at| MessageId::new(channel_id, arrived_at)),
+        );
+        let max_username_width = names.max_name_width();
+
+        // message display options
+        const TIME_WIDTH: usize = 6; // width of "00:00 "
+        const DELIMITER_WIDTH: usize = 2;
+        let mut prefix_width = TIME_WIDTH + max_username_width + DELIMITER_WIDTH;
+        if app.config.show_receipts {
+            prefix_width += RECEIPT_WIDTH;
+        }
+        let prefix = " ".repeat(prefix_width);
+
+        // The day of the message at the bottom of the viewport
+        let mut previous_msg_day =
+            utc_timestamp_msec_to_local(messages_to_render.clone().next().unwrap_or_default())
+                .num_days_from_ce();
+
+        let messages_from_offset = messages_to_render
+            .flat_map(|arrived_at| {
+                let Some(msg) = app.storage.message(MessageId::new(channel_id, arrived_at)) else {
+                    return [None, None];
+                };
+                let date_division = display_date_line(msg.arrived_at, &mut previous_msg_day, width);
+                let show_receipt =
+                    ShowReceipt::from_msg(&msg, app.user_id, app.config.show_receipts);
+                let msg = display_message(
+                    &names,
+                    &msg,
+                    &prefix,
+                    width,
+                    height,
+                    show_receipt,
+                    app.config.colored_messages,
+                );
+                [date_division, msg]
+            })
+            .flatten();
+
+        // counters to accumulate messages as long they fit into the list height,
+        // or up to the selected message
+        let mut items_height = 0;
+        let selected = messages.state.selected().unwrap_or(0);
+
+        let mut items: Vec<ListItem<'static>> = messages_from_offset
+            .enumerate()
+            .take_while(|(idx, item)| {
+                items_height += item.height();
+                items_height <= height || offset + *idx <= selected
+            })
+            .map(|(_, item)| item)
+            .collect();
+
+        // calculate the new offset by counting the messages down:
+        // we known that we either stopped at the last fitting message or at the selected message
+        let mut items_height = height;
+        let mut first_idx = 0;
+        for (idx, item) in items.iter().enumerate().rev() {
+            if item.height() <= items_height {
+                items_height -= item.height();
+                first_idx = idx;
+            } else {
+                break;
+            }
+        }
+        let offset = offset + first_idx;
+        items = items.split_off(first_idx);
+
+        // add unread messages line
+        let unread_messages = channel.unread_messages as usize;
+        if unread_messages > 0 && unread_messages < items.len() {
+            let new_message_line = "-".repeat(prefix_width)
+                + "new messages"
+                + &"-".repeat(width.saturating_sub(prefix_width));
+            items.insert(unread_messages, ListItem::new(Span::from(new_message_line)));
+        }
+
+        let title: String = if let Some(writing_people) = writing_people {
+            format!("Messages {writing_people}")
+        } else {
+            "Messages".to_string()
+        };
+
+        let list = List::new(items)
+            .block(Block::default().title(title).borders(Borders::ALL))
+            .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray))
+            .direction(ListDirection::BottomToTop);
+
+        // re-borrow channel messages mutably
+        let messages = app
+            .messages
+            .get_mut(&channel_id)
+            .expect("non-existent channel");
+
+        // update selected state to point within `items`
+        let state = &mut messages.state;
+        let selected_global = state.selected();
+        if let Some(selected) = selected_global {
+            state.select(Some(selected - offset));
+        }
+
+        f.render_stateful_widget(list, area, state);
+
+        // restore selected state and update offset
+        state.select(selected_global);
+        messages.rendered.offset = offset;
     }
 
-    let title: String = if let Some(writing_people) = writing_people {
-        format!("Messages {writing_people}")
-    } else {
-        "Messages".to_string()
-    };
+    fn draw_messages_condensed(&self, f: &mut Frame, app: &mut App, area: Rect) {
+        // area without borders
+        let height = area.height.saturating_sub(2) as usize;
+        if height == 0 {
+            return;
+        }
+        let width = area.width.saturating_sub(2) as usize;
 
-    let list = List::new(items)
-        .block(Block::default().title(title).borders(Borders::ALL))
-        .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray))
-        .direction(ListDirection::BottomToTop);
+        prepare_receipts(app, height);
 
-    // re-borrow channel messages mutably
-    let messages = app
-        .messages
-        .get_mut(&channel_id)
-        .expect("non-existent channel");
+        let Some(&channel_id) = app.channels.selected_item() else {
+            f.render_widget(
+                Paragraph::new("No Channel selected")
+                    .block(
+                        Block::bordered()
+                            .title("Messages")
+                            .padding(Padding::top(area.height / 2)),
+                    )
+                    .centered(),
+                area,
+            );
+            return;
+        };
 
-    // update selected state to point within `items`
-    let state = &mut messages.state;
-    let selected_global = state.selected();
-    if let Some(selected) = selected_global {
-        state.select(Some(selected - offset));
+        let channel = app
+            .storage
+            .channel(channel_id)
+            .expect("non-existent channel");
+
+        // Calculate the offset in messages we start rendering with.
+        // `offset` includes the selected message (if any), and is at most height-many messages to
+        // the selected message, since we can't render more than height-many of them.
+        let messages = &app.messages[&channel_id];
+        let offset = if let Some(selected) = messages.state.selected() {
+            messages
+                .rendered
+                .offset
+                .clamp(selected.saturating_sub(height), selected)
+        } else {
+            messages.rendered.offset
+        };
+        let messages_to_render = messages
+            .items
+            .iter()
+            .rev()
+            .skip(offset)
+            .take(height)
+            .copied();
+
+        let names = NameResolver::compute(
+            app,
+            messages_to_render
+                .clone()
+                .map(|arrived_at| MessageId::new(channel_id, arrived_at)),
+        );
+
+        let items = messages_to_render.into_iter().flat_map(|arrived_at| {
+            let msg = app
+                .storage
+                .message(MessageId::new(channel_id, arrived_at))?;
+
+            // text
+            let mut text =
+                strip_ansi_escapes::strip_str(msg.message.as_deref().unwrap_or_default());
+            replace_mentions(&msg, &names, &mut text);
+            add_attachments(&msg, &mut text);
+            if text.is_empty() {
+                return None; // no text => nothing to render
+            }
+            add_reactions(&msg, &mut text);
+            add_edited(&msg, &mut text);
+
+            // time
+            let time = Span::styled(
+                display_time(msg.arrived_at),
+                Style::default().fg(Color::Yellow),
+            );
+
+            // from
+            let (from, from_color) = names.resolve(msg.from_id);
+            let from = Span::styled(from.into_owned(), Style::default().fg(from_color));
+
+            // result
+            let mut lines: Vec<Line<'static>> = Default::default();
+
+            // quote
+            if let Some(quote_text) = msg
+                .quote
+                .as_ref()
+                .and_then(|quote| displayed_quote(&names, quote))
+            {
+                let quote_style = Style::default().fg(Color::Rgb(150, 150, 150));
+                lines.extend(
+                    textwrap::wrap(
+                        &quote_text,
+                        textwrap::Options::new(width.saturating_sub(2)).initial_indent("> "),
+                    )
+                    .into_iter()
+                    .map(|line| Line::from(Span::styled(line.into_owned(), quote_style))),
+                );
+            }
+
+            // message
+            let message_style = if app.config.colored_messages {
+                Style::default().fg(from_color)
+            } else {
+                Style::default()
+            };
+            const TIME_WIDTH: usize = 6; // width of "00:00 "
+            const SPACES: usize = 2;
+            let initial_indent = TIME_WIDTH + from.width() + SPACES;
+            let prefix = " ".repeat(initial_indent);
+            lines.extend(
+                textwrap::wrap(
+                    &text,
+                    textwrap::Options::new(width.saturating_sub(2)).initial_indent(&prefix),
+                )
+                .into_iter()
+                .enumerate()
+                .map(|(idx, line)| {
+                    if idx == 0 {
+                        Line::from(vec![
+                            time.clone(),
+                            from.clone(),
+                            Span::from(" "),
+                            Span::styled(
+                                line.strip_prefix(&prefix).unwrap().to_owned(),
+                                message_style,
+                            ),
+                        ])
+                    } else {
+                        Line::from(line.into_owned())
+                    }
+                }),
+            );
+
+            // error
+            if let Some(reason) = msg.send_failed.as_deref() {
+                let error = format!("[Could not send: {reason}]");
+                let error_style = Style::default().fg(Color::Red);
+                lines.extend(
+                    textwrap::wrap(&error, width.saturating_sub(2))
+                        .into_iter()
+                        .map(|line| Span::styled(line.into_owned(), error_style).into()),
+                );
+            }
+
+            Some(ListItem::new(Text::from(lines)))
+        });
+
+        let writing_people = app.writing_people(&channel);
+        let title: String = if let Some(writing_people) = writing_people {
+            format!("Messages {writing_people}")
+        } else {
+            "Messages".to_string()
+        };
+
+        let list = List::new(items)
+            .block(Block::default().title(title).borders(Borders::ALL))
+            .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray))
+            .direction(ListDirection::BottomToTop);
+
+        // re-borrow channel messages mutably
+        let messages = app
+            .messages
+            .get_mut(&channel_id)
+            .expect("non-existent channel");
+
+        // update selected state to point within `items`
+        let state = &mut messages.state;
+        let selected_global = state.selected();
+        if let Some(selected) = selected_global {
+            state.select(Some(selected - offset));
+        }
+
+        f.render_stateful_widget(list, area, state);
+
+        // restore selected state and update offset
+        state.select(selected_global);
+        messages.rendered.offset = offset;
     }
-
-    f.render_stateful_widget(list, area, state);
-
-    // restore selected state and update offset
-    state.select(selected_global);
-    messages.rendered.offset = offset;
 }
 
 fn display_time(timestamp: u64) -> String {
@@ -520,8 +713,8 @@ fn display_message(
         .subsequent_indent(prefix);
 
     // collect message text
-    let text = strip_ansi_escapes::strip_str(msg.message.as_deref().unwrap_or_default());
-    let mut text = replace_mentions(msg, names, text);
+    let mut text = strip_ansi_escapes::strip_str(msg.message.as_deref().unwrap_or_default());
+    replace_mentions(msg, names, &mut text);
     add_attachments(msg, &mut text);
     if text.is_empty() {
         return None; // no text => nothing to render
@@ -606,17 +799,18 @@ fn display_message(
     Some(ListItem::new(Text::from(spans)))
 }
 
-fn replace_mentions(msg: &Message, names: &NameResolver, text: String) -> String {
+fn replace_mentions(msg: &Message, names: &NameResolver, text: &mut String) {
     if msg.body_ranges.is_empty() {
-        return text;
+        return;
     }
 
     let ac = aho_corasick::AhoCorasickBuilder::new()
         .build(std::iter::repeat_n("￼", msg.body_ranges.len())) // TODO: cache
         .expect("failed to build obj replacer");
-    let mut buf = String::with_capacity(text.len());
+    let original_text = text.clone();
+    text.clear();
     let mut ranges = msg.body_ranges.iter();
-    ac.replace_all_with(&text, &mut buf, |_, _, dst| {
+    ac.replace_all_with(&original_text, text, |_, _, dst| {
         // TODO: check ranges?
         for range in &mut ranges {
             let (name, _color) = match range.value {
@@ -629,8 +823,6 @@ fn replace_mentions(msg: &Message, names: &NameResolver, text: String) -> String
         }
         false
     });
-
-    buf
 }
 
 fn display_date_line(
@@ -780,8 +972,10 @@ fn draw_help(f: &mut Frame, app: &mut App, area: Rect) {
 
 fn displayed_quote(names: &NameResolver, quote: &Message) -> Option<String> {
     let (name, _) = names.resolve(quote.from_id);
-    let text = format!("({}) {}", name, quote.message.as_ref()?);
-    Some(replace_mentions(quote, names, text))
+    let text = strip_ansi_escapes::strip_str(quote.message.as_deref()?);
+    let mut text = format!("({}) {}", name, text);
+    replace_mentions(quote, names, &mut text);
+    Some(text)
 }
 
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
