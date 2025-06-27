@@ -48,7 +48,7 @@ pub fn run() -> anyhow::Result<(Config, Passphrase)> {
         match Passphrase::new(passphrase.clone()) {
             Ok(value) => break value,
             Err(e) => {
-                println!("Invalid passphrase: {}", e);
+                println!("Invalid passphrase: {e}");
             }
         }
     };
