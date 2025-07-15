@@ -105,8 +105,8 @@ libraries that are not available on crates.io.
   * `ctrl+k / Down / PgDown` Next line
 
 ## File Uploads
-  * `file:///path/to/file` Uploads the File "file" at the path "/path/to/"
-  * `file://clip` Uploads Content of Current Clipboard
+  * `file:///path/to/file` Upload File "file" at path "/path/to/"
+  * `file://clip` Upload Content of Clipboard
 
 ## Configuration
 
