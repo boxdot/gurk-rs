@@ -28,7 +28,7 @@ impl Passphrase {
     /// 1. CLI argument
     /// 2. config file
     /// 3. Keychain (macOS only)
-    /// 3. prompt for passphrase
+    /// 4. prompt for passphrase
     pub fn get(
         passphrase_cli: Option<Passphrase>,
         config: &mut Config,
