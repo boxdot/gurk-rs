@@ -48,9 +48,14 @@ struct Args {
     relink: bool,
     /// Passphrase to use for encrypting the database
     ///
-    /// When omitted, passphrase is read from the config file, and if missing, prompted for.
-    #[arg(long, short)]
+    /// When omitted, passphrase is read from the config file, passphrase_command, and if missing, prompted for.
+    #[arg(long, short, conflicts_with = "passphrase_command")]
     passphrase: Option<Passphrase>,
+    /// Get a passphrase from external command. For example `pass`(password-store)
+    ///
+    /// When omitted, passphrase_command is read from the env "GURK_PASSPHRASE_COMMAND".
+    #[arg(long, conflicts_with = "passphrase")]
+    passphrase_command: Option<String>,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -74,7 +79,11 @@ fn main() -> anyhow::Result<()> {
     let (config, passphrase) = match Config::load_installed().context("failed to load config")? {
         Some(config) => {
             let mut config = config.report_deprecated_keys();
-            let passphrase = Passphrase::get(args.passphrase.take(), &mut config)?;
+            let passphrase = Passphrase::get(
+                args.passphrase.take(),
+                args.passphrase_command.take(),
+                &mut config,
+            )?;
             (config, passphrase)
         }
         None => onboarding::run()?,
