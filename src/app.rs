@@ -8,6 +8,7 @@ use std::path::Path;
 
 use anyhow::{Context as _, anyhow};
 use arboard::{Clipboard, ImageData};
+use chrono::Datelike;
 use chrono::{DateTime, Local, TimeZone};
 use crokey::Combiner;
 use crossterm::event::{KeyCode, KeyEvent};
@@ -43,6 +44,7 @@ use crate::signal::{
     SignalManager,
 };
 use crate::storage::{MessageId, Storage};
+use crate::util::utc_timestamp_msec_to_local;
 use crate::util::{self, ATTACHMENT_REGEX, StatefulList, URL_REGEX};
 
 pub struct App {
@@ -431,8 +433,33 @@ impl App {
         // Messages are shown in reversed order => selected is reversed
         let channel_id = self.channels.selected_item()?;
         let messages = self.messages.get(channel_id)?;
-        let idx = messages.state.selected()?;
-        let idx = messages.items.len().checked_sub(idx + 1)?;
+
+        // Retrieve the corrected index from the UI list
+        // - The raw UI index may include date lines, which breaks copying/reaction/etc. .
+        // - Dumb for loop detects day transitions and corrects the UI index.
+        // - It's not elegant, but it works!
+        let uncorrected_ui_idx = messages.state.selected()?;
+        let mut corrected_ui_idx = uncorrected_ui_idx;
+        for raw_idx in 0..uncorrected_ui_idx {
+            let lst_message_idx = messages.items.len().checked_sub(raw_idx + 1)?;
+            let cur_message_idx = messages.items.len().checked_sub(raw_idx + 2)?;
+
+            let lst_arrived_at = messages.items.get(lst_message_idx)?;
+            let cur_arrived_at = messages.items.get(cur_message_idx)?;
+
+            let lst_local_time = utc_timestamp_msec_to_local(*lst_arrived_at);
+            let cur_local_time = utc_timestamp_msec_to_local(*cur_arrived_at);
+
+            let lst_msg_day = lst_local_time.num_days_from_ce();
+            let cur_msg_day = cur_local_time.num_days_from_ce();
+
+            // Detect Day Transition - this means the index is one too large.
+            if lst_msg_day != cur_msg_day {
+                corrected_ui_idx -= 1;
+            }
+        }
+
+        let idx = messages.items.len().checked_sub(corrected_ui_idx + 1)?;
         let arrived_at = messages.items.get(idx)?;
         Some(MessageId::new(*channel_id, *arrived_at))
     }
