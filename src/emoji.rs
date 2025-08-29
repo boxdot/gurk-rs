@@ -5,7 +5,7 @@ use regex::{Captures, Regex};
 
 static REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r":([a-z1238+-][a-z0-9_-]*):").unwrap());
 
-pub(crate) fn replace_shortcodes(text: &str) -> Cow<str> {
+pub(crate) fn replace_shortcodes(text: &str) -> Cow<'_, str> {
     REGEX.replace_all(text, Replacer)
 }
 
