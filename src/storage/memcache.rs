@@ -62,16 +62,16 @@ impl<S: Storage> MemCache<S> {
 }
 
 impl<S: Storage> Storage for MemCache<S> {
-    fn channels(&self) -> Box<dyn Iterator<Item = Cow<Channel>> + '_> {
+    fn channels(&self) -> Box<dyn Iterator<Item = Cow<'_, Channel>> + '_> {
         Box::new(self.channels.iter().map(Cow::Borrowed))
     }
 
-    fn channel(&self, channel_id: ChannelId) -> Option<Cow<Channel>> {
+    fn channel(&self, channel_id: ChannelId) -> Option<Cow<'_, Channel>> {
         let idx = *self.channels_index.get(&channel_id)?;
         self.channels.get(idx).map(Cow::Borrowed)
     }
 
-    fn store_channel(&mut self, channel: Channel) -> Cow<Channel> {
+    fn store_channel(&mut self, channel: Channel) -> Cow<'_, Channel> {
         match self.channels_index.entry(channel.id) {
             Entry::Vacant(entry) => {
                 entry.insert(self.channels.len());
@@ -89,7 +89,7 @@ impl<S: Storage> Storage for MemCache<S> {
     fn messages(
         &self,
         channel_id: ChannelId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_> {
+    ) -> Box<dyn DoubleEndedIterator<Item = Cow<'_, Message>> + '_> {
         if let Some(messages) = self.messages.get(&channel_id) {
             Box::new(messages.iter().map(Cow::Borrowed))
         } else {
@@ -100,11 +100,11 @@ impl<S: Storage> Storage for MemCache<S> {
     fn edits(
         &self,
         message_id: MessageId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_> {
+    ) -> Box<dyn DoubleEndedIterator<Item = Cow<'_, Message>> + '_> {
         self.storage.edits(message_id) // Edits are not cached
     }
 
-    fn message(&self, message_id: MessageId) -> Option<Cow<Message>> {
+    fn message(&self, message_id: MessageId) -> Option<Cow<'_, Message>> {
         let messages = self.messages.get(&message_id.channel_id)?;
         let cached = self
             .messages_index
@@ -118,7 +118,7 @@ impl<S: Storage> Storage for MemCache<S> {
         }
     }
 
-    fn store_message(&mut self, channel_id: ChannelId, message: Message) -> Cow<Message> {
+    fn store_message(&mut self, channel_id: ChannelId, message: Message) -> Cow<'_, Message> {
         let message_id = MessageId::new(channel_id, message.arrived_at);
         match self.messages_index.entry(message_id) {
             Entry::Vacant(entry) => {
@@ -136,7 +136,7 @@ impl<S: Storage> Storage for MemCache<S> {
         self.storage.store_message(channel_id, message)
     }
 
-    fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + '_> {
+    fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<'_, str>)> + '_> {
         Box::new(
             self.names
                 .iter()
@@ -144,11 +144,11 @@ impl<S: Storage> Storage for MemCache<S> {
         )
     }
 
-    fn name(&self, id: Uuid) -> Option<Cow<str>> {
+    fn name(&self, id: Uuid) -> Option<Cow<'_, str>> {
         self.names.get(&id).map(String::as_str).map(Cow::Borrowed)
     }
 
-    fn store_name(&mut self, id: Uuid, name: String) -> Cow<str> {
+    fn store_name(&mut self, id: Uuid, name: String) -> Cow<'_, str> {
         match self.names.entry(id) {
             Entry::Vacant(entry) => {
                 entry.insert(name.clone());
@@ -160,11 +160,11 @@ impl<S: Storage> Storage for MemCache<S> {
         self.storage.store_name(id, name)
     }
 
-    fn metadata(&self) -> Cow<Metadata> {
+    fn metadata(&self) -> Cow<'_, Metadata> {
         Cow::Borrowed(&self.metadata)
     }
 
-    fn store_metadata(&mut self, metadata: Metadata) -> Cow<Metadata> {
+    fn store_metadata(&mut self, metadata: Metadata) -> Cow<'_, Metadata> {
         self.metadata = metadata.clone();
         self.storage.store_metadata(metadata)
     }

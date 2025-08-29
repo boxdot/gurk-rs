@@ -63,7 +63,7 @@ impl<'a> NameResolver<'a> {
     }
 
     /// Returns name and color for the given id
-    pub fn resolve(&self, id: Uuid) -> (Cow<str>, Color) {
+    pub fn resolve(&self, id: Uuid) -> (Cow<'_, str>, Color) {
         self.names_and_colors
             .get(&id)
             .map(|(name, color)| (name.into(), *color))

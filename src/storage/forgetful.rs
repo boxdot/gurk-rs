@@ -10,57 +10,57 @@ use super::{MessageId, Metadata, Storage};
 pub struct ForgetfulStorage;
 
 impl Storage for ForgetfulStorage {
-    fn channels(&self) -> Box<dyn Iterator<Item = Cow<Channel>> + '_> {
+    fn channels(&self) -> Box<dyn Iterator<Item = Cow<'_, Channel>> + '_> {
         Box::new(std::iter::empty())
     }
 
-    fn channel(&self, _channel_id: ChannelId) -> Option<Cow<Channel>> {
+    fn channel(&self, _channel_id: ChannelId) -> Option<Cow<'_, Channel>> {
         None
     }
 
-    fn store_channel(&mut self, channel: Channel) -> Cow<Channel> {
+    fn store_channel(&mut self, channel: Channel) -> Cow<'_, Channel> {
         Cow::Owned(channel)
     }
 
     fn messages(
         &self,
         _channel_id: ChannelId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_> {
+    ) -> Box<dyn DoubleEndedIterator<Item = Cow<'_, Message>> + '_> {
         Box::new(std::iter::empty())
     }
 
     fn edits(
         &self,
         _message_id: MessageId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_> {
+    ) -> Box<dyn DoubleEndedIterator<Item = Cow<'_, Message>> + '_> {
         Box::new(std::iter::empty())
     }
 
-    fn message(&self, _message_id: MessageId) -> Option<Cow<Message>> {
+    fn message(&self, _message_id: MessageId) -> Option<Cow<'_, Message>> {
         None
     }
 
-    fn store_message(&mut self, _channel_id: ChannelId, message: Message) -> Cow<Message> {
+    fn store_message(&mut self, _channel_id: ChannelId, message: Message) -> Cow<'_, Message> {
         Cow::Owned(message)
     }
 
-    fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + '_> {
+    fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<'_, str>)> + '_> {
         Box::new(std::iter::empty())
     }
 
-    fn name(&self, _id: Uuid) -> Option<Cow<str>> {
+    fn name(&self, _id: Uuid) -> Option<Cow<'_, str>> {
         None
     }
 
-    fn store_name(&mut self, _id: Uuid, name: String) -> Cow<str> {
+    fn store_name(&mut self, _id: Uuid, name: String) -> Cow<'_, str> {
         Cow::Owned(name)
     }
 
-    fn metadata(&self) -> Cow<Metadata> {
+    fn metadata(&self) -> Cow<'_, Metadata> {
         Cow::Owned(Default::default())
     }
 
-    fn store_metadata(&mut self, metadata: Metadata) -> Cow<Metadata> {
+    fn store_metadata(&mut self, metadata: Metadata) -> Cow<'_, Metadata> {
         Cow::Owned(metadata)
     }
 
