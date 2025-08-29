@@ -151,7 +151,7 @@ impl JsonStorage {
 }
 
 impl Storage for JsonStorage {
-    fn channels(&self) -> Box<dyn Iterator<Item = Cow<'_, Channel>> + '_> {
+    fn channels(&self) -> Box<dyn Iterator<Item = Cow<Channel>> + '_> {
         Box::new(
             self.data
                 .channels
@@ -162,7 +162,7 @@ impl Storage for JsonStorage {
         )
     }
 
-    fn channel(&self, channel_id: ChannelId) -> Option<Cow<'_, Channel>> {
+    fn channel(&self, channel_id: ChannelId) -> Option<Cow<Channel>> {
         self.data
             .channels
             .items
@@ -172,7 +172,7 @@ impl Storage for JsonStorage {
             .map(Cow::Owned)
     }
 
-    fn store_channel(&mut self, channel: Channel) -> Cow<'_, Channel> {
+    fn store_channel(&mut self, channel: Channel) -> Cow<Channel> {
         let channel_idx = if let Some(idx) = self
             .data
             .channels
@@ -197,7 +197,7 @@ impl Storage for JsonStorage {
     fn messages(
         &self,
         channel_id: ChannelId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<'_, Message>> + '_> {
+    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_> {
         if let Some(channel) = self
             .data
             .channels
@@ -220,7 +220,7 @@ impl Storage for JsonStorage {
     fn edits(
         &self,
         message_id: MessageId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<'_, Message>> + '_> {
+    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_> {
         if let Some(channel) = self
             .data
             .channels
@@ -240,7 +240,7 @@ impl Storage for JsonStorage {
         }
     }
 
-    fn message(&self, message_id: MessageId) -> Option<Cow<'_, Message>> {
+    fn message(&self, message_id: MessageId) -> Option<Cow<Message>> {
         let channel = self
             .data
             .channels
@@ -254,7 +254,7 @@ impl Storage for JsonStorage {
         Some(Cow::Borrowed(message))
     }
 
-    fn store_message(&mut self, channel_id: ChannelId, message: Message) -> Cow<'_, Message> {
+    fn store_message(&mut self, channel_id: ChannelId, message: Message) -> Cow<Message> {
         let channel_idx = self
             .data
             .channels
@@ -283,7 +283,7 @@ impl Storage for JsonStorage {
         Cow::Borrowed(&self.data.channels.items[channel_idx].messages[idx])
     }
 
-    fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<'_, str>)> + '_> {
+    fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + '_> {
         Box::new(
             self.data
                 .names
@@ -292,7 +292,7 @@ impl Storage for JsonStorage {
         )
     }
 
-    fn name(&self, id: Uuid) -> Option<Cow<'_, str>> {
+    fn name(&self, id: Uuid) -> Option<Cow<str>> {
         self.data
             .names
             .get(&id)
@@ -300,7 +300,7 @@ impl Storage for JsonStorage {
             .map(Cow::Borrowed)
     }
 
-    fn store_name(&mut self, id: Uuid, name: String) -> Cow<'_, str> {
+    fn store_name(&mut self, id: Uuid, name: String) -> Cow<str> {
         match self.data.names.entry(id) {
             Entry::Vacant(entry) => {
                 entry.insert(name);
@@ -313,14 +313,14 @@ impl Storage for JsonStorage {
         Cow::Borrowed(&self.data.names[&id])
     }
 
-    fn metadata(&self) -> Cow<'_, Metadata> {
+    fn metadata(&self) -> Cow<Metadata> {
         Cow::Owned(Metadata {
             contacts_sync_request_at: self.data.contacts_sync_request_at,
             fully_migrated: None,
         })
     }
 
-    fn store_metadata(&mut self, metadata: Metadata) -> Cow<'_, Metadata> {
+    fn store_metadata(&mut self, metadata: Metadata) -> Cow<Metadata> {
         let Metadata {
             contacts_sync_request_at,
             fully_migrated: _unsupported_in_json,

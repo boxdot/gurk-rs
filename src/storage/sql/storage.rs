@@ -238,7 +238,7 @@ struct SqlName {
 }
 
 impl Storage for SqliteStorage {
-    fn channels(&self) -> Box<dyn Iterator<Item = Cow<'_, Channel>> + '_> {
+    fn channels(&self) -> Box<dyn Iterator<Item = Cow<Channel>> + '_> {
         let channels = block_async_in_place(
             query_as!(
                 SqlChannel,
@@ -263,7 +263,7 @@ impl Storage for SqliteStorage {
         )
     }
 
-    fn channel(&self, channel_id: ChannelId) -> Option<Cow<'_, Channel>> {
+    fn channel(&self, channel_id: ChannelId) -> Option<Cow<Channel>> {
         let channel_id = &channel_id;
         let channel = block_async_in_place(
             query_as!(
@@ -286,7 +286,7 @@ impl Storage for SqliteStorage {
         channel?.convert().ok_logged().map(Cow::Owned)
     }
 
-    fn store_channel(&mut self, channel: Channel) -> Cow<'_, Channel> {
+    fn store_channel(&mut self, channel: Channel) -> Cow<Channel> {
         let id = &channel.id;
         let name = &channel.name;
         let (group_master_key, group_revision, group_members) = channel
@@ -321,7 +321,7 @@ impl Storage for SqliteStorage {
     fn messages(
         &self,
         channel_id: ChannelId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<'_, Message>> + '_> {
+    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_> {
         let channel_id = &channel_id;
         let messages = block_async_in_place(
             query_as!(
@@ -364,7 +364,7 @@ impl Storage for SqliteStorage {
     fn edits(
         &self,
         message_id: MessageId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<'_, Message>> + '_> {
+    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_> {
         let channel_id = &message_id.channel_id;
         let arrived_at: Option<i64> = message_id
             .arrived_at
@@ -413,7 +413,7 @@ impl Storage for SqliteStorage {
         )
     }
 
-    fn message(&self, message_id: MessageId) -> Option<Cow<'_, Message>> {
+    fn message(&self, message_id: MessageId) -> Option<Cow<Message>> {
         let channel_id = &message_id.channel_id;
         let arrived_at: i64 = message_id
             .arrived_at
@@ -455,7 +455,7 @@ impl Storage for SqliteStorage {
         Some(Cow::Owned(message))
     }
 
-    fn store_message(&mut self, channel_id: ChannelId, message: Message) -> Cow<'_, Message> {
+    fn store_message(&mut self, channel_id: ChannelId, message: Message) -> Cow<Message> {
         let channel_id = &channel_id;
         let arrived_at: i64 = message
             .arrived_at
@@ -518,7 +518,7 @@ impl Storage for SqliteStorage {
         Cow::Owned(message)
     }
 
-    fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<'_, str>)> + '_> {
+    fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + '_> {
         let names = block_async_in_place(
             query_as!(
                 SqlName,
@@ -534,7 +534,7 @@ impl Storage for SqliteStorage {
         Box::new(names)
     }
 
-    fn name(&self, id: Uuid) -> Option<Cow<'_, str>> {
+    fn name(&self, id: Uuid) -> Option<Cow<str>> {
         let name = block_async_in_place(
             query_scalar!(r#"SELECT name AS "name: _" FROM names WHERE id = ?"#, id)
                 .fetch_optional(&self.pool),
@@ -542,7 +542,7 @@ impl Storage for SqliteStorage {
         name.ok_logged()?.map(Cow::Owned)
     }
 
-    fn store_name(&mut self, id: Uuid, name: String) -> Cow<'_, str> {
+    fn store_name(&mut self, id: Uuid, name: String) -> Cow<str> {
         block_async_in_place(
             query!("REPLACE INTO names(id, name) VALUES (?, ?)", id, name).execute(&self.pool),
         )
@@ -550,7 +550,7 @@ impl Storage for SqliteStorage {
         Cow::Owned(name)
     }
 
-    fn metadata(&self) -> Cow<'_, Metadata> {
+    fn metadata(&self) -> Cow<Metadata> {
         let metadata = block_async_in_place(
             query_as!(
                 Metadata,
@@ -566,7 +566,7 @@ impl Storage for SqliteStorage {
         Cow::Owned(metadata.ok_logged().flatten().unwrap_or_default())
     }
 
-    fn store_metadata(&mut self, metadata: Metadata) -> Cow<'_, Metadata> {
+    fn store_metadata(&mut self, metadata: Metadata) -> Cow<Metadata> {
         block_async_in_place(
             query!(
                 "REPLACE INTO metadata(id, contacts_sync_request_at, fully_migrated)
