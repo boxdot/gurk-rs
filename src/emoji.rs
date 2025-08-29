@@ -1,9 +1,9 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::LazyLock};
 
-use once_cell::sync::Lazy;
 use regex::{Captures, Regex};
 
-static REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r":([a-z1238+-][a-z0-9_-]*):").unwrap());
+static REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r":([a-z1238+-][a-z0-9_-]*):").unwrap());
 
 pub(crate) fn replace_shortcodes(text: &str) -> Cow<'_, str> {
     REGEX.replace_all(text, Replacer)
