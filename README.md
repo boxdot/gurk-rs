@@ -104,6 +104,10 @@ libraries that are not available on crates.io.
   * `ctrl+j / Up / PgUp` Previous line
   * `ctrl+k / Down / PgDown` Next line
 
+## File Uploads
+  * `file:///path/to/file` Upload File "file" at path "/path/to/"
+  * `file://clip` Upload Content of Clipboard
+
 ## Configuration
 
 Upon startup, `gurk` tries to load configuration from one of the default locations:

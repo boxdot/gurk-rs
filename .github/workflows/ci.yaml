@@ -1,11 +1,18 @@
-on: [push, pull_request]
+on:
+  pull_request:
+    branches: ["main"]
 
 name: ci
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
   RUSTUP_MAX_RETRIES: 10
+  RUSTFLAGS: -D warnings
 
 jobs:
   rustfmt:
@@ -33,6 +40,9 @@ jobs:
         with:
           toolchain: ${{ matrix.toolchain }}
           components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
       - run: cargo clippy --locked --all-features
 
   build-gnu:
@@ -95,7 +105,7 @@ jobs:
           - aarch64-apple-darwin
     runs-on: macos-latest
     env:
-      SELECT_XCODE: /Applications/Xcode_15.3.app
+      SELECT_XCODE: /Applications/Xcode_16.4.app
     steps:
       - name: xcode
         run: sudo xcode-select -s "${SELECT_XCODE}"
