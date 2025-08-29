@@ -112,6 +112,6 @@ mod tests {
     #[test]
     fn test_passphrase_debug() {
         let passphrase = Passphrase::new("secret").unwrap();
-        assert_eq!(format!("{:?}", passphrase), "Passphrase(<redacted>)");
+        assert_eq!(format!("{passphrase:?}"), "Passphrase(<redacted>)");
     }
 }
