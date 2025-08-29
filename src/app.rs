@@ -437,7 +437,7 @@ impl App {
         Some(MessageId::new(*channel_id, *arrived_at))
     }
 
-    fn selected_message(&self) -> Option<Cow<Message>> {
+    fn selected_message(&self) -> Option<Cow<'_, Message>> {
         let message_id = self.selected_message_id()?;
         self.storage.message(message_id)
     }
