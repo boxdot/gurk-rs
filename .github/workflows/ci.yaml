@@ -95,7 +95,7 @@ jobs:
           - aarch64-apple-darwin
     runs-on: macos-latest
     env:
-      SELECT_XCODE: /Applications/Xcode_15.3.app
+      SELECT_XCODE: /Applications/Xcode_16.4.app
     steps:
       - name: xcode
         run: sudo xcode-select -s "${SELECT_XCODE}"
