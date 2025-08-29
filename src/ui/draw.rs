@@ -718,7 +718,7 @@ fn help_commands<'a>() -> Vec<Line<'a>> {
     v
 }
 
-fn bindings(app: &App) -> Vec<Line> {
+fn bindings(app: &App) -> Vec<Line<'_>> {
     [
         WindowMode::Normal,
         WindowMode::Anywhere,
