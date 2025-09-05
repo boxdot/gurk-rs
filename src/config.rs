@@ -57,8 +57,11 @@ pub struct Config {
     /// If set, the full message text will be colored, not only the author name
     #[serde(default)]
     pub colored_messages: bool,
+    /// UI Configuration
     #[serde(default)]
+    pub ui: UiConfig,
     /// Keymaps
+    #[serde(default)]
     pub keybindings: ModeKeybindingConfig,
     /// Whether to enable the default keybindings
     #[serde(default = "default_true")]
@@ -70,6 +73,44 @@ pub struct User {
     /// Name to be shown in the application
     #[serde(alias = "name")]
     pub display_name: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UiConfig {
+    pub theme: Theme,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Theme {
+    /// Default theme
+    ///
+    /// Example:
+    ///
+    /// ```norun,
+    /// ○ 16:59   bob: Hey Alice, what did the ocean say to the
+    ///                sailboat?
+    /// ○ 16:59 alice: Hmm, I'm not sure, Bob! What did the ocean say?
+    /// ○ 16:59   bob: > (alice) Hmm, I'm not sure, Bob! What did the
+    ///                > ocean say?
+    ///                Nothing, it just waved! Get it? Anyway, how was
+    ///                your day? Mine was pretty good! [👋]
+    /// ```
+    #[default]
+    Default,
+    /// Condensed theme
+    ///
+    /// Example:
+    ///
+    /// ```norun,
+    /// 16:59 bob Hey Alice, what did the ocean say to the
+    /// sailboat?
+    /// 16:59 alice Hmm, I'm not sure, Bob! What did the ocean say?
+    /// > alice Hmm, I'm not sure, Bob! What did the ocean say?
+    /// 16:59 bob Nothing, it just waved! Get it? Anyway, how was
+    /// your day? Mine was pretty good! [👋]
+    /// ```
+    Condensed,
 }
 
 #[cfg(feature = "dev")]
@@ -136,6 +177,7 @@ impl Config {
             colored_messages: false,
             default_keybindings: true,
             keybindings: ModeKeybindingConfig::default(),
+            ui: Default::default(),
         }
     }
 
