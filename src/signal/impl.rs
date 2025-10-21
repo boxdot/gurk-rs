@@ -81,7 +81,7 @@ impl SignalManager for PresageManager {
         let mut members = Vec::with_capacity(decrypted_group.members.len());
         let mut profile_keys = Vec::with_capacity(decrypted_group.members.len());
         for member in decrypted_group.members {
-            members.push(member.uuid);
+            members.push(member.aci.into());
             profile_keys.push(member.profile_key.bytes);
         }
 
@@ -347,7 +347,8 @@ impl SignalManager for PresageManager {
     }
 
     async fn profile_name(&self, id: Uuid) -> Option<String> {
-        let profile_key = self.manager.store().profile_key(&id).await.ok()??;
+        let service_id = ServiceId::Aci(id.into());
+        let profile_key = self.manager.store().profile_key(&service_id).await.ok()??;
         let profile = self.manager.store().profile(id, profile_key).await.ok()??;
         let given_name = profile.name?.given_name;
         if !given_name.is_empty() {
