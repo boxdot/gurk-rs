@@ -9,7 +9,7 @@ repository = "https://github.com/boxdot/gurk-rs"
 license = "AGPL-3.0-only"
 categories = ["command-line-utilities"]
 resolver = "2"
-rust-version = "1.85.1"
+rust-version = "1.87.0"
 
 [workspace]
 members = ["xtask"]
@@ -29,8 +29,8 @@ debug = true
 dev = ["prost", "base64"]
 
 [dependencies]
-presage = { git = "https://github.com/whisperfish/presage", rev = "d3a760088" }
-presage-store-sqlite = { git = "https://github.com/whisperfish/presage", rev = "d3a760088" }
+presage = { git = "https://github.com/whisperfish/presage", rev = "ed011688fc8d9c0ee07c3d44743c138c1fa4dfda" }
+presage-store-sqlite = { git = "https://github.com/whisperfish/presage", rev = "ed011688fc8d9c0ee07c3d44743c138c1fa4dfda" }
 
 # dev feature dependencies
 prost = { version = "0.13.4", optional = true }
@@ -119,7 +119,7 @@ harness = false
 # [patch."https://github.com/whisperfish/presage.git"]
 # presage = { path = "../presage/presage" }
 # presage-store-sqlite = { path = "../presage/presage-store-sqlite" }
-#
+
 # [patch."https://github.com/whisperfish/libsignal-service-rs"]
 # libsignal-service = { path = "../libsignal-service-rs" }
 

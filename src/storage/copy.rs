@@ -1,4 +1,5 @@
 use tracing::{debug, error};
+use uuid::Uuid;
 
 use crate::data::{Channel, ChannelId, GroupData, TypingSet};
 use crate::signal::SignalManager;
@@ -74,7 +75,11 @@ pub async fn sync_from_signal(manager: &dyn SignalManager, storage: &mut dyn Sto
         };
         let new_group_data = || GroupData {
             master_key_bytes,
-            members: group.members.iter().map(|member| member.uuid).collect(),
+            members: group
+                .members
+                .iter()
+                .map(|member| member.aci.into())
+                .collect(),
             revision: group.revision,
         };
         match storage.channel(channel_id) {
@@ -95,16 +100,16 @@ pub async fn sync_from_signal(manager: &dyn SignalManager, storage: &mut dyn Sto
                 if channel
                     .group_data
                     .as_ref()
-                    .map(|d| d.members.iter())
+                    .map(|d| d.members.iter().copied())
                     .into_iter()
                     .flatten()
-                    .ne(group.members.iter().map(|m| &m.uuid))
+                    .ne(group.members.iter().map(|m| Uuid::from(m.aci)))
                 {
                     let group_data = channel
                         .to_mut()
                         .group_data
                         .get_or_insert_with(new_group_data);
-                    group_data.members = group.members.iter().map(|m| m.uuid).collect();
+                    group_data.members = group.members.iter().map(|m| m.aci.into()).collect();
                     is_changed = true;
                 }
                 if is_changed {
