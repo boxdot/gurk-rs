@@ -106,7 +106,7 @@ security-framework = "3.2.0"
 ignored = ["libsqlite3-sys"]
 
 [dev-dependencies]
-criterion = { version = "0.6", features = ["async_tokio", "html_reports"] }
+criterion = { version = "0.7", features = ["async_tokio", "html_reports"] }
 hex-literal = "1.0.0"
 insta = { version = "1.41.1", features = ["json"] }
 quickcheck = "1.0.3"
