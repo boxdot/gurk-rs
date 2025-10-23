@@ -56,7 +56,7 @@ pub fn run() -> anyhow::Result<(Config, Passphrase)> {
     println!();
     let passphrase_storage = Select::with_theme(&theme)
         .with_prompt("Where do you want to store your passphrase?")
-        .items(&[
+        .items([
             "Config file",
             #[cfg(target_os = "macos")]
             "Keychain (macOS)",
