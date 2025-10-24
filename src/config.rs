@@ -39,9 +39,9 @@ pub struct Config {
     /// Whether to show receipts (sent, delivered, read) information next to your user name in UI
     #[serde(default = "default_true")]
     pub show_receipts: bool,
-    /// Whether to show system notifications on incoming messages
-    #[serde(default = "default_true")]
-    pub notifications: bool,
+    /// Notification settings
+    #[serde(default)]
+    pub notifications: NotificationConfig,
     #[serde(default = "default_true")]
     pub bell: bool,
     /// User configuration
@@ -70,6 +70,37 @@ pub struct User {
     /// Name to be shown in the application
     #[serde(alias = "name")]
     pub display_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NotificationConfig {
+    /// Whether to show system notifications on incoming messages
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Whether to show message preview in notifications
+    #[serde(default = "default_true")]
+    pub show_message_text: bool,
+    /// Whether to show message origin in notifications
+    #[serde(default = "default_true")]
+    pub show_message_chat: bool,
+    /// Whether to show reactions in notifications
+    #[serde(default = "default_true")]
+    pub show_reactions: bool,
+    /// Whether to mute reactions bell
+    #[serde(default)]
+    pub mute_reactions_bell: bool,
+}
+
+impl Default for NotificationConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            show_message_text: true,
+            show_message_chat: true,
+            show_reactions: true,
+            mute_reactions_bell: false,
+        }
+    }
 }
 
 #[cfg(feature = "dev")]
@@ -127,7 +158,7 @@ impl Config {
             deprecated_signal_db_path: default_signal_db_path(),
             first_name_only: false,
             show_receipts: true,
-            notifications: true,
+            notifications: NotificationConfig::default(),
             bell: true,
             #[cfg(feature = "dev")]
             developer: Default::default(),
@@ -218,6 +249,16 @@ impl Config {
             keys.push(DeprecatedConfigKey {
                 key: "sqlite",
                 message: "will be removed in a future version; use `<data_dir>/gurk.sqlite` instead",
+            });
+        }
+        if config_value
+            .get("notifications")
+            .and_then(|v| v.as_bool())
+            .is_some()
+        {
+            keys.push(DeprecatedConfigKey {
+                key: "notifications",
+                message: "boolean format is deprecated; use [notifications] section with enabled, show_sender_name, show_message_preview, and show_reactions fields",
             });
         }
 
