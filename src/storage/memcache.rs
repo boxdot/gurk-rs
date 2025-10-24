@@ -1,8 +1,10 @@
-use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
+use std::{borrow::Cow, num::NonZero};
 
 use get_size2::GetSize;
+use lru::LruCache;
+use parking_lot::Mutex;
 use uuid::Uuid;
 
 use crate::data::{Channel, ChannelId, Message};
@@ -17,8 +19,9 @@ use super::{MessageId, Metadata, Storage};
 pub struct MemCache<S: Storage> {
     channels: Vec<Channel>,
     channels_index: BTreeMap<ChannelId, usize>,
-    messages: BTreeMap<ChannelId, Vec<Message>>,
+    messages: BTreeMap<ChannelId, Vec<u64>>,
     messages_index: BTreeMap<MessageId, usize>,
+    messages_cache: Mutex<LruCache<MessageId, Message>>,
     names: BTreeMap<Uuid, String>,
     metadata: Metadata,
     storage: S,
@@ -35,20 +38,21 @@ impl<S: Storage> GetSize for MemCache<S> {
     }
 }
 
+const NUM_CACHED_MESSAGES: NonZero<usize> = NonZero::new(100).unwrap();
+
 impl<S: Storage> MemCache<S> {
     pub fn new(storage: S) -> Self {
         let mut channels: Vec<Channel> = Vec::new();
         let mut channels_index = BTreeMap::new();
-        let mut messages: BTreeMap<ChannelId, Vec<Message>> = BTreeMap::new();
+        let mut messages: BTreeMap<ChannelId, Vec<u64>> = BTreeMap::new();
         let mut messages_index: BTreeMap<MessageId, usize> = BTreeMap::new();
 
-        // build in-memory cache
+        // load channels into memory
         for channel in storage.channels() {
             let channel_messages = messages.entry(channel.id).or_default();
-            for message in storage.messages(channel.id) {
-                let message_id = MessageId::new(channel.id, message.arrived_at);
+            for message_id in storage.messages(channel.id) {
                 messages_index.insert(message_id, channel_messages.len());
-                channel_messages.push(message.clone().into_owned());
+                channel_messages.push(message_id.arrived_at);
             }
             channels_index.insert(channel.id, channels.len());
             channels.push(channel.clone().into_owned());
@@ -66,6 +70,7 @@ impl<S: Storage> MemCache<S> {
             channels_index,
             messages,
             messages_index,
+            messages_cache: Mutex::new(LruCache::new(NUM_CACHED_MESSAGES)),
             names,
             metadata,
             storage,
@@ -101,9 +106,13 @@ impl<S: Storage> Storage for MemCache<S> {
     fn messages(
         &self,
         channel_id: ChannelId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<'_, Message>> + '_> {
+    ) -> Box<dyn DoubleEndedIterator<Item = MessageId> + '_> {
         if let Some(messages) = self.messages.get(&channel_id) {
-            Box::new(messages.iter().map(Cow::Borrowed))
+            Box::new(
+                messages
+                    .iter()
+                    .map(move |arrived_at| MessageId::new(channel_id, *arrived_at)),
+            )
         } else {
             Box::new(std::iter::empty())
         }
@@ -117,32 +126,35 @@ impl<S: Storage> Storage for MemCache<S> {
     }
 
     fn message(&self, message_id: MessageId) -> Option<Cow<'_, Message>> {
-        let messages = self.messages.get(&message_id.channel_id)?;
-        let cached = self
-            .messages_index
-            .get(&message_id)
-            .and_then(|&idx| messages.get(idx).map(Cow::Borrowed));
-        if let Some(message) = cached {
-            Some(message)
-        } else {
-            let message = self.storage.message(message_id)?;
-            Some(message)
-        }
+        let message = self
+            .messages_cache
+            .lock()
+            .try_get_or_insert(message_id, || {
+                self.storage
+                    .message(message_id)
+                    .map(Cow::into_owned)
+                    .ok_or(())
+            })
+            .ok()?
+            .clone();
+        Some(Cow::Owned(message))
     }
 
     fn store_message(&mut self, channel_id: ChannelId, message: Message) -> Cow<'_, Message> {
-        let message_id = MessageId::new(channel_id, message.arrived_at);
+        let message_id = message.id(channel_id);
         match self.messages_index.entry(message_id) {
             Entry::Vacant(entry) => {
                 let messages = self.messages.entry(channel_id).or_default();
                 entry.insert(messages.len());
-                messages.push(message.clone());
+                messages.push(message.arrived_at);
+                self.messages_cache.lock().put(message_id, message.clone());
             }
             Entry::Occupied(entry) => {
                 let idx = *entry.get();
                 let messages = self.messages.entry(channel_id).or_default();
-                let stored_message = &mut messages[idx];
-                *stored_message = message.clone();
+                let stored_arrived_at = &mut messages[idx];
+                *stored_arrived_at = message.arrived_at;
+                self.messages_cache.lock().put(message_id, message.clone());
             }
         }
         self.storage.store_message(channel_id, message)

@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 use tracing::error;
 use uuid::Uuid;
 
-use crate::receipt::Receipt;
 use crate::signal::{Attachment, GroupIdentifierBytes, GroupMasterKeyBytes};
+use crate::{receipt::Receipt, storage::MessageId};
 
 #[derive(Debug, Clone, PartialEq, Eq, GetSize)]
 pub struct Channel {
@@ -89,7 +89,9 @@ impl Channel {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, GetSize)]
+#[derive(
+    Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, GetSize,
+)]
 pub enum ChannelId {
     User(Uuid),
     Group(GroupIdentifierBytes),
@@ -303,6 +305,10 @@ impl Message {
             edit: Default::default(),
             edited: Default::default(),
         }
+    }
+
+    pub(crate) fn id(&self, channel_id: ChannelId) -> MessageId {
+        MessageId::new(channel_id, self.arrived_at)
     }
 
     pub(crate) fn text(from_id: Uuid, arrived_at: u64, message: String) -> Self {

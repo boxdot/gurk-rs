@@ -41,7 +41,7 @@ pub trait Storage {
     fn messages(
         &self,
         channel_id: ChannelId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<'_, Message>> + '_>;
+    ) -> Box<dyn DoubleEndedIterator<Item = MessageId> + '_>;
     /// Gets the message by id
     fn message(&self, message_id: MessageId) -> Option<Cow<'_, Message>>;
 
@@ -131,7 +131,7 @@ pub trait Storage {
 }
 
 /// A message is identified by its channel and time of arrived in milliseconds
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, GetSize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, GetSize)]
 pub struct MessageId {
     pub channel_id: ChannelId,
     pub arrived_at: u64,

@@ -253,7 +253,8 @@ fn prepare_receipts(app: &mut App, height: usize) {
         .messages(channel_id)
         .rev()
         .skip(offset)
-        .filter_map(|message| {
+        .filter_map(|message_id| {
+            let message = app.storage.message(message_id)?;
             if let Receipt::Delivered = message.receipt {
                 if message.from_id != user_id {
                     let mut message = message.into_owned();

@@ -1093,14 +1093,17 @@ impl App {
                 // Note: `&mut` is needed to advance the iterator `messages` with each `ts`.
                 // Since these are sorted in reverse order, we can continue advancing messages
                 // without consuming them.
-                if let Some(msg) = (&mut messages)
-                    .take_while(|msg| msg.arrived_at >= ts)
-                    .find(|msg| msg.arrived_at == ts)
+                if let Some(message_id) = (&mut messages)
+                    .take_while(|message_id| message_id.arrived_at >= ts)
+                    .find(|message_id| message_id.arrived_at == ts)
                 {
-                    let mut msg = msg.into_owned();
-                    if msg.receipt < receipt {
-                        msg.receipt = msg.receipt.max(receipt);
-                        messages_to_store.push(msg);
+                    let Some(message) = self.storage.message(message_id) else {
+                        continue;
+                    };
+                    if message.receipt < receipt {
+                        let mut message = message.into_owned();
+                        message.receipt = message.receipt.max(receipt);
+                        messages_to_store.push(message);
                     }
                     found_channel_id = Some(channel_id);
                 }

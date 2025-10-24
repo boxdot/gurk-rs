@@ -25,7 +25,7 @@ impl Storage for ForgetfulStorage {
     fn messages(
         &self,
         _channel_id: ChannelId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<'_, Message>> + '_> {
+    ) -> Box<dyn DoubleEndedIterator<Item = MessageId> + '_> {
         Box::new(std::iter::empty())
     }
 

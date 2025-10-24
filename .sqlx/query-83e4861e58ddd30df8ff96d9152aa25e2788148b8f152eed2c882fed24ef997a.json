@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                    SELECT m.arrived_at\n                    FROM messages AS m\n                    WHERE m.channel_id = ?1 AND m.edit IS NULL\n                    ORDER BY m.arrived_at ASC\n                ",
+  "describe": {
+    "columns": [
+      {
+        "name": "arrived_at",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "83e4861e58ddd30df8ff96d9152aa25e2788148b8f152eed2c882fed24ef997a"
+}

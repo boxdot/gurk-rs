@@ -22,7 +22,10 @@ pub fn copy(from: &dyn Storage, to: &mut dyn Storage) -> Stats {
         let channel_id = channel.id;
         to.store_channel(channel.into_owned());
         stats.channels += 1;
-        for message in from.messages(channel_id) {
+        for message_id in from.messages(channel_id) {
+            let Some(message) = from.message(message_id) else {
+                continue;
+            };
             to.store_message(channel_id, message.into_owned());
             stats.messages += 1;
         }
