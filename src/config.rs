@@ -258,7 +258,7 @@ impl Config {
         {
             keys.push(DeprecatedConfigKey {
                 key: "notifications",
-                message: "boolean format is deprecated; use [notifications] section with enabled, show_sender_name, show_message_preview, and show_reactions fields",
+                message: "boolean format is deprecated; use [notifications] section with enabled, show_message_text, show_message_chat, show_reactions and mute_reactions_bell fields",
             });
         }
 
