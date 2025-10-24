@@ -15,6 +15,7 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
+use get_size2::GetSize;
 use gurk::{app::App, config::Config};
 use gurk::{backoff::Backoff, passphrase::Passphrase};
 use gurk::{config, signal, ui};
@@ -152,7 +153,9 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
                 info!(?stats, "converted");
             }
         }
-        Box::new(MemCache::new(sqlite_storage))
+        let mem_cache = MemCache::new(sqlite_storage);
+        info!(size = mem_cache.get_size(), "MemCache created");
+        Box::new(mem_cache)
     };
 
     sync_from_signal(&*signal_manager, &mut *storage).await;

@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
 
+use get_size2::GetSize;
 use uuid::Uuid;
 
 use crate::data::{Channel, ChannelId, Message};
@@ -21,6 +22,17 @@ pub struct MemCache<S: Storage> {
     names: BTreeMap<Uuid, String>,
     metadata: Metadata,
     storage: S,
+}
+
+impl<S: Storage> GetSize for MemCache<S> {
+    fn get_heap_size(&self) -> usize {
+        self.channels.get_size()
+            + self.channels_index.get_size()
+            + self.messages.get_size()
+            + self.messages_index.get_size()
+            + self.names.get_size()
+            + self.metadata.get_size()
+    }
 }
 
 impl<S: Storage> MemCache<S> {

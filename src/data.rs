@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 
 use anyhow::anyhow;
+use get_size2::GetSize;
 use presage::libsignal_service::zkgroup::groups::{GroupMasterKey, GroupSecretParams};
 use presage::proto;
 use presage::proto::data_message::Quote;
@@ -13,7 +14,7 @@ use uuid::Uuid;
 use crate::receipt::Receipt;
 use crate::signal::{Attachment, GroupIdentifierBytes, GroupMasterKeyBytes};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, GetSize)]
 pub struct Channel {
     pub id: ChannelId,
     pub name: String,
@@ -26,6 +27,15 @@ pub struct Channel {
 pub enum TypingSet {
     SingleTyping(bool),
     GroupTyping(HashSet<Uuid>),
+}
+
+impl GetSize for TypingSet {
+    fn get_heap_size(&self) -> usize {
+        match self {
+            Self::SingleTyping(_) => 0,
+            Self::GroupTyping(uuids) => uuids.len() * 16,
+        }
+    }
 }
 
 impl TypingSet {
@@ -44,6 +54,12 @@ pub struct GroupData {
     pub master_key_bytes: GroupMasterKeyBytes,
     pub members: Vec<Uuid>,
     pub revision: u32,
+}
+
+impl GetSize for GroupData {
+    fn get_heap_size(&self) -> usize {
+        self.members.len() * 16
+    }
 }
 
 impl Channel {
@@ -73,7 +89,7 @@ impl Channel {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, GetSize)]
 pub enum ChannelId {
     User(Uuid),
     Group(GroupIdentifierBytes),
@@ -152,7 +168,7 @@ impl TypingAction {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, GetSize)]
 pub struct Message {
     pub from_id: Uuid,
     pub message: Option<String>,
@@ -179,20 +195,20 @@ pub struct Message {
     pub(crate) edited: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, GetSize)]
 pub(crate) struct BodyRange {
     pub(crate) start: u16,
     pub(crate) end: u16,
     pub(crate) value: AssociatedValue,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, GetSize)]
 pub(crate) enum AssociatedValue {
     MentionUuid(Uuid),
     Style(Style),
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, GetSize)]
 pub(crate) enum Style {
     #[default]
     None,

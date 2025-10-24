@@ -7,6 +7,7 @@ mod sql;
 use std::borrow::Cow;
 
 use chrono::{DateTime, Utc};
+use get_size2::GetSize;
 use uuid::Uuid;
 
 use crate::data::{Channel, ChannelId, Message};
@@ -130,7 +131,7 @@ pub trait Storage {
 }
 
 /// A message is identified by its channel and time of arrived in milliseconds
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, GetSize)]
 pub struct MessageId {
     pub channel_id: ChannelId,
     pub arrived_at: u64,
@@ -154,3 +155,5 @@ pub struct Metadata {
     pub contacts_sync_request_at: Option<DateTime<Utc>>,
     pub fully_migrated: Option<bool>,
 }
+
+impl GetSize for Metadata {}
