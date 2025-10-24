@@ -32,7 +32,7 @@ dev = ["prost", "base64"]
 presage = { git = "https://github.com/whisperfish/presage", rev = "ed011688fc8d9c0ee07c3d44743c138c1fa4dfda" }
 presage-store-sqlite = { git = "https://github.com/whisperfish/presage", rev = "ed011688fc8d9c0ee07c3d44743c138c1fa4dfda" }
 
-# dev feature dependencies
+# dev feature dependenciestoml
 prost = { version = "0.13.4", optional = true }
 base64 = { version = "0.22.1", optional = true }
 
@@ -44,7 +44,7 @@ chrono = { version = "0.4.39", default-features = false, features = ["serde"] }
 clap = { version = "4.5.23", features = ["derive"] }
 crossterm = { version = "0.29.0", features = ["event-stream"] }
 dirs = "6.0.0"
-emojis = "0.6.4"
+emojis = "0.8.0"
 futures-channel = "0.3.31"
 hex = "0.4.3"
 hostname = "0.4.0"
@@ -80,7 +80,7 @@ tokio = { version = "1.42.0", default-features = false, features = [
     "time",
 ] }
 tokio-stream = "0.1.17"
-toml = "0.8.19"
+toml = "0.9.0"
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
@@ -95,7 +95,7 @@ tokio-util = { version = "0.7.13", features = ["rt"] }
 qrcode = { version = "0.14.1", default-features = false, features = ["image"] }
 sha2 = "0.10.8"
 strip-ansi-escapes = "0.2.1"
-dialoguer = "0.11.0"
+dialoguer = "0.12.0"
 zeroize = { version = "1.8.1", features = ["derive", "serde"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
@@ -106,7 +106,7 @@ security-framework = "3.2.0"
 ignored = ["libsqlite3-sys"]
 
 [dev-dependencies]
-criterion = { version = "0.6", features = ["async_tokio", "html_reports"] }
+criterion = { version = "0.7", features = ["async_tokio", "html_reports"] }
 hex-literal = "1.0.0"
 insta = { version = "1.41.1", features = ["json"] }
 quickcheck = "1.0.3"
