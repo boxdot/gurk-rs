@@ -35,15 +35,17 @@ pub trait Storage {
     /// Stores the given `channel` and returns it back
     fn store_channel(&mut self, channel: Channel) -> Cow<'_, Channel>;
 
-    /// Messages sorted by arrived_at in ascending order
-    ///
-    /// No edited messages must be included.
-    fn messages(
-        &self,
-        channel_id: ChannelId,
-    ) -> Box<dyn DoubleEndedIterator<Item = MessageId> + '_>;
+    // /// Messages sorted by arrived_at in ascending order
+    // ///
+    // /// No edited messages must be included.
+    // fn messages(
+    //     &self,
+    //     channel_id: ChannelId,
+    // ) -> Box<dyn DoubleEndedIterator<Item = MessageId> + '_>;
     /// Gets the message by id
     fn message(&self, message_id: MessageId) -> Option<Cow<'_, Message>>;
+    fn message_id_at(&self, channel_id: ChannelId, idx: usize) -> Option<MessageId>;
+    fn count_messages(&self, channel_id: ChannelId, after: u64) -> usize;
 
     fn message_channel(&self, arrived_at: u64) -> Option<ChannelId>;
 

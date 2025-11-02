@@ -19,9 +19,8 @@ use super::{MessageId, Metadata, Storage};
 pub struct MemCache<S: Storage> {
     channels: Vec<Channel>,
     channels_index: BTreeMap<ChannelId, usize>,
-    messages: BTreeMap<ChannelId, Vec<u64>>,
-    messages_index: BTreeMap<MessageId, usize>,
     messages_cache: Mutex<LruCache<MessageId, Message>>,
+    messages_index: Mutex<BTreeMap<ChannelId, BTreeMap<usize, Option<MessageId>>>>,
     names: BTreeMap<Uuid, String>,
     metadata: Metadata,
     storage: S,
@@ -31,8 +30,6 @@ impl<S: Storage> GetSize for MemCache<S> {
     fn get_heap_size(&self) -> usize {
         self.channels.get_size()
             + self.channels_index.get_size()
-            + self.messages.get_size()
-            + self.messages_index.get_size()
             + self.names.get_size()
             + self.metadata.get_size()
     }
@@ -44,16 +41,9 @@ impl<S: Storage> MemCache<S> {
     pub fn new(storage: S) -> Self {
         let mut channels: Vec<Channel> = Vec::new();
         let mut channels_index = BTreeMap::new();
-        let mut messages: BTreeMap<ChannelId, Vec<u64>> = BTreeMap::new();
-        let mut messages_index: BTreeMap<MessageId, usize> = BTreeMap::new();
 
         // load channels into memory
         for channel in storage.channels() {
-            let channel_messages = messages.entry(channel.id).or_default();
-            for message_id in storage.messages(channel.id) {
-                messages_index.insert(message_id, channel_messages.len());
-                channel_messages.push(message_id.arrived_at);
-            }
             channels_index.insert(channel.id, channels.len());
             channels.push(channel.clone().into_owned());
         }
@@ -68,9 +58,8 @@ impl<S: Storage> MemCache<S> {
         Self {
             channels,
             channels_index,
-            messages,
-            messages_index,
             messages_cache: Mutex::new(LruCache::new(NUM_CACHED_MESSAGES)),
+            messages_index: Default::default(),
             names,
             metadata,
             storage,
@@ -103,20 +92,20 @@ impl<S: Storage> Storage for MemCache<S> {
         self.storage.store_channel(channel)
     }
 
-    fn messages(
-        &self,
-        channel_id: ChannelId,
-    ) -> Box<dyn DoubleEndedIterator<Item = MessageId> + '_> {
-        if let Some(messages) = self.messages.get(&channel_id) {
-            Box::new(
-                messages
-                    .iter()
-                    .map(move |arrived_at| MessageId::new(channel_id, *arrived_at)),
-            )
-        } else {
-            Box::new(std::iter::empty())
-        }
-    }
+    // fn messages(
+    //     &self,
+    //     channel_id: ChannelId,
+    // ) -> Box<dyn DoubleEndedIterator<Item = MessageId> + '_> {
+    //     if let Some(messages) = self.messages.get(&channel_id) {
+    //         Box::new(
+    //             messages
+    //                 .iter()
+    //                 .map(move |arrived_at| MessageId::new(channel_id, *arrived_at)),
+    //         )
+    //     } else {
+    //         Box::new(std::iter::empty())
+    //     }
+    // }
 
     fn edits(
         &self,
@@ -142,21 +131,12 @@ impl<S: Storage> Storage for MemCache<S> {
 
     fn store_message(&mut self, channel_id: ChannelId, message: Message) -> Cow<'_, Message> {
         let message_id = message.id(channel_id);
-        match self.messages_index.entry(message_id) {
-            Entry::Vacant(entry) => {
-                let messages = self.messages.entry(channel_id).or_default();
-                entry.insert(messages.len());
-                messages.push(message.arrived_at);
-                self.messages_cache.lock().put(message_id, message.clone());
-            }
-            Entry::Occupied(entry) => {
-                let idx = *entry.get();
-                let messages = self.messages.entry(channel_id).or_default();
-                let stored_arrived_at = &mut messages[idx];
-                *stored_arrived_at = message.arrived_at;
-                self.messages_cache.lock().put(message_id, message.clone());
-            }
-        }
+        self.messages_cache.lock().put(message_id, message.clone());
+        self.messages_index
+            .lock()
+            .entry(channel_id)
+            .or_default()
+            .clear();
         self.storage.store_message(channel_id, message)
     }
 
@@ -200,5 +180,22 @@ impl<S: Storage> Storage for MemCache<S> {
     fn message_channel(&self, arrived_at: u64) -> Option<ChannelId> {
         // message arrived_at to channel_id conversion is not cached
         self.storage.message_channel(arrived_at)
+    }
+
+    fn message_id_at(&self, channel_id: ChannelId, idx: usize) -> Option<MessageId> {
+        tracing::info!(?channel_id, idx, "###########");
+        let mut index = self.messages_index.lock();
+        match index.entry(channel_id).or_default().entry(idx) {
+            Entry::Vacant(entry) => {
+                let message_id = self.storage.message_id_at(channel_id, idx);
+                entry.insert(message_id);
+                message_id
+            }
+            Entry::Occupied(entry) => *entry.get(),
+        }
+    }
+
+    fn count_messages(&self, channel_id: ChannelId, after: u64) -> usize {
+        self.storage.count_messages(channel_id, after)
     }
 }

@@ -22,13 +22,6 @@ impl Storage for ForgetfulStorage {
         Cow::Owned(channel)
     }
 
-    fn messages(
-        &self,
-        _channel_id: ChannelId,
-    ) -> Box<dyn DoubleEndedIterator<Item = MessageId> + '_> {
-        Box::new(std::iter::empty())
-    }
-
     fn edits(
         &self,
         _message_id: MessageId,
@@ -68,5 +61,13 @@ impl Storage for ForgetfulStorage {
 
     fn message_channel(&self, _arrived_at: u64) -> Option<ChannelId> {
         None
+    }
+
+    fn message_id_at(&self, channel_id: ChannelId, idx: usize) -> Option<MessageId> {
+        todo!()
+    }
+
+    fn count_messages(&self, channel_id: ChannelId, after: u64) -> usize {
+        todo!()
     }
 }

@@ -60,7 +60,7 @@ opener = "0.8.2"
 phonenumber = "0.3.6"
 postcard = { version = "1.1.1", features = ["alloc"] }
 qr2term = "0.3.3"
-ratatui = "0.29.0"
+ratatui = "0.30.0-alpha.5"
 regex = "1.11.1"
 scopeguard = "1.2.0"
 serde = { version = "1.0.216", features = ["derive"] }
@@ -132,3 +132,5 @@ harness = false
 # signal-protocol uses a fork of this library via the patch mechanism of cargo.
 # Since it is not transitive, we have to add the patch here explicitly.
 "curve25519-dalek" = { git = 'https://github.com/signalapp/curve25519-dalek', tag = 'signal-curve25519-4.1.3' }
+# "ratatui" = { git = 'https://github.com/boxdot/ratatui', branch = 'list-items-builder' }
+"ratatui" = { path = "/Users/dima/src/ratatui/ratatui" }

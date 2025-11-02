@@ -97,12 +97,7 @@ impl App {
             .filter_map(|read| {
                 let arrived_at = read.timestamp?;
                 let channel_id = self.storage.message_channel(arrived_at)?;
-                let num_unread = self
-                    .storage
-                    .messages(channel_id)
-                    .rev()
-                    .take_while(|msg| arrived_at < msg.arrived_at)
-                    .count();
+                let num_unread = self.storage.count_messages(channel_id, arrived_at);
                 let num_unread: u32 = num_unread.try_into().ok()?;
                 Some((channel_id, num_unread))
             })

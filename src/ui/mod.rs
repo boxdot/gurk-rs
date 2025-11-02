@@ -4,6 +4,7 @@
 
 mod coords;
 mod draw;
+mod message_items_builder;
 mod name_resolver;
 
 pub use coords::coords_within_channels_view;

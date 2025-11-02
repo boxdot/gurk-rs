@@ -17,6 +17,24 @@ pub struct NameResolver<'a> {
     max_name_width: usize,
 }
 
+impl NameResolver<'static> {
+    pub fn compute_global(app: &App) -> Self {
+        let names_and_colors = app
+            .storage
+            .names()
+            .map(|(id, name)| {
+                let color = user_color(&name);
+                (id, (name.into_owned(), color))
+            })
+            .collect();
+        Self {
+            app: None,
+            names_and_colors,
+            max_name_width: 0,
+        }
+    }
+}
+
 impl<'a> NameResolver<'a> {
     pub fn compute(
         app: &'a App,
@@ -119,7 +137,7 @@ const USER_COLORS: &[Color] = &[
 ];
 
 // Randomly but deterministically choose a color for a username
-fn user_color(username: &str) -> Color {
+pub(crate) fn user_color(username: &str) -> Color {
     let idx = username
         .bytes()
         .fold(0, |sum, b| (sum + usize::from(b)) % USER_COLORS.len());

@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                    SELECT COUNT(*)\n                    FROM messages\n                    WHERE channel_id = ?1 AND edit IS NULL AND arrived_at > ?2\n                ",
+  "describe": {
+    "columns": [
+      {
+        "name": "COUNT(*)",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "34a4598cecb8a8e75e26dfbb7f4e0c4975bbb8e874da18238107cb442d3424ca"
+}

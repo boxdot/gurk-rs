@@ -34,9 +34,8 @@ impl SelectChannel {
 
         self.items.sort_unstable_by_key(|item| {
             let last_message_arrived_at = storage
-                .messages(item.channel_id)
-                .last()
-                .map(|message| message.arrived_at);
+                .message_id_at(item.channel_id, 0)
+                .map(|id| id.arrived_at);
             (Reverse(last_message_arrived_at), item.name.clone())
         });
 
