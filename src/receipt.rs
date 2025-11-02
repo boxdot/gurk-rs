@@ -6,19 +6,14 @@ use uuid::Uuid;
 
 use crate::signal::SignalManager;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Receipt {
     Sent = -1,
     Delivered = 0,
     Read = 1,
+    #[default]
     #[serde(other)]
     Nothing = -2, // Do not do anything to these receipts in order to avoid spamming receipt messages when an old database is loaded
-}
-
-impl Default for Receipt {
-    fn default() -> Self {
-        Self::Nothing
-    }
 }
 
 impl Receipt {
