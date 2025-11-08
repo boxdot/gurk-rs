@@ -17,11 +17,11 @@ use crossterm::{
 };
 use gurk::{app::App, config::Config};
 use gurk::{backoff::Backoff, passphrase::Passphrase};
-use gurk::{config, signal, ui};
 use gurk::{
     onboarding,
-    storage::{JsonStorage, MemCache, SqliteStorage, Storage, sync_from_signal},
+    storage::{MemCache, SqliteStorage, Storage, sync_from_signal},
 };
+use gurk::{signal, ui};
 use presage::libsignal_service::content::Content;
 use ratatui::{Terminal, backend::CrosstermBackend};
 use tokio::{runtime, select};
@@ -135,23 +135,9 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
         };
 
         debug!(%url, "opening sqlite data storage");
-        let mut sqlite_storage = SqliteStorage::maybe_encrypt_and_open(&url, &passphrase, false)
+        let sqlite_storage = SqliteStorage::maybe_encrypt_and_open(&url, &passphrase, false)
             .await
             .with_context(|| format!("failed to open sqlite data storage at: {url}"))?;
-        if sqlite_storage.is_empty() || !(sqlite_storage.metadata().fully_migrated.unwrap_or(false))
-        {
-            if let Ok(json_storage) = JsonStorage::new(
-                &config.deprecated_data_path,
-                config::fallback_data_path().as_deref(),
-            ) {
-                println!("converting JSON storage to SQLite storage at {url}");
-                let stats = sqlite_storage.copy_from(&json_storage).await?;
-                let mut metadata = sqlite_storage.metadata().into_owned();
-                metadata.fully_migrated = Some(true);
-                sqlite_storage.store_metadata(metadata);
-                info!(?stats, "converted");
-            }
-        }
         Box::new(MemCache::new(sqlite_storage))
     };
 
