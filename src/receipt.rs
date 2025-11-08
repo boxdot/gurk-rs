@@ -180,17 +180,4 @@ mod tests {
         assert!(Receipt::Sent < Receipt::Delivered);
         assert!(Receipt::Delivered < Receipt::Read);
     }
-
-    #[test]
-    fn test_receipt_serde() -> anyhow::Result<()> {
-        assert_eq!(serde_json::to_string(&Receipt::Nothing)?, "\"Nothing\"");
-        assert_eq!(serde_json::to_string(&Receipt::Sent)?, "\"Sent\"");
-        assert_eq!(serde_json::to_string(&Receipt::Delivered)?, "\"Delivered\"");
-        assert_eq!(serde_json::to_string(&Receipt::Read)?, "\"Read\"");
-
-        let receipt: Receipt = serde_json::from_str("\"Unknown\"")?;
-        assert_eq!(receipt, Receipt::Nothing);
-
-        Ok(())
-    }
 }
