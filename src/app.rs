@@ -719,8 +719,8 @@ impl App {
                     emoji,
                     HandleReactionOptions::new()
                         .remove(remove.unwrap_or(false))
-                        .notify(true)
-                        .bell(true),
+                        .notify(self.config.notifications.show_reactions)
+                        .bell(!self.config.notifications.mute_reactions_bell),
                 )
                 .await;
                 read.into_iter().for_each(|r| {
@@ -769,8 +769,8 @@ impl App {
                     emoji,
                     HandleReactionOptions::new()
                         .remove(remove.unwrap_or(false))
-                        .notify(true)
-                        .bell(true),
+                        .notify(self.config.notifications.show_reactions)
+                        .bell(!self.config.notifications.mute_reactions_bell),
                 )
                 .await;
                 return Ok(());
@@ -1424,8 +1424,20 @@ impl App {
     }
 
     fn notify(&self, summary: &str, text: &str) {
-        if self.config.notifications {
-            if let Err(e) = Notification::new().summary(summary).body(text).show() {
+        if self.config.notifications.enabled {
+            if let Err(e) = Notification::new()
+                .summary(if self.config.notifications.show_message_chat {
+                    summary
+                } else {
+                    "gurk"
+                })
+                .body(if self.config.notifications.show_message_text {
+                    text
+                } else {
+                    "New message!"
+                })
+                .show()
+            {
                 error!("failed to send notification: {}", e);
             }
         }

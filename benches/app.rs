@@ -2,7 +2,7 @@ use std::path::Path;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use gurk::app::App;
-use gurk::config::{Config, User};
+use gurk::config::{Config, NotificationConfig, User};
 use gurk::signal::test::SignalManagerMock;
 use gurk::storage::{ForgetfulStorage, MemCache};
 use presage::libsignal_service::content::Content;
@@ -11,7 +11,10 @@ use tracing::info;
 fn test_app() -> App {
     let (app, _) = App::try_new(
         Config {
-            notifications: false,
+            notifications: NotificationConfig {
+                enabled: false,
+                ..Default::default()
+            },
             ..Config::with_user(User {
                 display_name: "Tyler Durden".to_string(),
             })
