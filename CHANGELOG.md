@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.2] - 2025-10-24
+
+### 🚀 Features
+
+- Get passphrase from external command (#421)
+- Upgrade presage/libsignal to 0.83 (#435)
+
+### 🐛 Bug Fixes
+
+- Cache sender certificate (#404)
+- Disable receipts (#408)
+- Unread count excludes messages sent by the current user (#407)
+- *(publish)* Use latest ubuntu for musl (#419)
+- Correct message selection behind date separators (#316, #324, #381) (#424)
+
+### ⚙️ Miscellaneous Tasks
+
+- Specify msrv in Cargo.toml (#405)
+- Update tracing-subscriber fixing RUSTSEC-2025-0055 (#427)
+- Add instructions on File Uploads (#418) [Wertzui]
+
+* @so-rose made their first contribution in #424
+* @kachick made their first contribution in #421
+* @pcrockett made their first contribution in #419
+* @lwertzui made their first contribution in #418
+
 ## [0.7.1] - 2025-04-07
 
 ### 🐛 Bug Fixes
