@@ -183,7 +183,6 @@ impl<S: Storage> Storage for MemCache<S> {
     }
 
     fn message_id_at(&self, channel_id: ChannelId, idx: usize) -> Option<MessageId> {
-        tracing::info!(?channel_id, idx, "###########");
         let mut index = self.messages_index.lock();
         match index.entry(channel_id).or_default().entry(idx) {
             Entry::Vacant(entry) => {

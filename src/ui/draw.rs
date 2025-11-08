@@ -335,11 +335,12 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
 
     // message display options
     const TIME_WIDTH: usize = 6; // width of "00:00 "
-    const DELIMITER_WIDTH: usize = 2;
-    let mut prefix_width = TIME_WIDTH + DELIMITER_WIDTH;
-    if app.config.show_receipts {
-        prefix_width += RECEIPT_WIDTH;
-    }
+    let mut prefix_width = TIME_WIDTH
+        + if app.config.show_receipts {
+            RECEIPT_WIDTH
+        } else {
+            0
+        };
     let prefix = " ".repeat(prefix_width);
 
     // // The day of the message at the bottom of the viewport
