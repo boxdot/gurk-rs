@@ -41,7 +41,7 @@ pub trait Storage {
     /// etc.
     fn message_id_at(&self, channel_id: ChannelId, idx: usize) -> Option<MessageId>;
     /// The number of messages in the given channel after the given timestamp (non-inclusive).
-    fn count_messages(&self, channel_id: ChannelId, after: u64) -> usize;
+    fn num_messages(&self, channel_id: ChannelId, after: u64) -> usize;
     /// The channel of the message with the given arrived_at timestamp.
     fn message_channel(&self, arrived_at: u64) -> Option<ChannelId>;
 
@@ -113,14 +113,6 @@ pub trait Storage {
     fn metadata(&self) -> Cow<'_, Metadata>;
     /// Stores the new metadata in the storage overriding the previous one
     fn store_metadata(&mut self, metadata: Metadata) -> Cow<'_, Metadata>;
-
-    /// Persists the data in the storage
-    ///
-    /// ## Implementation note
-    ///
-    /// The implementers of this trait, can persist for each store call, if it is efficient enough.
-    /// This methods must guarantee that the data is persisted in any case.
-    fn save(&mut self);
 
     /// Returns `true` if this storage does not contains any channels and no names
     fn is_empty(&self) -> bool {

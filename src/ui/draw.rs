@@ -237,16 +237,9 @@ fn prepare_receipts(app: &mut App, height: usize) {
         return;
     }
 
-    let offset = if let Some(selected) = messages.state.selected() {
-        messages
-            .rendered
-            .offset
-            .clamp(selected.saturating_sub(height), selected)
-    } else {
-        messages.rendered.offset
-    };
+    let offset = messages.state.offset();
 
-    for idx in 0..offset {
+    for idx in offset..offset + height {
         if let Some(message_id) = app.storage.message_id_at(channel_id, idx)
             && let Some(message) = app.storage.message(message_id)
             && let Receipt::Delivered = message.receipt
@@ -296,19 +289,6 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
 
     let writing_people = app.writing_people(&channel);
 
-    // Calculate the offset in messages we start rendering with.
-    // `offset` includes the selected message (if any), and is at most height-many messages to
-    // the selected message, since we can't render more than height-many of them.
-    let messages = &app.messages[&channel_id];
-    let offset = if let Some(selected) = messages.state.selected() {
-        messages
-            .rendered
-            .offset
-            .clamp(selected.saturating_sub(height), selected)
-    } else {
-        messages.rendered.offset
-    };
-
     // message display options
     const TIME_WIDTH: usize = 6; // width of "00:00 "
     let prefix_width = TIME_WIDTH
@@ -327,7 +307,7 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     let name_resolver = RefCell::new(NameResolver::new(&*app.storage, app.config.first_name_only));
     let builder = MessageItemsBuilder {
         channel_id,
-        num_messages: height,
+        num_messages: height, // TODO: this is definitely wrong
         storage: &*app.storage,
         prefix_len: prefix_width,
         user_id: app.user_id,
@@ -344,23 +324,23 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
         .direction(ListDirection::BottomToTop);
 
     // re-borrow channel messages mutably
-    let messages = app
+    let message_list_state = app
         .messages
         .get_mut(&channel_id)
         .expect("non-existent channel");
 
-    // update selected state to point within `items`
-    let state = &mut messages.state;
-    let selected_global = state.selected();
-    if let Some(selected) = selected_global {
-        state.select(Some(selected - offset));
-    }
+    // // update selected state to point within `items`
+    // let state = &mut message_list_state.state;
+    // let selected_global = state.selected();
+    // if let Some(selected) = selected_global {
+    //     state.select(Some(selected - offset));
+    // }
 
-    f.render_stateful_widget(list, area, state);
+    f.render_stateful_widget(list, area, &mut message_list_state.state);
 
-    // restore selected state and update offset
-    state.select(selected_global);
-    messages.rendered.offset = offset;
+    // // restore selected state and update offset
+    // state.select(selected_global);
+    // message_list_state.rendered.offset = offset;
 }
 
 fn display_time(timestamp: u64) -> String {

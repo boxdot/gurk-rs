@@ -309,32 +309,6 @@ impl Storage for SqliteStorage {
         Cow::Owned(channel)
     }
 
-    // fn messages(
-    //     &self,
-    //     channel_id: ChannelId,
-    // ) -> Box<dyn DoubleEndedIterator<Item = MessageId> + '_> {
-    //     let channel_id_ref = &channel_id;
-    //     let arrived_at: sqlx::Result<Vec<i64>> = block_async_in_place(
-    //         query_scalar!(
-    //             r#"
-    //                 SELECT m.arrived_at
-    //                 FROM messages AS m
-    //                 WHERE m.channel_id = ?1 AND m.edit IS NULL
-    //                 ORDER BY m.arrived_at ASC
-    //             "#,
-    //             channel_id_ref
-    //         )
-    //         .fetch_all(&self.pool),
-    //     );
-    //     Box::new(
-    //         arrived_at
-    //             .ok_logged()
-    //             .into_iter()
-    //             .flatten()
-    //             .map(move |arrived_at| MessageId::new(channel_id, arrived_at as u64)),
-    //     )
-    // }
-
     fn edits(
         &self,
         message_id: MessageId,
@@ -562,8 +536,6 @@ impl Storage for SqliteStorage {
         Cow::Owned(metadata)
     }
 
-    fn save(&mut self) {}
-
     fn message_channel(&self, arrived_at: u64) -> Option<ChannelId> {
         let arrived_at: i64 = arrived_at
             .try_into()
@@ -609,7 +581,7 @@ impl Storage for SqliteStorage {
         .map(|arrived_at| MessageId::new(*channel_id, arrived_at))
     }
 
-    fn count_messages(&self, channel_id: ChannelId, after: u64) -> usize {
+    fn num_messages(&self, channel_id: ChannelId, after: u64) -> usize {
         let channel_id = &channel_id;
         let after: i64 = after.try_into().expect("after timestamp too large");
         block_async_in_place(

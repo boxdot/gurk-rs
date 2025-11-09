@@ -57,8 +57,6 @@ impl Storage for ForgetfulStorage {
         Cow::Owned(metadata)
     }
 
-    fn save(&mut self) {}
-
     fn message_channel(&self, _arrived_at: u64) -> Option<ChannelId> {
         None
     }
@@ -67,7 +65,7 @@ impl Storage for ForgetfulStorage {
         None
     }
 
-    fn count_messages(&self, _channel_id: ChannelId, _after: u64) -> usize {
+    fn num_messages(&self, _channel_id: ChannelId, _after: u64) -> usize {
         0
     }
 }

@@ -13,8 +13,6 @@ pub struct StatefulList<T> {
     #[serde(skip)]
     pub state: ListState,
     pub items: Vec<T>,
-    #[serde(skip)]
-    pub rendered: Rendered,
 }
 
 impl<T: PartialEq> PartialEq for StatefulList<T> {
@@ -35,7 +33,6 @@ impl<T> Default for StatefulList<T> {
         Self {
             state: Default::default(),
             items: Vec::new(),
-            rendered: Default::default(),
         }
     }
 }

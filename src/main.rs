@@ -35,7 +35,6 @@ use url::Url;
 const TARGET_FPS: u64 = 144;
 const RECEIPT_TICK_PERIOD: u64 = 144;
 const FRAME_BUDGET: Duration = Duration::from_millis(1000 / TARGET_FPS);
-const SAVE_BUDGET: Duration = Duration::from_millis(1000);
 const RECEIPT_BUDGET: Duration = Duration::from_millis(RECEIPT_TICK_PERIOD * 1000 / TARGET_FPS);
 
 #[derive(Debug, Parser)]
@@ -225,7 +224,6 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
 
     let mut res = Ok(()); // result on quit
     let mut last_render_at = Instant::now();
-    let mut last_save_at = Instant::now();
     let is_render_spawned = Arc::new(AtomicBool::new(false));
 
     let tick_tx = tx.clone();
@@ -348,11 +346,6 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
             None => {
                 break;
             }
-        }
-
-        if last_save_at.elapsed() > SAVE_BUDGET || app.should_quit {
-            app.storage.save();
-            last_save_at = Instant::now();
         }
 
         if app.should_quit {

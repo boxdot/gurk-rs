@@ -29,6 +29,7 @@ use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
+use crate::channels::SelectChannel;
 use crate::command::{
     Command, DirectionVertical, ModeKeybinding, MoveAmountText, MoveAmountVisual, MoveDirection,
     Widget, WindowMode, get_keybindings,
@@ -44,13 +45,11 @@ use crate::signal::{
 };
 use crate::storage::{MessageId, Storage};
 use crate::util::{self, ATTACHMENT_REGEX, StatefulList, URL_REGEX};
-use crate::{channels::SelectChannel, util::Rendered};
 
 #[derive(Default)]
 pub struct MessageListState {
     pub items_len: usize,
     pub state: ListState,
-    pub rendered: Rendered,
 }
 
 pub struct App {
@@ -88,7 +87,14 @@ impl App {
         let mut messages: BTreeMap<_, MessageListState> = BTreeMap::new();
         for channel in storage.channels() {
             channels.items.push(channel.id);
-            messages.insert(channel.id, Default::default());
+            let items_len = storage.num_messages(channel.id, 0);
+            messages.insert(
+                channel.id,
+                MessageListState {
+                    items_len,
+                    state: Default::default(),
+                },
+            );
         }
         channels.items.sort_unstable_by_key(|channel_id| {
             let last_message_arrived_at = storage
@@ -497,7 +503,6 @@ impl App {
         if let Some(channel_id) = self.channels.selected_item() {
             if let Some(messages) = self.messages.get_mut(channel_id) {
                 messages.state.select(None);
-                messages.rendered = Default::default();
             }
         }
     }
