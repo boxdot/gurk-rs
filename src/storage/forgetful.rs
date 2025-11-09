@@ -63,11 +63,11 @@ impl Storage for ForgetfulStorage {
         None
     }
 
-    fn message_id_at(&self, channel_id: ChannelId, idx: usize) -> Option<MessageId> {
-        todo!()
+    fn message_id_at(&self, _channel_id: ChannelId, _idx: usize) -> Option<MessageId> {
+        None
     }
 
-    fn count_messages(&self, channel_id: ChannelId, after: u64) -> usize {
-        todo!()
+    fn count_messages(&self, _channel_id: ChannelId, _after: u64) -> usize {
+        0
     }
 }

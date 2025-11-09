@@ -269,6 +269,7 @@ impl SignalManager for PresageManager {
             send_failed: Default::default(),
             edit: edit_message_timestamp,
             edited: edit_message_timestamp.is_some(),
+            attributes: Default::default(),
         };
         (message, response)
     }

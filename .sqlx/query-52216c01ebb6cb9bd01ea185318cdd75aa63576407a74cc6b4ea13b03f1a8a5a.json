@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                    SELECT\n                        m.arrived_at AS \"arrived_at!\",\n                        m.from_id AS \"from_id: _\",\n                        m.message,\n                        m.receipt AS \"receipt: _\",\n                        m.body_ranges AS \"body_ranges: _\",\n                        m.attachments AS \"attachments: _\",\n                        m.reactions AS \"reactions: _\",\n                        q.arrived_at AS \"quote_arrived_at: _\",\n                        q.from_id AS \"quote_from_id: _\",\n                        q.message AS quote_message,\n                        q.attachments AS \"quote_attachments: _\",\n                        q.body_ranges AS \"quote_body_ranges: _\",\n                        q.receipt AS \"quote_receipt: _\",\n                        NULL AS \"edit: _\",\n                        m.edited AS \"edited: _\"\n                    FROM messages AS m\n                    LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1\n                    WHERE m.channel_id = ?1 AND m.edit == ?2\n                    ORDER BY m.arrived_at ASC\n                ",
+  "query": "\n                    SELECT\n                        m.arrived_at AS \"arrived_at!\",\n                        m.from_id AS \"from_id: _\",\n                        m.message,\n                        m.receipt AS \"receipt: _\",\n                        m.body_ranges AS \"body_ranges: _\",\n                        m.attachments AS \"attachments: _\",\n                        m.reactions AS \"reactions: _\",\n                        q.arrived_at AS \"quote_arrived_at: _\",\n                        q.from_id AS \"quote_from_id: _\",\n                        q.message AS quote_message,\n                        q.attachments AS \"quote_attachments: _\",\n                        q.body_ranges AS \"quote_body_ranges: _\",\n                        q.receipt AS \"quote_receipt: _\",\n                        NULL AS \"edit: _\",\n                        m.edited AS \"edited: _\",\n                        NULL AS \"prev_message_arrived_at: _\"\n                    FROM messages AS m\n                    LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1\n                    WHERE m.channel_id = ?1 AND m.edit == ?2\n                    ORDER BY m.arrived_at ASC\n                ",
   "describe": {
     "columns": [
       {
@@ -77,6 +77,11 @@
         "name": "edited: _",
         "ordinal": 14,
         "type_info": "Bool"
+      },
+      {
+        "name": "prev_message_arrived_at: _",
+        "ordinal": 15,
+        "type_info": "Null"
       }
     ],
     "parameters": {
@@ -97,8 +102,9 @@
       true,
       true,
       null,
-      false
+      false,
+      null
     ]
   },
-  "hash": "6b840f0eb971e19e45726b9e3fd1be08acc54f19db63fd7f0404e0dc5c50f4be"
+  "hash": "52216c01ebb6cb9bd01ea185318cdd75aa63576407a74cc6b4ea13b03f1a8a5a"
 }

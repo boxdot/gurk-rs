@@ -10,13 +10,13 @@ use tracing::info;
 use url::Url;
 use uuid::Uuid;
 
-use crate::receipt::Receipt;
-use crate::signal::Attachment;
 use crate::storage::{MessageId, Metadata, Storage};
+use crate::{data::MessageAttributes, signal::Attachment};
 use crate::{
     data::{BodyRange, Channel, ChannelId, GroupData, Message, TypingSet},
     passphrase::Passphrase,
 };
+use crate::{receipt::Receipt, util::utc_timestamp_msec_to_local};
 
 use super::encoding::BlobData;
 use super::encrypt::{encrypt_db, is_sqlite_encrypted_heuristics};
@@ -131,6 +131,7 @@ struct SqlMessage {
     quote_receipt: Option<BlobData<Receipt>>,
     edit: Option<i64>,
     edited: bool,
+    prev_message_arrived_at: Option<i64>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -157,6 +158,7 @@ impl SqlMessage {
             quote_receipt,
             edit,
             edited,
+            prev_message_arrived_at,
         } = self;
 
         let quote = quote_arrived_at
@@ -180,6 +182,16 @@ impl SqlMessage {
                 Some(quote)
             });
 
+        let at_date_boundary = if let Some(prev_message_arrived_at) = prev_message_arrived_at {
+            let date = utc_timestamp_msec_to_local(arrived_at as u64).date_naive();
+            let prev_date =
+                utc_timestamp_msec_to_local(prev_message_arrived_at as u64).date_naive();
+            date != prev_date
+        } else {
+            false
+        };
+        let attributes = MessageAttributes { at_date_boundary };
+
         Ok(Message {
             from_id,
             message,
@@ -198,6 +210,7 @@ impl SqlMessage {
                     .ok_logged()
             }),
             edited,
+            attributes,
         })
     }
 }
@@ -354,7 +367,8 @@ impl Storage for SqliteStorage {
                         q.body_ranges AS "quote_body_ranges: _",
                         q.receipt AS "quote_receipt: _",
                         NULL AS "edit: _",
-                        m.edited AS "edited: _"
+                        m.edited AS "edited: _",
+                        NULL AS "prev_message_arrived_at: _"
                     FROM messages AS m
                     LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1
                     WHERE m.channel_id = ?1 AND m.edit == ?2
@@ -400,9 +414,15 @@ impl Storage for SqliteStorage {
                         q.body_ranges AS "quote_body_ranges: _",
                         q.receipt AS "quote_receipt: _",
                         m.edit,
-                        m.edited as "edited: _"
+                        m.edited as "edited: _",
+                        pm.arrived_at AS "prev_message_arrived_at: _"
                     FROM messages AS m
                     LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1
+                    LEFT JOIN messages AS pm ON pm.arrived_at = (
+                        SELECT MAX(arrived_at)
+                        FROM messages
+                        WHERE channel_id = ?1 AND arrived_at < ?2
+                    )
                     WHERE m.channel_id = ?1 AND m.arrived_at = ?2
                     GROUP BY m.arrived_at
                     LIMIT 1
@@ -658,6 +678,7 @@ mod tests {
                 send_failed: Default::default(),
                 edit: Default::default(),
                 edited: Default::default(),
+                attributes: Default::default(),
             },
         );
 
@@ -686,6 +707,7 @@ mod tests {
                 send_failed: Default::default(),
                 edit: Default::default(),
                 edited: Default::default(),
+                attributes: Default::default(),
             },
         );
 

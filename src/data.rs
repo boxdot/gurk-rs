@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 
 use anyhow::anyhow;
+use chrono::{Date, NaiveDate, Utc};
 use get_size2::GetSize;
 use presage::libsignal_service::zkgroup::groups::{GroupMasterKey, GroupSecretParams};
 use presage::proto;
@@ -195,6 +196,24 @@ pub struct Message {
     /// Whether the message was edited
     #[serde(default)]
     pub(crate) edited: bool,
+    /// Calculated attributes of this message
+    ///
+    /// Attributes are calculated and not stored in the storage. In particular, changes are not
+    /// reflected in the storage.
+    #[serde(default)]
+    pub(crate) attributes: MessageAttributes,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct MessageAttributes {
+    /// `true` if this is the first message of the day (in local time)
+    pub(crate) at_date_boundary: bool,
+}
+
+impl GetSize for MessageAttributes {
+    fn get_stack_size() -> usize {
+        1
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, GetSize)]
@@ -304,6 +323,7 @@ impl Message {
             send_failed: Default::default(),
             edit: Default::default(),
             edited: Default::default(),
+            attributes: Default::default(),
         }
     }
 
@@ -324,6 +344,7 @@ impl Message {
             send_failed: Default::default(),
             edit: Default::default(),
             edited: Default::default(),
+            attributes: Default::default(),
         }
     }
 
@@ -344,6 +365,7 @@ impl Message {
             send_failed: Default::default(),
             edit: Default::default(),
             edited: Default::default(),
+            attributes: Default::default(),
         })
     }
 
