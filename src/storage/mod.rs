@@ -33,18 +33,16 @@ pub trait Storage {
     /// Stores the given `channel` and returns it back
     fn store_channel(&mut self, channel: Channel) -> Cow<'_, Channel>;
 
-    // /// Messages sorted by arrived_at in ascending order
-    // ///
-    // /// No edited messages must be included.
-    // fn messages(
-    //     &self,
-    //     channel_id: ChannelId,
-    // ) -> Box<dyn DoubleEndedIterator<Item = MessageId> + '_>;
-    /// Gets the message by id
+    /// Gets the message by id.
     fn message(&self, message_id: MessageId) -> Option<Cow<'_, Message>>;
+    /// Gets the message id at the given index.
+    ///
+    /// The index is reversed, that is, the last message is at index 0, the second last at index 1,
+    /// etc.
     fn message_id_at(&self, channel_id: ChannelId, idx: usize) -> Option<MessageId>;
+    /// The number of messages in the given channel after the given timestamp (non-inclusive).
     fn count_messages(&self, channel_id: ChannelId, after: u64) -> usize;
-
+    /// The channel of the message with the given arrived_at timestamp.
     fn message_channel(&self, arrived_at: u64) -> Option<ChannelId>;
 
     fn edits(

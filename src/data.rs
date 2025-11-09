@@ -3,7 +3,6 @@
 use std::collections::HashSet;
 
 use anyhow::anyhow;
-use chrono::{Date, NaiveDate, Utc};
 use get_size2::GetSize;
 use presage::libsignal_service::zkgroup::groups::{GroupMasterKey, GroupSecretParams};
 use presage::proto;
@@ -145,10 +144,6 @@ impl ChannelId {
             ChannelId::User(uuid) => Some(*uuid),
             _ => None,
         }
-    }
-
-    pub(crate) fn is_user(&self) -> bool {
-        matches!(self, ChannelId::User(_))
     }
 }
 

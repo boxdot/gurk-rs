@@ -42,9 +42,7 @@ impl<T> Default for StatefulList<T> {
 
 impl<T> StatefulList<T> {
     pub fn next(&mut self) {
-        let selected = self.state.selected();
-        tracing::info!(selected = ?selected, "next");
-        let i = match selected {
+        let i = match self.state.selected() {
             Some(i) => {
                 if i + 1 >= self.items.len() {
                     if MESSAGE_SCROLL_BACK { 0 } else { i }

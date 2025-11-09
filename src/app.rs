@@ -1,10 +1,10 @@
-use std::borrow::Cow;
 use std::cell::Cell;
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::io::Cursor;
 use std::path::Path;
+use std::{borrow::Cow, convert::identity};
 
 use anyhow::{Context as _, anyhow};
 use arboard::{Clipboard, ImageData};
@@ -94,12 +94,12 @@ impl App {
             let last_message_arrived_at = storage
                 .message_id_at(*channel_id, 0)
                 .map(|id| id.arrived_at);
-            let channel_name = storage
-                .channel(*channel_id)
-                .map(|channel| channel.name.clone());
-            let key = (Reverse(last_message_arrived_at), channel_name);
-            tracing::info!(key = ?key, "channel");
-            key
+            let channel_name = last_message_arrived_at.is_none().then(|| {
+                storage
+                    .channel(*channel_id)
+                    .map(|channel| channel.name.clone())
+            });
+            (Reverse(last_message_arrived_at), channel_name)
         });
         channels.next(); // select first channel
 
@@ -399,6 +399,7 @@ impl App {
     ///
     /// Does nothing if no message is selected and no url is contained in the message.
     fn try_open_url(&mut self) -> Option<()> {
+        info!("Trying to open url");
         let message = self.selected_message()?;
         open_url(&message, &URL_REGEX)?;
         self.reset_message_selection();
@@ -428,9 +429,7 @@ impl App {
         let channel_id = self.channels.selected_item()?;
         let list = self.messages.get(channel_id)?;
         let selected_idx = list.state.selected()?;
-        // Messages are shown in reversed order => selected is reversed
-        let idx = list.items_len.checked_sub(selected_idx + 1)?;
-        self.storage.message_id_at(*channel_id, idx)
+        self.storage.message_id_at(*channel_id, selected_idx)
     }
 
     fn selected_message(&self) -> Option<Cow<'_, Message>> {
@@ -597,7 +596,7 @@ impl App {
     }
 
     pub async fn on_message(&mut self, content: Box<Content>) -> anyhow::Result<()> {
-        // tracing::info!(?content, "incoming");
+        tracing::info!(?content, "incoming");
 
         #[cfg(feature = "dev")]
         if self.config.developer.dump_raw_messages {
@@ -1035,6 +1034,8 @@ impl App {
     }
 
     fn handle_receipt(&mut self, sender_uuid: Uuid, receipt: Receipt, mut timestamps: Vec<u64>) {
+        info!(?sender_uuid, ?receipt, ?timestamps, "handle_receipt");
+
         let sender_channels: Vec<ChannelId> = self
             .storage
             .channels()
@@ -1049,41 +1050,37 @@ impl App {
             .map(|channel| channel.id)
             .collect();
 
-        timestamps.sort_unstable_by_key(|&ts| Reverse(ts));
         if timestamps.is_empty() {
             return;
         }
+        timestamps.sort_unstable_by_key(|&ts| Reverse(ts));
 
         let mut found_channel_id = None;
         let mut messages_to_store = Vec::new();
 
-        // 'outer: for channel_id in sender_channels {
-        //     let mut messages = self.storage.messages(channel_id).rev();
-        //     for &ts in &timestamps {
-        //         // Note: `&mut` is needed to advance the iterator `messages` with each `ts`.
-        //         // Since these are sorted in reverse order, we can continue advancing messages
-        //         // without consuming them.
-        //         if let Some(message_id) = (&mut messages)
-        //             .take_while(|message_id| message_id.arrived_at >= ts)
-        //             .find(|message_id| message_id.arrived_at == ts)
-        //         {
-        //             let Some(message) = self.storage.message(message_id) else {
-        //                 continue;
-        //             };
-        //             if message.receipt < receipt {
-        //                 let mut message = message.into_owned();
-        //                 message.receipt = message.receipt.max(receipt);
-        //                 messages_to_store.push(message);
-        //             }
-        //             found_channel_id = Some(channel_id);
-        //         }
-        //     }
-        //
-        //     if found_channel_id.is_some() {
-        //         // if one ts was found, then all other ts have to be in the same channel
-        //         break 'outer;
-        //     }
-        // }
+        for channel_id in sender_channels {
+            for &ts in &timestamps {
+                let message_id = (0..)
+                    .map(|idx| self.storage.message_id_at(channel_id, idx))
+                    .map_while(identity)
+                    .take_while(|message_id| message_id.arrived_at >= ts)
+                    .find(|message_id| message_id.arrived_at == ts);
+                if let Some(message_id) = message_id
+                    && let Some(message) = self.storage.message(message_id)
+                {
+                    if message.receipt < receipt {
+                        let mut message = message.into_owned();
+                        message.receipt = receipt;
+                        messages_to_store.push(message);
+                    }
+                    found_channel_id = Some(channel_id);
+                }
+            }
+            if found_channel_id.is_some() {
+                // if one ts was found, then all other ts have to be in the same channel
+                break;
+            }
+        }
 
         if let Some(channel_id) = found_channel_id {
             for message in messages_to_store {
@@ -1682,6 +1679,7 @@ pub fn to_emoji(s: &str) -> Option<&str> {
 fn open_url(message: &Message, url_regex: &Regex) -> Option<()> {
     let text = message.message.as_ref()?;
     let m = url_regex.find(text)?;
+    info!("Found url: {:?}", m);
     let url = m.as_str();
     if let Err(error) = opener::open(url) {
         error!(url, %error, "failed to open");

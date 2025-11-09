@@ -1,7 +1,6 @@
 use std::{borrow::Cow, cell::RefCell};
 
 use ratatui::widgets::{ListItem, ListItemsBuilder};
-use tracing::info;
 use uuid::Uuid;
 
 use crate::{
@@ -35,7 +34,6 @@ impl<'a> ListItemsBuilder<'a> for MessageItemsBuilder<'a> {
     fn build(&self, index: usize) -> Option<Cow<'_, ListItem<'a>>> {
         let message_id = self.storage.message_id_at(self.channel_id, index)?;
         let message = self.storage.message(message_id)?;
-        info!(index, ?message_id, ?self.unread_messages, "message");
         let is_first_unread = self.unread_messages == index as u32 + 1;
         self.render_message(message, is_first_unread)
             .map(Cow::Owned)
