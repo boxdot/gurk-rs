@@ -19,13 +19,6 @@ pub struct Config {
         skip_serializing_if = "is_default_data_dir"
     )]
     pub data_dir: PathBuf,
-    /// Path to the JSON file (incl. filename) storing channels and messages.
-    #[serde(
-        default = "default_data_json_path",
-        rename = "data_path",
-        skip_serializing
-    )]
-    pub deprecated_data_path: PathBuf,
     /// Path to the Signal database containing the linked device data.
     #[serde(
         rename = "signal_db_path",
@@ -123,7 +116,6 @@ impl Config {
         Config {
             user,
             data_dir: default_data_dir(),
-            deprecated_data_path: default_data_json_path(),
             deprecated_signal_db_path: default_signal_db_path(),
             first_name_only: false,
             show_receipts: true,
@@ -200,12 +192,6 @@ impl Config {
             keys.push(DeprecatedConfigKey {
                 key: "sqlite.enabled",
                 message: "sqlite is now enabled by default",
-            });
-        }
-        if config_value.get("data_path").is_some() {
-            keys.push(DeprecatedConfigKey {
-                key: "data_path",
-                message: "is not used anymore, and is migrated to sqlite.url",
             });
         }
         if config_value.get("signal_db_path").is_some() {
@@ -325,10 +311,6 @@ fn default_data_dir() -> PathBuf {
 
 fn is_default_data_dir(path: &Path) -> bool {
     path == default_data_dir()
-}
-
-fn default_data_json_path() -> PathBuf {
-    default_data_dir().join("gurk.data.json")
 }
 
 fn default_true() -> bool {

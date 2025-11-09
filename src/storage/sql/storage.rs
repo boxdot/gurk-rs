@@ -12,7 +12,6 @@ use uuid::Uuid;
 
 use crate::receipt::Receipt;
 use crate::signal::Attachment;
-use crate::storage::copy::{self, Stats};
 use crate::storage::{MessageId, Metadata, Storage};
 use crate::{
     data::{BodyRange, Channel, ChannelId, GroupData, Message, TypingSet},
@@ -26,7 +25,6 @@ use super::util::ResultExt as _;
 const METADATA_ID: i64 = 0;
 
 pub struct SqliteStorage {
-    opts: SqliteConnectOptions,
     pool: SqlitePool,
 }
 
@@ -62,7 +60,7 @@ impl SqliteStorage {
         let pool = SqlitePool::connect_with(opts.clone()).await?;
         sqlx::migrate!().run(&pool).await?;
 
-        Ok(Self { opts, pool })
+        Ok(Self { pool })
     }
 
     #[cfg(test)]
@@ -76,27 +74,7 @@ impl SqliteStorage {
         let pool = SqlitePool::connect_with(opts.clone()).await?;
         sqlx::migrate!().run(&pool).await?;
 
-        Ok(Self { opts, pool })
-    }
-
-    pub async fn copy_from(&mut self, from: &impl Storage) -> sqlx::Result<Stats> {
-        // reconnect without disabled journaling and synchronous mode
-        // otherwise copying the data is really slow
-        let copy_opts = self
-            .opts
-            .clone()
-            .journal_mode(SqliteJournalMode::Off)
-            .synchronous(SqliteSynchronous::Off);
-
-        self.pool.close().await;
-
-        self.pool = SqlitePool::connect_with(copy_opts).await?;
-        let stats = copy::copy(from, self);
-
-        self.pool.close().await;
-        self.pool = SqlitePool::connect_with(self.opts.clone()).await?;
-
-        Ok(stats)
+        Ok(Self { pool })
     }
 }
 

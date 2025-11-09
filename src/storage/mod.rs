@@ -1,6 +1,5 @@
 mod copy;
 mod forgetful;
-mod json;
 mod memcache;
 mod sql;
 
@@ -12,9 +11,8 @@ use uuid::Uuid;
 
 use crate::data::{Channel, ChannelId, Message};
 
-pub use copy::{copy, sync_from_signal};
+pub use copy::sync_from_signal;
 pub use forgetful::ForgetfulStorage;
-pub use json::JsonStorage;
 pub use memcache::MemCache;
 pub use sql::SqliteStorage;
 

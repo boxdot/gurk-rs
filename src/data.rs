@@ -347,11 +347,6 @@ impl Message {
         })
     }
 
-    /// Returns whether this message is an edit of an another message
-    pub(crate) fn is_edit(&self) -> bool {
-        self.edit.is_some()
-    }
-
     pub fn is_empty(&self) -> bool {
         self.message.is_none()
             && self.attachments.is_empty()
