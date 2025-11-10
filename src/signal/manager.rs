@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use std::pin::Pin;
 
 use async_trait::async_trait;
-use get_size2::GetSize;
 use presage::libsignal_service::content::Content;
 use presage::libsignal_service::sender::AttachmentSpec;
 use presage::model::contacts::Contact;
@@ -75,7 +74,7 @@ pub struct ResolvedGroup {
     pub profile_keys: Vec<ProfileKeyBytes>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, GetSize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Attachment {
     pub id: String,

@@ -1,15 +1,12 @@
 use std::collections::{HashMap, HashSet};
 
-use get_size2::GetSize;
 use serde::{Deserialize, Serialize};
 use tracing::error;
 use uuid::Uuid;
 
 use crate::signal::SignalManager;
 
-#[derive(
-    Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, GetSize,
-)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Receipt {
     Sent = -1,
     Delivered = 0,

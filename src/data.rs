@@ -3,7 +3,6 @@
 use std::collections::HashSet;
 
 use anyhow::anyhow;
-use get_size2::GetSize;
 use presage::libsignal_service::zkgroup::groups::{GroupMasterKey, GroupSecretParams};
 use presage::proto;
 use presage::proto::data_message::Quote;
@@ -14,7 +13,7 @@ use uuid::Uuid;
 use crate::signal::{Attachment, GroupIdentifierBytes, GroupMasterKeyBytes};
 use crate::{receipt::Receipt, storage::MessageId};
 
-#[derive(Debug, Clone, PartialEq, Eq, GetSize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Channel {
     pub id: ChannelId,
     pub name: String,
@@ -27,15 +26,6 @@ pub struct Channel {
 pub enum TypingSet {
     SingleTyping(bool),
     GroupTyping(HashSet<Uuid>),
-}
-
-impl GetSize for TypingSet {
-    fn get_heap_size(&self) -> usize {
-        match self {
-            Self::SingleTyping(_) => 0,
-            Self::GroupTyping(uuids) => uuids.len() * 16,
-        }
-    }
 }
 
 impl TypingSet {
@@ -54,12 +44,6 @@ pub struct GroupData {
     pub master_key_bytes: GroupMasterKeyBytes,
     pub members: Vec<Uuid>,
     pub revision: u32,
-}
-
-impl GetSize for GroupData {
-    fn get_heap_size(&self) -> usize {
-        self.members.len() * 16
-    }
 }
 
 impl Channel {
@@ -89,9 +73,7 @@ impl Channel {
     }
 }
 
-#[derive(
-    Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, GetSize,
-)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ChannelId {
     User(Uuid),
     Group(GroupIdentifierBytes),
@@ -166,7 +148,7 @@ impl TypingAction {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, GetSize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Message {
     pub from_id: Uuid,
     pub message: Option<String>,
@@ -205,26 +187,20 @@ pub(crate) struct MessageAttributes {
     pub(crate) at_date_boundary: bool,
 }
 
-impl GetSize for MessageAttributes {
-    fn get_stack_size() -> usize {
-        1
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, GetSize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct BodyRange {
     pub(crate) start: u16,
     pub(crate) end: u16,
     pub(crate) value: AssociatedValue,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, GetSize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum AssociatedValue {
     MentionUuid(Uuid),
     Style(Style),
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, GetSize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum Style {
     #[default]
     None,

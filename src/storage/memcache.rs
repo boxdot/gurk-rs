@@ -2,7 +2,6 @@ use std::collections::btree_map::Entry;
 use std::{borrow::Cow, num::NonZero};
 use std::{cell::Cell, collections::BTreeMap};
 
-use get_size2::GetSize;
 use lru::LruCache;
 use thread_local::ThreadLocal;
 use uuid::Uuid;
@@ -58,15 +57,6 @@ pub struct MemCache<S: Storage> {
     names: BTreeMap<Uuid, String>,
     metadata: Metadata,
     storage: S,
-}
-
-impl<S: Storage> GetSize for MemCache<S> {
-    fn get_heap_size(&self) -> usize {
-        self.channels.get_size()
-            + self.channels_index.get_size()
-            + self.names.get_size()
-            + self.metadata.get_size()
-    }
 }
 
 const NUM_CACHED_MESSAGES: NonZero<usize> = NonZero::new(1024).unwrap();

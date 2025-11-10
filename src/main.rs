@@ -15,7 +15,6 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use get_size2::GetSize;
 use gurk::{app::App, config::Config};
 use gurk::{backoff::Backoff, passphrase::Passphrase};
 use gurk::{
@@ -138,9 +137,7 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
         let sqlite_storage = SqliteStorage::maybe_encrypt_and_open(&url, &passphrase, false)
             .await
             .with_context(|| format!("failed to open sqlite data storage at: {url}"))?;
-        let mem_cache = MemCache::new(sqlite_storage);
-        info!(size = mem_cache.get_size(), "MemCache created");
-        Box::new(mem_cache)
+        Box::new(MemCache::new(sqlite_storage))
     };
 
     sync_from_signal(&*signal_manager, &mut *storage).await;
