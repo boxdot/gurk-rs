@@ -395,16 +395,7 @@ impl App {
     ///
     /// Does nothing if no message is selected and no url is contained in the message.
     fn try_open_url(&mut self) -> Option<()> {
-        // Note: to make the borrow checker happy, we have to use distinct fields here, and no
-        // methods that borrow self mutably.
-        let channel_id = self.channels.selected_item()?;
-        let messages = self.messages.get(channel_id)?;
-        let idx = messages.state.selected()?;
-        let idx = messages.items.len().checked_sub(idx + 1)?;
-        let arrived_at = messages.items.get(idx)?;
-        let message = self
-            .storage
-            .message(MessageId::new(*channel_id, *arrived_at))?;
+        let message = self.selected_message()?;
         open_url(&message, &URL_REGEX)?;
         self.reset_message_selection();
         Some(())
@@ -414,16 +405,7 @@ impl App {
     ///
     /// Does nothing if no message is selected and the message contains no attachments.
     fn try_open_file(&mut self) -> Option<()> {
-        // Note: to make the borrow checker happy, we have to use distinct fields here, and no
-        // methods that borrow self mutably.
-        let channel_id = self.channels.selected_item()?;
-        let messages = self.messages.get(channel_id)?;
-        let idx = messages.state.selected()?;
-        let idx = messages.items.len().checked_sub(idx + 1)?;
-        let arrived_at = messages.items.get(idx)?;
-        let message = self
-            .storage
-            .message(MessageId::new(*channel_id, *arrived_at))?;
+        let message = self.selected_message()?;
         open_file(&message)?;
         self.reset_message_selection();
         Some(())
