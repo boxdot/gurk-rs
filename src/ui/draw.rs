@@ -4,9 +4,9 @@ use std::fmt;
 
 use chrono::Datelike;
 use itertools::Itertools;
-use ratatui::Frame;
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Clear, List, ListDirection, ListItem, Paragraph};
+use ratatui::Frame;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     widgets::Padding,
@@ -27,8 +27,8 @@ use crate::receipt::{Receipt, ReceiptEvent};
 use crate::storage::MessageId;
 use crate::util::utc_timestamp_msec_to_local;
 
-use super::CHANNEL_VIEW_RATIO;
 use super::name_resolver::NameResolver;
+use super::CHANNEL_VIEW_RATIO;
 
 /// The main function drawing the UI for each frame
 pub fn draw(f: &mut Frame, app: &mut App) {
@@ -342,16 +342,22 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     let prefix = " ".repeat(prefix_width);
 
     // The day of the message at the bottom of the viewport
-    let mut previous_msg_day =
-        utc_timestamp_msec_to_local(messages_to_render.clone().next().unwrap_or_default())
-            .num_days_from_ce();
+    let first_msg_timestamp = messages_to_render.clone().next().unwrap_or_default();
+    let mut previous_msg_timestamp = first_msg_timestamp;
+    let mut previous_msg_day = utc_timestamp_msec_to_local(first_msg_timestamp).num_days_from_ce();
 
     let messages_from_offset = messages_to_render
         .flat_map(|arrived_at| {
             let Some(msg) = app.storage.message(MessageId::new(channel_id, arrived_at)) else {
                 return [None, None];
             };
-            let date_division = display_date_line(msg.arrived_at, &mut previous_msg_day, width);
+            let date_division = display_date_line(
+                msg.arrived_at,
+                previous_msg_timestamp,
+                &mut previous_msg_day,
+                width,
+            );
+            previous_msg_timestamp = msg.arrived_at;
             let show_receipt = ShowReceipt::from_msg(&msg, app.user_id, app.config.show_receipts);
             let msg = display_message(
                 &names,
@@ -635,6 +641,7 @@ fn replace_mentions(msg: &Message, names: &NameResolver, text: String) -> String
 
 fn display_date_line(
     msg_timestamp: u64,
+    previous_msg_timestamp: u64,
     previous_msg_day: &mut i32,
     width: usize,
 ) -> Option<ListItem<'static>> {
@@ -642,10 +649,10 @@ fn display_date_line(
     let current_msg_day = local_time.num_days_from_ce();
 
     if current_msg_day != *previous_msg_day {
+        // Show the date of the previous section (the day we're leaving)
+        let previous_local_time = utc_timestamp_msec_to_local(previous_msg_timestamp);
+        let date = format!("{:=^width$}", previous_local_time.format(" %A, %x "));
         *previous_msg_day = current_msg_day;
-
-        // Weekday and locale's date representation (e.g., 12/31/99)
-        let date = format!("{:=^width$}", local_time.format(" %A, %x "));
         Some(ListItem::new(Span::from(date)))
     } else {
         None
