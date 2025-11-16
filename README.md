@@ -66,7 +66,7 @@ pkg install net-im/gurk-rs
 cd /usr/ports/net-im/gurk-rs
 make install clean
 ```
--ports tree
+- ports tree
 # Usage
 
 Run
