@@ -55,9 +55,9 @@ environment.systemPackages = with pkgs; [ gurk-rs ];
 ```
 
 # Freebsd
-##(as root)
+## (as root)
 ```shell
-pkg install gurk
+pkg install net-im/gurk-rs
 ```
 - pkg repositories
 
@@ -65,7 +65,6 @@ pkg install gurk
 ```shell
 cd /usr/ports/net-im/gurk-rs
 make install clean
-pkg install net-im/gurk-rs
 ```
 -ports tree
 # Usage
