@@ -33,7 +33,7 @@ cargo install --git https://github.com/boxdot/gurk-rs gurk
 ```shell
 pacman -S gurk
 ```
-\(as root\)
+(as root\
 - Official repository, tagged releases: [`gurk`](https://archlinux.org/packages/extra/x86_64/gurk)
 ```shell
 yay -S gurk
@@ -55,7 +55,7 @@ environment.systemPackages = with pkgs; [ gurk-rs ];
 ```
 
 # Freebsd
-##\(as root\)
+##(as root)
 ```shell
 pkg install gurk
 ```
