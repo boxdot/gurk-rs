@@ -12,7 +12,6 @@ use uuid::Uuid;
 
 use crate::receipt::Receipt;
 use crate::signal::Attachment;
-use crate::storage::copy::{self, Stats};
 use crate::storage::{MessageId, Metadata, Storage};
 use crate::{
     data::{BodyRange, Channel, ChannelId, GroupData, Message, TypingSet},
@@ -26,7 +25,6 @@ use super::util::ResultExt as _;
 const METADATA_ID: i64 = 0;
 
 pub struct SqliteStorage {
-    opts: SqliteConnectOptions,
     pool: SqlitePool,
 }
 
@@ -62,7 +60,7 @@ impl SqliteStorage {
         let pool = SqlitePool::connect_with(opts.clone()).await?;
         sqlx::migrate!().run(&pool).await?;
 
-        Ok(Self { opts, pool })
+        Ok(Self { pool })
     }
 
     #[cfg(test)]
@@ -76,27 +74,7 @@ impl SqliteStorage {
         let pool = SqlitePool::connect_with(opts.clone()).await?;
         sqlx::migrate!().run(&pool).await?;
 
-        Ok(Self { opts, pool })
-    }
-
-    pub async fn copy_from(&mut self, from: &impl Storage) -> sqlx::Result<Stats> {
-        // reconnect without disabled journaling and synchronous mode
-        // otherwise copying the data is really slow
-        let copy_opts = self
-            .opts
-            .clone()
-            .journal_mode(SqliteJournalMode::Off)
-            .synchronous(SqliteSynchronous::Off);
-
-        self.pool.close().await;
-
-        self.pool = SqlitePool::connect_with(copy_opts).await?;
-        let stats = copy::copy(from, self);
-
-        self.pool.close().await;
-        self.pool = SqlitePool::connect_with(self.opts.clone()).await?;
-
-        Ok(stats)
+        Ok(Self { pool })
     }
 }
 
@@ -238,7 +216,7 @@ struct SqlName {
 }
 
 impl Storage for SqliteStorage {
-    fn channels(&self) -> Box<dyn Iterator<Item = Cow<Channel>> + '_> {
+    fn channels(&self) -> Box<dyn Iterator<Item = Cow<'_, Channel>> + '_> {
         let channels = block_async_in_place(
             query_as!(
                 SqlChannel,
@@ -263,7 +241,7 @@ impl Storage for SqliteStorage {
         )
     }
 
-    fn channel(&self, channel_id: ChannelId) -> Option<Cow<Channel>> {
+    fn channel(&self, channel_id: ChannelId) -> Option<Cow<'_, Channel>> {
         let channel_id = &channel_id;
         let channel = block_async_in_place(
             query_as!(
@@ -286,7 +264,7 @@ impl Storage for SqliteStorage {
         channel?.convert().ok_logged().map(Cow::Owned)
     }
 
-    fn store_channel(&mut self, channel: Channel) -> Cow<Channel> {
+    fn store_channel(&mut self, channel: Channel) -> Cow<'_, Channel> {
         let id = &channel.id;
         let name = &channel.name;
         let (group_master_key, group_revision, group_members) = channel
@@ -321,7 +299,7 @@ impl Storage for SqliteStorage {
     fn messages(
         &self,
         channel_id: ChannelId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_> {
+    ) -> Box<dyn DoubleEndedIterator<Item = Cow<'_, Message>> + '_> {
         let channel_id = &channel_id;
         let messages = block_async_in_place(
             query_as!(
@@ -364,7 +342,7 @@ impl Storage for SqliteStorage {
     fn edits(
         &self,
         message_id: MessageId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_> {
+    ) -> Box<dyn DoubleEndedIterator<Item = Cow<'_, Message>> + '_> {
         let channel_id = &message_id.channel_id;
         let arrived_at: Option<i64> = message_id
             .arrived_at
@@ -413,7 +391,7 @@ impl Storage for SqliteStorage {
         )
     }
 
-    fn message(&self, message_id: MessageId) -> Option<Cow<Message>> {
+    fn message(&self, message_id: MessageId) -> Option<Cow<'_, Message>> {
         let channel_id = &message_id.channel_id;
         let arrived_at: i64 = message_id
             .arrived_at
@@ -455,7 +433,7 @@ impl Storage for SqliteStorage {
         Some(Cow::Owned(message))
     }
 
-    fn store_message(&mut self, channel_id: ChannelId, message: Message) -> Cow<Message> {
+    fn store_message(&mut self, channel_id: ChannelId, message: Message) -> Cow<'_, Message> {
         let channel_id = &channel_id;
         let arrived_at: i64 = message
             .arrived_at
@@ -518,7 +496,7 @@ impl Storage for SqliteStorage {
         Cow::Owned(message)
     }
 
-    fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + '_> {
+    fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<'_, str>)> + '_> {
         let names = block_async_in_place(
             query_as!(
                 SqlName,
@@ -534,7 +512,7 @@ impl Storage for SqliteStorage {
         Box::new(names)
     }
 
-    fn name(&self, id: Uuid) -> Option<Cow<str>> {
+    fn name(&self, id: Uuid) -> Option<Cow<'_, str>> {
         let name = block_async_in_place(
             query_scalar!(r#"SELECT name AS "name: _" FROM names WHERE id = ?"#, id)
                 .fetch_optional(&self.pool),
@@ -542,7 +520,7 @@ impl Storage for SqliteStorage {
         name.ok_logged()?.map(Cow::Owned)
     }
 
-    fn store_name(&mut self, id: Uuid, name: String) -> Cow<str> {
+    fn store_name(&mut self, id: Uuid, name: String) -> Cow<'_, str> {
         block_async_in_place(
             query!("REPLACE INTO names(id, name) VALUES (?, ?)", id, name).execute(&self.pool),
         )
@@ -550,7 +528,7 @@ impl Storage for SqliteStorage {
         Cow::Owned(name)
     }
 
-    fn metadata(&self) -> Cow<Metadata> {
+    fn metadata(&self) -> Cow<'_, Metadata> {
         let metadata = block_async_in_place(
             query_as!(
                 Metadata,
@@ -566,7 +544,7 @@ impl Storage for SqliteStorage {
         Cow::Owned(metadata.ok_logged().flatten().unwrap_or_default())
     }
 
-    fn store_metadata(&mut self, metadata: Metadata) -> Cow<Metadata> {
+    fn store_metadata(&mut self, metadata: Metadata) -> Cow<'_, Metadata> {
         block_async_in_place(
             query!(
                 "REPLACE INTO metadata(id, contacts_sync_request_at, fully_migrated)

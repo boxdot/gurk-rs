@@ -1,39 +1,10 @@
 use tracing::{debug, error};
+use uuid::Uuid;
 
 use crate::data::{Channel, ChannelId, GroupData, TypingSet};
 use crate::signal::SignalManager;
 
 use super::Storage;
-
-#[derive(Debug, Default)]
-pub struct Stats {
-    pub channels: usize,
-    pub messages: usize,
-    pub names: usize,
-}
-
-pub fn copy(from: &dyn Storage, to: &mut dyn Storage) -> Stats {
-    let mut stats = Stats::default();
-
-    to.store_metadata(from.metadata().into_owned());
-
-    for channel in from.channels() {
-        let channel_id = channel.id;
-        to.store_channel(channel.into_owned());
-        stats.channels += 1;
-        for message in from.messages(channel_id) {
-            to.store_message(channel_id, message.into_owned());
-            stats.messages += 1;
-        }
-    }
-
-    for (id, name) in from.names() {
-        to.store_name(id, name.into_owned());
-        stats.names += 1;
-    }
-
-    stats
-}
 
 /// Copies contacts and groups from the signal manager into the storages
 ///
@@ -74,7 +45,11 @@ pub async fn sync_from_signal(manager: &dyn SignalManager, storage: &mut dyn Sto
         };
         let new_group_data = || GroupData {
             master_key_bytes,
-            members: group.members.iter().map(|member| member.uuid).collect(),
+            members: group
+                .members
+                .iter()
+                .map(|member| member.aci.into())
+                .collect(),
             revision: group.revision,
         };
         match storage.channel(channel_id) {
@@ -95,16 +70,16 @@ pub async fn sync_from_signal(manager: &dyn SignalManager, storage: &mut dyn Sto
                 if channel
                     .group_data
                     .as_ref()
-                    .map(|d| d.members.iter())
+                    .map(|d| d.members.iter().copied())
                     .into_iter()
                     .flatten()
-                    .ne(group.members.iter().map(|m| &m.uuid))
+                    .ne(group.members.iter().map(|m| Uuid::from(m.aci)))
                 {
                     let group_data = channel
                         .to_mut()
                         .group_data
                         .get_or_insert_with(new_group_data);
-                    group_data.members = group.members.iter().map(|m| m.uuid).collect();
+                    group_data.members = group.members.iter().map(|m| m.aci.into()).collect();
                     is_changed = true;
                 }
                 if is_changed {

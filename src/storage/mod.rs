@@ -1,6 +1,5 @@
 mod copy;
 mod forgetful;
-mod json;
 mod memcache;
 mod sql;
 
@@ -11,9 +10,8 @@ use uuid::Uuid;
 
 use crate::data::{Channel, ChannelId, Message};
 
-pub use copy::{copy, sync_from_signal};
+pub use copy::sync_from_signal;
 pub use forgetful::ForgetfulStorage;
-pub use json::JsonStorage;
 pub use memcache::MemCache;
 pub use sql::SqliteStorage;
 
@@ -28,11 +26,11 @@ pub use sql::SqliteStorage;
 /// converted and/or serialized.
 pub trait Storage {
     /// Channels in no particular order
-    fn channels(&self) -> Box<dyn Iterator<Item = Cow<Channel>> + '_>;
+    fn channels(&self) -> Box<dyn Iterator<Item = Cow<'_, Channel>> + '_>;
     /// Gets the channel by id
-    fn channel(&self, channel_id: ChannelId) -> Option<Cow<Channel>>;
+    fn channel(&self, channel_id: ChannelId) -> Option<Cow<'_, Channel>>;
     /// Stores the given `channel` and returns it back
-    fn store_channel(&mut self, channel: Channel) -> Cow<Channel>;
+    fn store_channel(&mut self, channel: Channel) -> Cow<'_, Channel>;
 
     /// Messages sorted by arrived_at in ascending order
     ///
@@ -40,29 +38,29 @@ pub trait Storage {
     fn messages(
         &self,
         channel_id: ChannelId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_>;
+    ) -> Box<dyn DoubleEndedIterator<Item = Cow<'_, Message>> + '_>;
     /// Gets the message by id
-    fn message(&self, message_id: MessageId) -> Option<Cow<Message>>;
+    fn message(&self, message_id: MessageId) -> Option<Cow<'_, Message>>;
 
     fn message_channel(&self, arrived_at: u64) -> Option<ChannelId>;
 
     fn edits(
         &self,
         message_id: MessageId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<Message>> + '_>;
+    ) -> Box<dyn DoubleEndedIterator<Item = Cow<'_, Message>> + '_>;
 
     /// Stores the message for the given `channel_id` and returns it back
     ///
     /// If a channel with this `channel_id` already exists in the storage, it is overridden.
     /// Otherwise, the channel is added to the storage.
-    fn store_message(&mut self, channel_id: ChannelId, message: Message) -> Cow<Message>;
+    fn store_message(&mut self, channel_id: ChannelId, message: Message) -> Cow<'_, Message>;
 
     fn store_edited_message(
         &mut self,
         channel_id: ChannelId,
         target_sent_timestampt: u64,
         message: Message,
-    ) -> Option<Cow<Message>> {
+    ) -> Option<Cow<'_, Message>> {
         // Note: target_sent_timestamp points to the previous edit or the original message
         let prev_edited = self.message(MessageId::new(channel_id, target_sent_timestampt))?;
 
@@ -101,19 +99,19 @@ pub trait Storage {
     }
 
     /// Names of contacts
-    fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<str>)> + '_>;
+    fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<'_, str>)> + '_>;
     /// Gets the name for the given contact `id`
-    fn name(&self, id: Uuid) -> Option<Cow<str>>;
+    fn name(&self, id: Uuid) -> Option<Cow<'_, str>>;
     /// Stores a name for the given contact `id`
     ///
     /// If the name with this `id` already exists in the storage, it is overridden. Otherwise, it
     /// the name is added to the storage.
-    fn store_name(&mut self, id: Uuid, name: String) -> Cow<str>;
+    fn store_name(&mut self, id: Uuid, name: String) -> Cow<'_, str>;
 
     /// Returns the metadata containing persisted flags and settings
-    fn metadata(&self) -> Cow<Metadata>;
+    fn metadata(&self) -> Cow<'_, Metadata>;
     /// Stores the new metadata in the storage overriding the previous one
-    fn store_metadata(&mut self, metadata: Metadata) -> Cow<Metadata>;
+    fn store_metadata(&mut self, metadata: Metadata) -> Cow<'_, Metadata>;
 
     /// Persists the data in the storage
     ///

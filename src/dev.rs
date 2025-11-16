@@ -2,8 +2,11 @@ use std::fs::OpenOptions;
 use std::io::BufWriter;
 
 use base64::prelude::*;
-use presage::libsignal_service::content::{Content, Metadata};
 use presage::libsignal_service::protocol::ServiceId;
+use presage::libsignal_service::{
+    content::{Content, Metadata},
+    prelude::DeviceId,
+};
 use presage::proto;
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -23,7 +26,8 @@ struct MetadataDef {
     sender: ServiceId,
     #[serde(with = "service_id")]
     destination: ServiceId,
-    sender_device: u32,
+    #[serde(with = "device_id")]
+    sender_device: DeviceId,
     timestamp: u64,
     needs_receipt: bool,
     unidentified_sender: bool,
@@ -49,6 +53,26 @@ mod service_id {
         let s = String::deserialize(deserializer)?;
         ServiceId::parse_from_service_id_string(&s)
             .ok_or_else(|| serde::de::Error::custom(format!("invalid service id string: {s}")))
+    }
+}
+
+mod device_id {
+    use presage::libsignal_service::protocol::DeviceId;
+    use serde::{Deserialize, Serialize, Serializer};
+
+    pub fn serialize<S>(value: &DeviceId, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        u8::from(*value).serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<DeviceId, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = u8::deserialize(deserializer)?;
+        DeviceId::try_from(value).map_err(serde::de::Error::custom)
     }
 }
 

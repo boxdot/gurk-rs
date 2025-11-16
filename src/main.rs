@@ -17,11 +17,11 @@ use crossterm::{
 };
 use gurk::{app::App, config::Config};
 use gurk::{backoff::Backoff, passphrase::Passphrase};
-use gurk::{config, signal, ui};
 use gurk::{
     onboarding,
-    storage::{JsonStorage, MemCache, SqliteStorage, Storage, sync_from_signal},
+    storage::{MemCache, SqliteStorage, Storage, sync_from_signal},
 };
+use gurk::{signal, ui};
 use presage::libsignal_service::content::Content;
 use ratatui::{Terminal, backend::CrosstermBackend};
 use tokio::{runtime, select};
@@ -48,9 +48,14 @@ struct Args {
     relink: bool,
     /// Passphrase to use for encrypting the database
     ///
-    /// When omitted, passphrase is read from the config file, and if missing, prompted for.
-    #[arg(long, short)]
+    /// When omitted, passphrase is read from the config file, passphrase_command, and if missing, prompted for.
+    #[arg(long, short, conflicts_with = "passphrase_command")]
     passphrase: Option<Passphrase>,
+    /// Get a passphrase from external command. For example `pass`(password-store)
+    ///
+    /// When omitted, passphrase_command is read from the env "GURK_PASSPHRASE_COMMAND".
+    #[arg(long, conflicts_with = "passphrase")]
+    passphrase_command: Option<String>,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -74,7 +79,11 @@ fn main() -> anyhow::Result<()> {
     let (config, passphrase) = match Config::load_installed().context("failed to load config")? {
         Some(config) => {
             let mut config = config.report_deprecated_keys();
-            let passphrase = Passphrase::get(args.passphrase.take(), &mut config)?;
+            let passphrase = Passphrase::get(
+                args.passphrase.take(),
+                args.passphrase_command.take(),
+                &mut config,
+            )?;
             (config, passphrase)
         }
         None => onboarding::run()?,
@@ -126,23 +135,9 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
         };
 
         debug!(%url, "opening sqlite data storage");
-        let mut sqlite_storage = SqliteStorage::maybe_encrypt_and_open(&url, &passphrase, false)
+        let sqlite_storage = SqliteStorage::maybe_encrypt_and_open(&url, &passphrase, false)
             .await
             .with_context(|| format!("failed to open sqlite data storage at: {url}"))?;
-        if sqlite_storage.is_empty() || !(sqlite_storage.metadata().fully_migrated.unwrap_or(false))
-        {
-            if let Ok(json_storage) = JsonStorage::new(
-                &config.deprecated_data_path,
-                config::fallback_data_path().as_deref(),
-            ) {
-                println!("converting JSON storage to SQLite storage at {url}");
-                let stats = sqlite_storage.copy_from(&json_storage).await?;
-                let mut metadata = sqlite_storage.metadata().into_owned();
-                metadata.fully_migrated = Some(true);
-                sqlite_storage.store_metadata(metadata);
-                info!(?stats, "converted");
-            }
-        }
         Box::new(MemCache::new(sqlite_storage))
     };
 
