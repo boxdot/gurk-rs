@@ -30,7 +30,14 @@ cargo install --git https://github.com/boxdot/gurk-rs gurk
 
 ## Arch Linux
 
+```shell
+pacman -S gurk
+```
+\(as root\)
 - Official repository, tagged releases: [`gurk`](https://archlinux.org/packages/extra/x86_64/gurk)
+```shell
+yay -S gurk
+```
 - AUR source build from Git HEAD: [`gurk-git`](https://aur.archlinux.org/packages/gurk-bin)
 
 ## Nix/NixOS
@@ -47,6 +54,20 @@ or system-wide:
 environment.systemPackages = with pkgs; [ gurk-rs ];
 ```
 
+# Freebsd
+##\(as root\)
+```shell
+pkg install gurk
+```
+- pkg repositories
+
+
+```shell
+cd /usr/ports/net-im/gurk-rs
+make install clean
+pkg install net-im/gurk-rs
+```
+-ports tree
 # Usage
 
 Run
