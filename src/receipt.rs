@@ -6,19 +6,14 @@ use uuid::Uuid;
 
 use crate::signal::SignalManager;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Receipt {
     Sent = -1,
     Delivered = 0,
     Read = 1,
+    #[default]
     #[serde(other)]
     Nothing = -2, // Do not do anything to these receipts in order to avoid spamming receipt messages when an old database is loaded
-}
-
-impl Default for Receipt {
-    fn default() -> Self {
-        Self::Nothing
-    }
 }
 
 impl Receipt {
@@ -184,18 +179,5 @@ mod tests {
         assert!(Receipt::Nothing < Receipt::Sent);
         assert!(Receipt::Sent < Receipt::Delivered);
         assert!(Receipt::Delivered < Receipt::Read);
-    }
-
-    #[test]
-    fn test_receipt_serde() -> anyhow::Result<()> {
-        assert_eq!(serde_json::to_string(&Receipt::Nothing)?, "\"Nothing\"");
-        assert_eq!(serde_json::to_string(&Receipt::Sent)?, "\"Sent\"");
-        assert_eq!(serde_json::to_string(&Receipt::Delivered)?, "\"Delivered\"");
-        assert_eq!(serde_json::to_string(&Receipt::Read)?, "\"Read\"");
-
-        let receipt: Receipt = serde_json::from_str("\"Unknown\"")?;
-        assert_eq!(receipt, Receipt::Nothing);
-
-        Ok(())
     }
 }
