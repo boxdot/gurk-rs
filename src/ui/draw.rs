@@ -4,9 +4,9 @@ use std::fmt;
 
 use chrono::Datelike;
 use itertools::Itertools;
+use ratatui::Frame;
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Clear, List, ListDirection, ListItem, Paragraph};
-use ratatui::Frame;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     widgets::Padding,
@@ -27,8 +27,8 @@ use crate::receipt::{Receipt, ReceiptEvent};
 use crate::storage::MessageId;
 use crate::util::utc_timestamp_msec_to_local;
 
-use super::name_resolver::NameResolver;
 use super::CHANNEL_VIEW_RATIO;
+use super::name_resolver::NameResolver;
 
 /// The main function drawing the UI for each frame
 pub fn draw(f: &mut Frame, app: &mut App) {
