@@ -2,7 +2,7 @@
 [![ci][ci-badge]][ci-link] [![chat][chat-badge]][chat-link]
 
 [Signal Messenger] client for terminal.
-pkg install net-im/gurk-rs
+
 ![screenshot](screenshot.png)
 
 # Installation
