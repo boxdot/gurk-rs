@@ -395,16 +395,7 @@ impl App {
     ///
     /// Does nothing if no message is selected and no url is contained in the message.
     fn try_open_url(&mut self) -> Option<()> {
-        // Note: to make the borrow checker happy, we have to use distinct fields here, and no
-        // methods that borrow self mutably.
-        let channel_id = self.channels.selected_item()?;
-        let messages = self.messages.get(channel_id)?;
-        let idx = messages.state.selected()?;
-        let idx = messages.items.len().checked_sub(idx + 1)?;
-        let arrived_at = messages.items.get(idx)?;
-        let message = self
-            .storage
-            .message(MessageId::new(*channel_id, *arrived_at))?;
+        let message = self.selected_message()?;
         open_url(&message, &URL_REGEX)?;
         self.reset_message_selection();
         Some(())
@@ -414,16 +405,7 @@ impl App {
     ///
     /// Does nothing if no message is selected and the message contains no attachments.
     fn try_open_file(&mut self) -> Option<()> {
-        // Note: to make the borrow checker happy, we have to use distinct fields here, and no
-        // methods that borrow self mutably.
-        let channel_id = self.channels.selected_item()?;
-        let messages = self.messages.get(channel_id)?;
-        let idx = messages.state.selected()?;
-        let idx = messages.items.len().checked_sub(idx + 1)?;
-        let arrived_at = messages.items.get(idx)?;
-        let message = self
-            .storage
-            .message(MessageId::new(*channel_id, *arrived_at))?;
+        let message = self.selected_message()?;
         open_file(&message)?;
         self.reset_message_selection();
         Some(())
@@ -434,34 +416,49 @@ impl App {
         let channel_id = self.channels.selected_item()?;
         let messages = self.messages.get(channel_id)?;
 
-        // Retrieve the corrected index from the UI list
-        // - The raw UI index may include date lines, which breaks copying/reaction/etc. .
-        // - Dumb for loop detects day transitions and corrects the UI index.
-        // - It's not elegant, but it works!
-        let uncorrected_ui_idx = messages.state.selected()?;
-        let mut corrected_ui_idx = uncorrected_ui_idx;
-        for raw_idx in 0..uncorrected_ui_idx {
-            let lst_message_idx = messages.items.len().checked_sub(raw_idx + 1)?;
-            let cur_message_idx = messages.items.len().checked_sub(raw_idx + 2)?;
-
-            let lst_arrived_at = messages.items.get(lst_message_idx)?;
-            let cur_arrived_at = messages.items.get(cur_message_idx)?;
-
-            let lst_local_time = utc_timestamp_msec_to_local(*lst_arrived_at);
-            let cur_local_time = utc_timestamp_msec_to_local(*cur_arrived_at);
-
-            let lst_msg_day = lst_local_time.num_days_from_ce();
-            let cur_msg_day = cur_local_time.num_days_from_ce();
-
-            // Detect Day Transition - this means the index is one too large.
-            if lst_msg_day != cur_msg_day {
-                corrected_ui_idx -= 1;
-            }
+        if messages.items.is_empty() {
+            return None;
         }
 
-        let idx = messages.items.len().checked_sub(corrected_ui_idx + 1)?;
-        let arrived_at = messages.items.get(idx)?;
-        Some(MessageId::new(*channel_id, *arrived_at))
+        // Track UI positions to match rendering logic
+        let uncorrected_ui_idx = messages.state.selected()?;
+        let mut ui_position = 0;
+        let mut message_idx = messages.items.len() - 1; // Start with newest
+
+        // Initialize to newest message's day (like rendering does in draw.rs)
+        let mut previous_msg_day =
+            utc_timestamp_msec_to_local(messages.items[message_idx]).num_days_from_ce();
+
+        loop {
+            let arrived_at = messages.items[message_idx];
+            let current_day = utc_timestamp_msec_to_local(arrived_at).num_days_from_ce();
+
+            // Check if this message would have a separator before it
+            if current_day != previous_msg_day {
+                // A separator exists at this UI position
+                if ui_position == uncorrected_ui_idx {
+                    // User selected the separator itself, return the message after it
+                    return Some(MessageId::new(*channel_id, arrived_at));
+                }
+                ui_position += 1;
+                previous_msg_day = current_day;
+            }
+
+            // The message is at this UI position
+            if ui_position == uncorrected_ui_idx {
+                return Some(MessageId::new(*channel_id, arrived_at));
+            }
+            ui_position += 1;
+
+            // Move to next older message
+            if message_idx == 0 {
+                break;
+            }
+            message_idx -= 1;
+        }
+
+        // UI position beyond available messages
+        None
     }
 
     fn selected_message(&self) -> Option<Cow<'_, Message>> {
