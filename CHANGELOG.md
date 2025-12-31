@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.0] - 2025-12-31
+
+### 🚀 Features
+
+- [**breaking**] Remove json storage and deprecated `data_path` config (#446)
+- Configurable notifications (#438)
+
+### 🐛 Bug Fixes
+
+- Wasn't selecting the right message when copying/opening url (#447)
+- Fix wrong date showing in date separators (#448)
+
+### ⚙️ Miscellaneous Tasks
+
+- Update presage/libsignal to 0.86.6 and dependencies (#454)
+
+
+* @elmehalawi made their first contribution in #448
+* @iamwehi made their first contribution in #438
+
 ## [0.7.2] - 2025-10-24
 
 ### 🚀 Features
