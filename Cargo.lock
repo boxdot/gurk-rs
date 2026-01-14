@@ -2474,7 +2474,7 @@ dependencies = [
 [[package]]
 name = "libsignal-service"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/libsignal-service-rs?rev=abad1634f91dba01baefc55b2a6196be00635b55#abad1634f91dba01baefc55b2a6196be00635b55"
+source = "git+https://github.com/whisperfish/libsignal-service-rs?rev=b48b42fbce755035fafafc3b28d5b23844763e49#b48b42fbce755035fafafc3b28d5b23844763e49"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -3352,7 +3352,7 @@ dependencies = [
 [[package]]
 name = "presage"
 version = "0.8.0-dev"
-source = "git+https://github.com/whisperfish/presage?rev=66b56a7765cae7cfb83a610469562045902eb4c1#66b56a7765cae7cfb83a610469562045902eb4c1"
+source = "git+https://github.com/whisperfish/presage?rev=47faeca3d53d2fc736ae5d9a1ffcf0d17b4e25d5#47faeca3d53d2fc736ae5d9a1ffcf0d17b4e25d5"
 dependencies = [
  "base64",
  "bytes",
@@ -3373,7 +3373,7 @@ dependencies = [
 [[package]]
 name = "presage-store-sqlite"
 version = "0.8.0-dev"
-source = "git+https://github.com/whisperfish/presage?rev=66b56a7765cae7cfb83a610469562045902eb4c1#66b56a7765cae7cfb83a610469562045902eb4c1"
+source = "git+https://github.com/whisperfish/presage?rev=47faeca3d53d2fc736ae5d9a1ffcf0d17b4e25d5#47faeca3d53d2fc736ae5d9a1ffcf0d17b4e25d5"
 dependencies = [
  "async-trait",
  "bytes",
