@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.1] - 2026-01-15
+
+### 🐛 Bug Fixes
+
+- Missing incoming message due to missing trusted roots (#464)
+
 ## [0.8.0] - 2025-12-31
 
 ### 🚀 Features
