@@ -32,7 +32,7 @@ jobs:
       matrix:
         toolchain:
           - stable
-          - 1.87.0 # MSRV
+          - 1.88.0 # MSRV
     runs-on: ubuntu-latest
     steps:
       - name: system dependencies
