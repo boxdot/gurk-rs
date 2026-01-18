@@ -625,10 +625,10 @@ impl App {
         // tracing::info!(?content, "incoming");
 
         #[cfg(feature = "dev")]
-        if self.config.developer.dump_raw_messages {
-            if let Err(e) = crate::dev::dump_raw_message(&content) {
-                warn!(error = %e, "failed to dump raw message");
-            }
+        if self.config.developer.dump_raw_messages
+            && let Err(e) = crate::dev::dump_raw_message(&content)
+        {
+            warn!(error = %e, "failed to dump raw message");
         }
 
         let user_id = self.user_id;
