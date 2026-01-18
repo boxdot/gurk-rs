@@ -360,19 +360,18 @@ impl App {
                             // input is empty
                             self.try_open_url_or_file();
                         }
-                    } else if self.select_channel.is_shown {
-                        if let Some(channel_id) = self.select_channel.selected_channel_id().copied()
-                        {
-                            self.select_channel.is_shown = false;
-                            let (idx, _) = self
-                                .channels
-                                .items
-                                .iter()
-                                .enumerate()
-                                .find(|(_, id)| **id == channel_id)
-                                .context("channel disappeared during channel select popup")?;
-                            self.channels.state.select(Some(idx));
-                        }
+                    } else if self.select_channel.is_shown
+                        && let Some(channel_id) = self.select_channel.selected_channel_id().copied()
+                    {
+                        self.select_channel.is_shown = false;
+                        let (idx, _) = self
+                            .channels
+                            .items
+                            .iter()
+                            .enumerate()
+                            .find(|(_, id)| **id == channel_id)
+                            .context("channel disappeared during channel select popup")?;
+                        self.channels.state.select(Some(idx));
                     }
                 }
                 KeyCode::Esc => {
@@ -523,11 +522,11 @@ impl App {
     }
 
     fn reset_message_selection(&mut self) {
-        if let Some(channel_id) = self.channels.selected_item() {
-            if let Some(messages) = self.messages.get_mut(channel_id) {
-                messages.state.select(None);
-                messages.rendered = Default::default();
-            }
+        if let Some(channel_id) = self.channels.selected_item()
+            && let Some(messages) = self.messages.get_mut(channel_id)
+        {
+            messages.state.select(None);
+            messages.rendered = Default::default();
         }
     }
 
@@ -612,14 +611,13 @@ impl App {
     }
 
     pub fn reset_unread_messages(&mut self) {
-        if let Some(channel_id) = self.channels.selected_item() {
-            if let Some(channel) = self.storage.channel(*channel_id) {
-                if channel.unread_messages > 0 {
-                    let mut channel = channel.into_owned();
-                    channel.unread_messages = 0;
-                    self.storage.store_channel(channel);
-                }
-            }
+        if let Some(channel_id) = self.channels.selected_item()
+            && let Some(channel) = self.storage.channel(*channel_id)
+            && channel.unread_messages > 0
+        {
+            let mut channel = channel.into_owned();
+            channel.unread_messages = 0;
+            self.storage.store_channel(channel);
         }
     }
 
@@ -1421,8 +1419,8 @@ impl App {
     }
 
     fn notify(&self, summary: &str, text: &str) {
-        if self.config.notifications.enabled {
-            if let Err(e) = Notification::new()
+        if self.config.notifications.enabled
+            && let Err(e) = Notification::new()
                 .summary(if self.config.notifications.show_message_chat {
                     summary
                 } else {
@@ -1434,9 +1432,8 @@ impl App {
                     "New message!"
                 })
                 .show()
-            {
-                error!("failed to send notification: {}", e);
-            }
+        {
+            error!("failed to send notification: {}", e);
         }
     }
 
@@ -1569,15 +1566,15 @@ impl App {
     }
 
     pub fn copy_selection(&mut self) {
-        if let Some(message) = self.selected_message() {
-            if let Some(text) = message.message.as_ref() {
-                let text = text.clone();
-                if let Some(clipboard) = self.clipboard.as_mut() {
-                    if let Err(error) = clipboard.set_text(text) {
-                        error!(%error, "failed to copy text to clipboard");
-                    } else {
-                        info!("copied selected text to clipboard");
-                    }
+        if let Some(message) = self.selected_message()
+            && let Some(text) = message.message.as_ref()
+        {
+            let text = text.clone();
+            if let Some(clipboard) = self.clipboard.as_mut() {
+                if let Err(error) = clipboard.set_text(text) {
+                    error!(%error, "failed to copy text to clipboard");
+                } else {
+                    info!("copied selected text to clipboard");
                 }
             }
         }
@@ -1664,10 +1661,10 @@ impl App {
             vec![WindowMode::Anywhere, WindowMode::Normal]
         };
         for mode in modes {
-            if let Some(kb) = self.mode_keybindings.get(&mode) {
-                if let Some(cmd) = kb.get(&keys_pressed) {
-                    return Some(cmd);
-                }
+            if let Some(kb) = self.mode_keybindings.get(&mode)
+                && let Some(cmd) = kb.get(&keys_pressed)
+            {
+                return Some(cmd);
             }
         }
         if self.is_help() {

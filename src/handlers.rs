@@ -109,12 +109,12 @@ impl App {
             .collect();
         // Update the unread counters
         for (channel_id, num_unread) in read_counters {
-            if let Some(channel) = self.storage.channel(channel_id) {
-                if channel.unread_messages > 0 {
-                    let mut channel = channel.into_owned();
-                    channel.unread_messages = num_unread;
-                    self.storage.store_channel(channel);
-                }
+            if let Some(channel) = self.storage.channel(channel_id)
+                && channel.unread_messages > 0
+            {
+                let mut channel = channel.into_owned();
+                channel.unread_messages = num_unread;
+                self.storage.store_channel(channel);
             }
         }
     }
