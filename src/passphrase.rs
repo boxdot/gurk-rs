@@ -153,7 +153,7 @@ mod tests {
         let result = Passphrase::get_from_external_command("echo secret");
         assert!(result.is_ok());
         let passphrase = result.unwrap();
-        assert_eq!(format!("{:?}", passphrase), "Passphrase(<redacted>)");
+        assert_eq!(format!("{passphrase:?}"), "Passphrase(<redacted>)");
     }
 
     #[test]
@@ -161,7 +161,7 @@ mod tests {
         let result = Passphrase::get_from_external_command("echo -n secret");
         assert!(result.is_ok());
         let passphrase = result.unwrap();
-        assert_eq!(format!("{:?}", passphrase), "Passphrase(<redacted>)");
+        assert_eq!(format!("{passphrase:?}"), "Passphrase(<redacted>)");
     }
 
     #[test]

@@ -117,9 +117,7 @@ async fn relink_device(
 }
 
 async fn gen_qr_code(rx: oneshot::Receiver<Url>, path: &Path) -> anyhow::Result<()> {
-    let url = rx
-        .await
-        .map_err(|e| anyhow!("error linking device {}", e))?;
+    let url = rx.await.map_err(|e| anyhow!("error linking device {e}"))?;
 
     if let Err(error) = save_qr_code_png(&url, path) {
         error!(%error, "failed to generate PNG QR code");
