@@ -8,7 +8,6 @@ use std::path::Path;
 
 use anyhow::{Context as _, anyhow};
 use arboard::{Clipboard, ImageData};
-use chrono::Datelike;
 use chrono::{DateTime, Local, TimeZone};
 use crokey::Combiner;
 use crossterm::event::{KeyCode, KeyEvent};
@@ -44,7 +43,6 @@ use crate::signal::{
     SignalManager,
 };
 use crate::storage::{MessageId, Storage};
-use crate::util::utc_timestamp_msec_to_local;
 use crate::util::{self, ATTACHMENT_REGEX, StatefulList, URL_REGEX};
 
 pub struct App {
@@ -411,58 +409,22 @@ impl App {
     }
 
     fn selected_message_id(&self) -> Option<MessageId> {
-        // Messages are shown in reversed order => selected is reversed
         let channel_id = self.channels.selected_item()?;
         let messages = self.messages.get(channel_id)?;
-
-        if messages.items.is_empty() {
-            return None;
-        }
-
-        // Track UI positions to match rendering logic
-        let uncorrected_ui_idx = messages.state.selected()?;
-        let mut ui_position = 0;
-        let mut message_idx = messages.items.len() - 1; // Start with newest
-
-        // Initialize to newest message's day (like rendering does in draw.rs)
-        let mut previous_msg_day =
-            utc_timestamp_msec_to_local(messages.items[message_idx]).num_days_from_ce();
-
-        loop {
-            let arrived_at = messages.items[message_idx];
-            let current_day = utc_timestamp_msec_to_local(arrived_at).num_days_from_ce();
-
-            // Check if this message would have a separator before it
-            if current_day != previous_msg_day {
-                // A separator exists at this UI position
-                if ui_position == uncorrected_ui_idx {
-                    // User selected the separator itself, return the message after it
-                    return Some(MessageId::new(*channel_id, arrived_at));
-                }
-                ui_position += 1;
-                previous_msg_day = current_day;
-            }
-
-            // The message is at this UI position
-            if ui_position == uncorrected_ui_idx {
-                return Some(MessageId::new(*channel_id, arrived_at));
-            }
-            ui_position += 1;
-
-            // Move to next older message
-            if message_idx == 0 {
-                break;
-            }
-            message_idx -= 1;
-        }
-
-        // UI position beyond available messages
-        None
+        let message_idx = messages.state.selected()?;
+        let arrived_at = messages.items[messages
+            .items
+            .len()
+            .checked_sub(message_idx)?
+            .checked_sub(1)?];
+        Some(MessageId::new(*channel_id, arrived_at))
     }
 
     fn selected_message(&self) -> Option<Cow<'_, Message>> {
         let message_id = self.selected_message_id()?;
-        self.storage.message(message_id)
+        let message = self.storage.message(message_id);
+        info!("selected message: {message:?}");
+        message
     }
 
     /// Returns Some(_) reaction if input is a reaction.
@@ -598,6 +560,7 @@ impl App {
                 .get_mut(channel_id)
                 .expect("non-existent channel")
                 .next();
+            self.selected_message();
         }
     }
 
@@ -1617,7 +1580,6 @@ impl App {
 
         let message_id = self.selected_message_id()?;
         let message = self.storage.message(message_id)?;
-
         if message.from_id != self.user_id {
             return None;
         }
