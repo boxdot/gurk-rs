@@ -38,10 +38,10 @@ impl<'a> NameResolver<'a> {
                             names_and_colors.get(&message.from_id).expect("logic error");
                         let (_, self_color) =
                             names_and_colors.get_mut(&app.user_id).expect("logic error");
-                        if self_color == &contact_color {
-                            if let Some(idx) = USER_COLORS.iter().position(|&c| c == *self_color) {
-                                *self_color = USER_COLORS[(idx + 1) % USER_COLORS.len()];
-                            }
+                        if self_color == &contact_color
+                            && let Some(idx) = USER_COLORS.iter().position(|&c| c == *self_color)
+                        {
+                            *self_color = USER_COLORS[(idx + 1) % USER_COLORS.len()];
                         }
                         break; // amortize direct channel
                     }

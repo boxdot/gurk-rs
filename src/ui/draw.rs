@@ -254,12 +254,12 @@ fn prepare_receipts(app: &mut App, height: usize) {
         .rev()
         .skip(offset)
         .filter_map(|message| {
-            if let Receipt::Delivered = message.receipt {
-                if message.from_id != user_id {
-                    let mut message = message.into_owned();
-                    message.receipt = Receipt::Read;
-                    return Some(message);
-                }
+            if let Receipt::Delivered = message.receipt
+                && message.from_id != user_id
+            {
+                let mut message = message.into_owned();
+                message.receipt = Receipt::Read;
+                return Some(message);
             }
             None
         })

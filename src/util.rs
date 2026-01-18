@@ -132,6 +132,6 @@ mod tests {
 
     #[test]
     fn test_is_phone_number() {
-        assert!(is_phone_number("+1 000-000-0000"));
+        assert!(is_phone_number("+1 800-000-0000"));
     }
 }

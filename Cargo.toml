@@ -1,7 +1,7 @@
 [package]
 name = "gurk"
 description = "Signal messenger client for terminal"
-version = "0.8.1"
+version = "0.9.0-dev"
 authors = ["boxdot <d@zerovolt.org>"]
 edition = "2024"
 keywords = ["signal", "tui"]
@@ -9,7 +9,7 @@ repository = "https://github.com/boxdot/gurk-rs"
 license = "AGPL-3.0-only"
 categories = ["command-line-utilities"]
 resolver = "2"
-rust-version = "1.87.0"
+rust-version = "1.88.0"
 
 [workspace]
 members = ["xtask"]
@@ -60,7 +60,7 @@ opener = "0.8.2"
 phonenumber = "0.3.6"
 postcard = { version = "1.1.1", features = ["alloc"] }
 qr2term = "0.3.3"
-ratatui = "0.29.0"
+ratatui = "0.30.0"
 regex = "1.11.1"
 scopeguard = "1.2.0"
 serde = { version = "1.0.216", features = ["derive"] }
@@ -106,7 +106,7 @@ security-framework = "3.2.0"
 ignored = ["libsqlite3-sys"]
 
 [dev-dependencies]
-criterion = { version = "0.7", features = ["async_tokio", "html_reports"] }
+criterion = { version = "0.8.1", features = ["async_tokio", "html_reports"] }
 hex-literal = "1.0.0"
 quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
