@@ -346,29 +346,52 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     let mut previous_msg_timestamp = first_msg_timestamp;
     let mut previous_msg_day = utc_timestamp_msec_to_local(first_msg_timestamp).num_days_from_ce();
 
-    let messages_from_offset = messages_to_render.flat_map(|arrived_at| {
-        let msg = app
-            .storage
-            .message(MessageId::new(channel_id, arrived_at))?;
-        let date_division = display_date_line(
-            msg.arrived_at,
-            previous_msg_timestamp,
-            &mut previous_msg_day,
-            width,
-        );
-        previous_msg_timestamp = msg.arrived_at;
-        let show_receipt = ShowReceipt::from_msg(&msg, app.user_id, app.config.show_receipts);
-        display_message(
-            &names,
-            &msg,
-            &prefix,
-            width,
-            height,
-            show_receipt,
-            date_division,
-            app.config.colored_messages,
-        )
-    });
+    let unread_messages = channel.unread_messages as usize;
+
+    let messages_from_offset = messages_to_render
+        .enumerate()
+        .flat_map(|(idx, arrived_at)| {
+            let msg = app
+                .storage
+                .message(MessageId::new(channel_id, arrived_at))?;
+
+            let mut message_prefix = Vec::new();
+
+            // Unread messages line
+            if unread_messages > 0 && idx + 1 == unread_messages {
+                let line = format!(
+                    "{:-<prefix_width$}new messages{:-<suffix_width$}",
+                    "",
+                    "",
+                    suffix_width = width.saturating_sub(prefix_width)
+                );
+                message_prefix.push(line);
+            }
+
+            // Date line
+            let date_line = display_date_line(
+                msg.arrived_at,
+                previous_msg_timestamp,
+                &mut previous_msg_day,
+                width,
+            );
+            previous_msg_timestamp = msg.arrived_at;
+            if let Some(date_line) = date_line {
+                message_prefix.push(date_line);
+            }
+
+            let show_receipt = ShowReceipt::from_msg(&msg, app.user_id, app.config.show_receipts);
+            display_message(
+                &names,
+                &msg,
+                &prefix,
+                width,
+                height,
+                show_receipt,
+                message_prefix,
+                app.config.colored_messages,
+            )
+        });
 
     // counters to accumulate messages as long they fit into the list height,
     // or up to the selected message
@@ -398,15 +421,6 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     }
     let offset = offset + first_idx;
     items = items.split_off(first_idx);
-
-    // add unread messages line
-    let unread_messages = channel.unread_messages as usize;
-    if unread_messages > 0 && unread_messages < items.len() {
-        let new_message_line = "-".repeat(prefix_width)
-            + "new messages"
-            + &"-".repeat(width.saturating_sub(prefix_width));
-        items.insert(unread_messages, ListItem::new(Span::from(new_message_line)));
-    }
 
     let title: String = if let Some(writing_people) = writing_people {
         format!("Messages {writing_people}")
@@ -491,7 +505,7 @@ fn display_message(
     width: usize,
     height: usize,
     show_receipt: ShowReceipt,
-    date_division: Option<String>,
+    message_prefix: Vec<String>,
     colored_messages: bool,
 ) -> Option<ListItem<'static>> {
     let receipt = Span::styled(
@@ -535,8 +549,8 @@ fn display_message(
     add_edited(msg, &mut text);
 
     let mut spans: Vec<Line> = vec![];
-    if let Some(date_division) = date_division {
-        spans.push(Line::from(date_division));
+    if !message_prefix.is_empty() {
+        spans.extend(message_prefix.into_iter().map(Line::from));
     }
 
     // prepend quote if any
@@ -876,7 +890,7 @@ mod tests {
             WIDTH,
             HEIGHT,
             ShowReceipt::Never,
-            None,
+            Vec::new(),
             false,
         );
 
@@ -913,7 +927,7 @@ mod tests {
             WIDTH,
             HEIGHT,
             ShowReceipt::Never,
-            None,
+            Vec::new(),
             false,
         );
 
@@ -954,7 +968,7 @@ mod tests {
             WIDTH,
             HEIGHT,
             show_receipt,
-            None,
+            Vec::new(),
             false,
         );
 
@@ -987,7 +1001,7 @@ mod tests {
             WIDTH,
             HEIGHT,
             show_receipt,
-            None,
+            Vec::new(),
             false,
         );
 
@@ -1020,7 +1034,7 @@ mod tests {
             WIDTH,
             HEIGHT,
             show_receipt,
-            None,
+            Vec::new(),
             false,
         );
 
@@ -1053,7 +1067,7 @@ mod tests {
             WIDTH,
             HEIGHT,
             show_receipt,
-            None,
+            Vec::new(),
             false,
         );
 
@@ -1088,7 +1102,7 @@ mod tests {
             WIDTH,
             HEIGHT,
             show_receipt,
-            None,
+            Vec::new(),
             false,
         );
 
@@ -1135,7 +1149,7 @@ mod tests {
             WIDTH,
             HEIGHT,
             show_receipt,
-            None,
+            Vec::new(),
             false,
         );
 
