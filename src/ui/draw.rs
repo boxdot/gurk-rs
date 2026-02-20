@@ -341,34 +341,48 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     }
     let prefix = " ".repeat(prefix_width);
 
+    if channel.unread_messages > 0 {}
+
     // The day of the message at the bottom of the viewport
     let first_msg_timestamp = messages_to_render.clone().next().unwrap_or_default();
     let mut previous_msg_timestamp = first_msg_timestamp;
     let mut previous_msg_day = utc_timestamp_msec_to_local(first_msg_timestamp).num_days_from_ce();
 
-    let messages_from_offset = messages_to_render.flat_map(|arrived_at| {
-        let msg = app
-            .storage
-            .message(MessageId::new(channel_id, arrived_at))?;
-        let date_division = display_date_line(
-            msg.arrived_at,
-            previous_msg_timestamp,
-            &mut previous_msg_day,
-            width,
-        );
-        previous_msg_timestamp = msg.arrived_at;
-        let show_receipt = ShowReceipt::from_msg(&msg, app.user_id, app.config.show_receipts);
-        display_message(
-            &names,
-            &msg,
-            &prefix,
-            width,
-            height,
-            show_receipt,
-            date_division,
-            app.config.colored_messages,
-        )
-    });
+    let messages_from_offset = messages_to_render
+        .enumerate()
+        .flat_map(|(idx, arrived_at)| {
+            let msg = app
+                .storage
+                .message(MessageId::new(channel_id, arrived_at))?;
+            let date_division = display_date_line(
+                msg.arrived_at,
+                previous_msg_timestamp,
+                &mut previous_msg_day,
+                width,
+            );
+
+            let unread_messages = channel.unread_messages as usize;
+            let new_messages_division =
+                (unread_messages > 0 && unread_messages == idx + 1).then(|| {
+                    "-".repeat(prefix_width)
+                        + "new messages"
+                        + &"-".repeat(width.saturating_sub(prefix_width))
+                });
+
+            previous_msg_timestamp = msg.arrived_at;
+            let show_receipt = ShowReceipt::from_msg(&msg, app.user_id, app.config.show_receipts);
+            display_message(
+                &names,
+                &msg,
+                &prefix,
+                width,
+                height,
+                show_receipt,
+                date_division,
+                new_messages_division,
+                app.config.colored_messages,
+            )
+        });
 
     // counters to accumulate messages as long they fit into the list height,
     // or up to the selected message
@@ -398,15 +412,6 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     }
     let offset = offset + first_idx;
     items = items.split_off(first_idx);
-
-    // add unread messages line
-    let unread_messages = channel.unread_messages as usize;
-    if unread_messages > 0 && unread_messages < items.len() {
-        let new_message_line = "-".repeat(prefix_width)
-            + "new messages"
-            + &"-".repeat(width.saturating_sub(prefix_width));
-        items.insert(unread_messages, ListItem::new(Span::from(new_message_line)));
-    }
 
     let title: String = if let Some(writing_people) = writing_people {
         format!("Messages {writing_people}")
@@ -492,6 +497,7 @@ fn display_message(
     height: usize,
     show_receipt: ShowReceipt,
     date_division: Option<String>,
+    unread_messages_division: Option<String>,
     colored_messages: bool,
 ) -> Option<ListItem<'static>> {
     let receipt = Span::styled(
@@ -538,6 +544,9 @@ fn display_message(
     if let Some(date_division) = date_division {
         spans.push(Line::from(date_division));
     }
+    if let Some(unread_messages_division) = unread_messages_division {
+        spans.push(Line::from(unread_messages_division));
+    }
 
     // prepend quote if any
     let quote_text = msg
@@ -550,27 +559,31 @@ fn display_message(
             .initial_indent(&quote_prefix)
             .subsequent_indent(&quote_prefix);
         let quote_style = Style::default().fg(Color::Rgb(150, 150, 150));
-        spans = textwrap::wrap(quote_text, quote_wrap_opts)
-            .into_iter()
-            .enumerate()
-            .map(|(idx, line)| {
-                let res = if idx == 0 {
-                    vec![
-                        receipt.clone(),
-                        time.clone(),
-                        from.clone(),
-                        delimiter.clone(),
-                        Span::styled(line.strip_prefix(prefix).unwrap().to_owned(), quote_style),
-                    ]
-                } else {
-                    vec![Span::styled(line.into_owned(), quote_style)]
-                };
-                Line::from(res)
-            })
-            .collect();
+        spans.extend(
+            textwrap::wrap(quote_text, quote_wrap_opts)
+                .into_iter()
+                .enumerate()
+                .map(|(idx, line)| {
+                    let res = if idx == 0 {
+                        vec![
+                            receipt.clone(),
+                            time.clone(),
+                            from.clone(),
+                            delimiter.clone(),
+                            Span::styled(
+                                line.strip_prefix(prefix).unwrap().to_owned(),
+                                quote_style,
+                            ),
+                        ]
+                    } else {
+                        vec![Span::styled(line.into_owned(), quote_style)]
+                    };
+                    Line::from(res)
+                }),
+        );
     }
 
-    let add_time = spans.is_empty();
+    let add_time = quote_text.is_none();
     let message_style = if colored_messages {
         Style::default().fg(from_color)
     } else {
@@ -877,6 +890,7 @@ mod tests {
             HEIGHT,
             ShowReceipt::Never,
             None,
+            None,
             false,
         );
 
@@ -913,6 +927,7 @@ mod tests {
             WIDTH,
             HEIGHT,
             ShowReceipt::Never,
+            None,
             None,
             false,
         );
@@ -955,6 +970,7 @@ mod tests {
             HEIGHT,
             show_receipt,
             None,
+            None,
             false,
         );
 
@@ -987,6 +1003,7 @@ mod tests {
             WIDTH,
             HEIGHT,
             show_receipt,
+            None,
             None,
             false,
         );
@@ -1021,6 +1038,7 @@ mod tests {
             HEIGHT,
             show_receipt,
             None,
+            None,
             false,
         );
 
@@ -1053,6 +1071,7 @@ mod tests {
             WIDTH,
             HEIGHT,
             show_receipt,
+            None,
             None,
             false,
         );
@@ -1088,6 +1107,7 @@ mod tests {
             WIDTH,
             HEIGHT,
             show_receipt,
+            None,
             None,
             false,
         );
@@ -1136,6 +1156,7 @@ mod tests {
             HEIGHT,
             show_receipt,
             None,
+            None,
             false,
         );
 
@@ -1151,6 +1172,42 @@ mod tests {
                 Span::raw("Mention @boxdot  and even more @boxdot ."),
             ]),
             Line::from(vec![Span::raw("                  End")]),
+        ]));
+        assert_eq!(rendered, Some(expected));
+    }
+
+    #[test]
+    fn test_display_unread_messages_division() {
+        let names = name_resolver();
+        let msg = Message {
+            message: Some("Hello, World!".into()),
+            ..test_message()
+        };
+        let division = Some("--new messages--".to_string());
+        let rendered = display_message(
+            &names,
+            &msg,
+            PREFIX,
+            WIDTH,
+            HEIGHT,
+            ShowReceipt::Never,
+            None,
+            division.clone(),
+            false,
+        );
+
+        let expected = ListItem::new(Text::from(vec![
+            Line::from(division.unwrap()),
+            Line::from(vec![
+                Span::styled("", Style::default().fg(Color::Yellow)),
+                Span::styled(
+                    display_time(msg.arrived_at),
+                    Style::default().fg(Color::Yellow),
+                ),
+                Span::styled("boxdot", Style::default().fg(Color::Green)),
+                Span::raw(": "),
+                Span::raw("Hello, World!"),
+            ]),
         ]));
         assert_eq!(rendered, Some(expected));
     }
