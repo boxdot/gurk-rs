@@ -95,7 +95,7 @@ libraries that are not available on crates.io.
   * `ctrl+c` Quit.
 * Message input
   * `tab` Send emoji from input line as reaction on selected message.
-  * `alt+enter` Switch between multi-line and singl-line input modes.
+  * `alt+enter` Switch between multi-line and single-line input modes.
   * `alt+left`, `alt+right` Jump to previous/next word.
   * `ctrl+w / ctrl+backspace / alt+backspace` Delete last word.
   * `ctrl+u` Delete to the start of the line.

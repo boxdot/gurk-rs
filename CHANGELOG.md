@@ -471,7 +471,7 @@ gurk --relink
 
 The highlight of this release is the usage of the native implementation of the Signal client
 protocol via [presage]. This removes the dependency on [signal-cli] and makes `gurk` fully
-standalone. For more defails, see [#41].
+standalone. For more details, see [#41].
 
 ⚠️ This release has a breaking change of the data storage.
 
