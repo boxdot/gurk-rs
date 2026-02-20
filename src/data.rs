@@ -229,7 +229,7 @@ impl Style {
 
 impl From<&BodyRange> for proto::BodyRange {
     fn from(range: &BodyRange) -> Self {
-        let associtated_value = match &range.value {
+        let associated_value = match &range.value {
             AssociatedValue::MentionUuid(id) => {
                 proto::body_range::AssociatedValue::MentionAci(id.to_string())
             }
@@ -240,7 +240,7 @@ impl From<&BodyRange> for proto::BodyRange {
         Self {
             start: Some(range.start.into()),
             length: Some((range.end - range.start).into()),
-            associated_value: Some(associtated_value),
+            associated_value: Some(associated_value),
         }
     }
 }

@@ -81,7 +81,7 @@ impl ReceiptQueues {
 
     pub fn add_read(&mut self, timestamp: u64) {
         // Ensures we do not send uselessly double the amount of receipts
-        // in the case a message is immediatly received and read.
+        // in the case a message is immediately received and read.
         self.received_msg.remove(&timestamp);
         if !self.read_msg.insert(timestamp) {
             error!("Somehow got duplicate Delivered receipt @ {}", timestamp);
