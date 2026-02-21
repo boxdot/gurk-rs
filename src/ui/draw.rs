@@ -341,8 +341,6 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     }
     let prefix = " ".repeat(prefix_width);
 
-    if channel.unread_messages > 0 {}
-
     // The day of the message at the bottom of the viewport
     let first_msg_timestamp = messages_to_render.clone().next().unwrap_or_default();
     let mut previous_msg_timestamp = first_msg_timestamp;
