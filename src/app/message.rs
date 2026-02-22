@@ -109,7 +109,9 @@ impl App {
                     ChannelId::User(target_author_uuid.parse()?)
                 };
 
-                let channel_muted = self.storage.channel(channel_id)
+                let channel_muted = self
+                    .storage
+                    .channel(channel_id)
                     .map(|c| c.muted)
                     .unwrap_or(false);
                 self.handle_reaction(
@@ -162,7 +164,9 @@ impl App {
                     ChannelId::User(sender.raw_uuid())
                 };
 
-                let channel_muted = self.storage.channel(channel_id)
+                let channel_muted = self
+                    .storage
+                    .channel(channel_id)
                     .map(|c| c.muted)
                     .unwrap_or(false);
                 self.handle_reaction(
@@ -263,7 +267,7 @@ impl App {
                     ..
                 }),
             ) => {
-                let (channel_idx, from) = if let Some(GroupContextV2 {
+                let (channel_idx, from, channel_muted) = if let Some(GroupContextV2 {
                     master_key: Some(master_key),
                     revision: Some(revision),
                     ..
@@ -290,8 +294,12 @@ impl App {
                     self.ensure_user_is_known(sender.raw_uuid(), profile_key)
                         .await;
                     let from = self.name_by_id(sender.raw_uuid()).await;
-
-                    (channel_idx, from)
+                    let channel_id = self.channels.items[channel_idx];
+                    let channel = self
+                        .storage
+                        .channel(channel_id)
+                        .expect("non-existent channel");
+                    (channel_idx, from, channel.muted)
                 } else {
                     // incoming direct message
                     let profile_key = profile_key
@@ -312,19 +320,16 @@ impl App {
                         .expect("non-existent channel")
                         .into_owned();
                     let from = channel.name.clone();
+                    let channel_muted = channel.muted;
                     if channel.reset_writing(sender.raw_uuid()) {
                         self.storage.store_channel(channel);
                     }
-                    (channel_idx, from)
+                    (channel_idx, from, channel_muted)
                 };
 
                 add_emoji_from_sticker(&mut body, sticker);
 
                 let attachments = self.save_attachments(attachment_pointers).await;
-                let channel_muted = self.channels.items.get(channel_idx)
-                    .and_then(|&id| self.storage.channel(id))
-                    .map(|c| c.muted)
-                    .unwrap_or(false);
                 if !channel_muted {
                     self.notify_about_message(&from, body.as_deref(), &attachments);
                 }

@@ -781,8 +781,31 @@ fn bindings_mode<'a>(app: &App, mode: &WindowMode) -> Vec<Line<'a>> {
     v
 }
 
+fn help_indicators<'a>() -> Vec<Line<'a>> {
+    let indicators: &[(&str, &str)] = &[
+        ("(N)", "N unread messages in channel"),
+        ("[M]", "Channel is muted (notifications silenced)"),
+        ("○", "Message sent"),
+        ("◉", "Message delivered"),
+        ("●", "Message read"),
+    ];
+    let label_len = indicators.iter().map(|i| i.0.len()).max().unwrap_or(0);
+    let mut v = vec![
+        Line::default(),
+        Line::styled("Indicators", Style::default().add_modifier(Modifier::BOLD)),
+        Line::default(),
+    ];
+    v.extend(
+        indicators
+            .iter()
+            .map(|i| Line::raw(format!("{: <label_len$}   {}", i.0, i.1))),
+    );
+    v
+}
+
 fn draw_help(f: &mut Frame, app: &mut App, area: Rect) {
     let mut command_bindings = help_commands();
+    command_bindings.extend(help_indicators());
     command_bindings.extend(bindings(app));
     let command_bindings = Paragraph::new(Text::from(command_bindings))
         .block(Block::bordered().title("Available commands and configured shortcuts"))
