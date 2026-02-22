@@ -330,12 +330,10 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
             .clone()
             .map(|arrived_at| MessageId::new(channel_id, arrived_at)),
     );
-    let max_username_width = names.max_name_width();
 
     // message display options
     const TIME_WIDTH: usize = 6; // width of "00:00 "
-    const DELIMITER_WIDTH: usize = 2;
-    let mut prefix_width = TIME_WIDTH + max_username_width + DELIMITER_WIDTH;
+    let mut prefix_width = TIME_WIDTH;
     if app.config.show_receipts {
         prefix_width += RECEIPT_WIDTH;
     }
@@ -510,18 +508,7 @@ fn display_message(
 
     let (from, from_color) = names.resolve(msg.from_id);
 
-    let from = Span::styled(
-        textwrap::indent(
-            &from,
-            &" ".repeat(
-                names
-                    .max_name_width()
-                    .checked_sub(from.width())
-                    .unwrap_or_default(),
-            ),
-        ),
-        Style::default().fg(from_color),
-    );
+    let from = Span::styled(from.into_owned(), Style::default().fg(from_color));
     let delimiter = Span::from(": ");
 
     let wrap_opts = textwrap::Options::new(width)
@@ -1175,13 +1162,15 @@ mod tests {
     }
 
     #[test]
-    fn test_display_unread_messages_division() {
+    fn test_display_long_message_wraps() {
         let names = name_resolver();
         let msg = Message {
-            message: Some("Hello, World!".into()),
+            message: Some(
+                "This is a very long message that should wrap across multiple lines in the display"
+                    .into(),
+            ),
             ..test_message()
         };
-        let division = Some("--new messages--".to_string());
         let rendered = display_message(
             &names,
             &msg,
@@ -1190,12 +1179,50 @@ mod tests {
             HEIGHT,
             ShowReceipt::Never,
             None,
-            division.clone(),
+            None,
             false,
         );
 
         let expected = ListItem::new(Text::from(vec![
-            Line::from(division.unwrap()),
+            Line::from(vec![
+                Span::styled("", Style::default().fg(Color::Yellow)),
+                Span::styled(
+                    display_time(msg.arrived_at),
+                    Style::default().fg(Color::Yellow),
+                ),
+                Span::styled("boxdot", Style::default().fg(Color::Green)),
+                Span::raw(": "),
+                Span::raw("This is a very long message that should"),
+            ]),
+            Line::from(vec![Span::raw(
+                "                  wrap across multiple lines in the display",
+            )]),
+        ]));
+        assert_eq!(rendered, Some(expected));
+    }
+
+    #[test]
+    fn test_display_unread_messages_division() {
+        let names = name_resolver();
+        let msg = Message {
+            message: Some("Hello, World!".into()),
+            ..test_message()
+        };
+        let division = "--new messages--".to_owned();
+        let rendered = display_message(
+            &names,
+            &msg,
+            PREFIX,
+            WIDTH,
+            HEIGHT,
+            ShowReceipt::Never,
+            None,
+            Some(division.clone()),
+            false,
+        );
+
+        let expected = ListItem::new(Text::from(vec![
+            Line::from(division),
             Line::from(vec![
                 Span::styled("", Style::default().fg(Color::Yellow)),
                 Span::styled(

@@ -2,7 +2,6 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 
 use ratatui::style::Color;
-use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
 
 use crate::app::App;
@@ -14,7 +13,6 @@ use crate::storage::MessageId;
 pub struct NameResolver<'a> {
     app: Option<&'a App>,
     names_and_colors: HashMap<Uuid, (String, Color)>,
-    max_name_width: usize,
 }
 
 impl<'a> NameResolver<'a> {
@@ -49,16 +47,9 @@ impl<'a> NameResolver<'a> {
             }
         }
 
-        let max_name_width = names_and_colors
-            .values()
-            .map(|(name, _)| name.width())
-            .max()
-            .unwrap_or(0);
-
         Self {
             app: Some(app),
             names_and_colors,
-            max_name_width,
         }
     }
 
@@ -73,18 +64,12 @@ impl<'a> NameResolver<'a> {
             })
     }
 
-    /// Returns the char width of the longest name
-    pub(super) fn max_name_width(&self) -> usize {
-        self.max_name_width
-    }
-
     /// Resolver with a single user
     #[cfg(test)]
     pub fn single_user(user_id: Uuid, username: String, color: Color) -> NameResolver<'static> {
         NameResolver {
             app: None,
             names_and_colors: [(user_id, (username, color))].into_iter().collect(),
-            max_name_width: 6,
         }
     }
 }
