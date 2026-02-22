@@ -1,10 +1,13 @@
 use anyhow::{Context, anyhow, bail};
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize, Serialize,
+    de::{self, MapAccess, Visitor},
+};
 use tracing::warn;
 use url::Url;
 
-use std::fs;
 use std::path::{Path, PathBuf};
+use std::{fmt, fs};
 
 use crate::{command::ModeKeybindingConfig, passphrase::Passphrase};
 
@@ -33,7 +36,7 @@ pub struct Config {
     #[serde(default = "default_true")]
     pub show_receipts: bool,
     /// Notification settings
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_notification_config")]
     pub notifications: NotificationConfig,
     #[serde(default = "default_true")]
     pub bell: bool,
@@ -139,6 +142,35 @@ pub(crate) struct DeprecatedKeys {
 pub(crate) struct DeprecatedConfigKey {
     pub(crate) key: &'static str,
     pub(crate) message: &'static str,
+}
+
+/// Accepts either `notifications = true/false` (legacy) or `[notifications]` (current struct).
+fn deserialize_notification_config<'de, D>(deserializer: D) -> Result<NotificationConfig, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct NotificationConfigVisitor;
+
+    impl<'de> Visitor<'de> for NotificationConfigVisitor {
+        type Value = NotificationConfig;
+
+        fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            f.write_str("a boolean or a notification config table")
+        }
+
+        fn visit_bool<E: de::Error>(self, enabled: bool) -> Result<NotificationConfig, E> {
+            Ok(NotificationConfig {
+                enabled,
+                ..Default::default()
+            })
+        }
+
+        fn visit_map<M: MapAccess<'de>>(self, map: M) -> Result<NotificationConfig, M::Error> {
+            NotificationConfig::deserialize(de::value::MapAccessDeserializer::new(map))
+        }
+    }
+
+    deserializer.deserialize_any(NotificationConfigVisitor)
 }
 
 impl Config {
@@ -392,6 +424,38 @@ mod tests {
         assert!(config_path.parent().unwrap().exists()); // data path parent is created
 
         Ok(())
+    }
+
+    #[test]
+    fn test_notifications_bool_compat() {
+        // Old configs with `notifications = true/false` should parse successfully
+        let toml_true = r#"
+notifications = true
+[user]
+display_name = "Test"
+"#;
+        let config: Config = toml::de::from_str(toml_true).unwrap();
+        assert!(config.notifications.enabled);
+
+        let toml_false = r#"
+notifications = false
+[user]
+display_name = "Test"
+"#;
+        let config: Config = toml::de::from_str(toml_false).unwrap();
+        assert!(!config.notifications.enabled);
+
+        // New struct format should still work
+        let toml_struct = r#"
+[user]
+display_name = "Test"
+[notifications]
+enabled = false
+show_message_text = true
+"#;
+        let config: Config = toml::de::from_str(toml_struct).unwrap();
+        assert!(!config.notifications.enabled);
+        assert!(config.notifications.show_message_text);
     }
 
     #[test]
