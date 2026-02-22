@@ -134,7 +134,7 @@ impl SignalManager for PresageManager {
         edit_message_timestamp: Option<u64>,
         attachments: Vec<(AttachmentSpec, Vec<u8>)>,
     ) -> (Message, oneshot::Receiver<anyhow::Result<()>>) {
-        let mut message: String = crate::emoji::replace_shortcodes(&text).into_owned();
+        let message: String = crate::emoji::replace_shortcodes(&text).into_owned();
         let has_attachments = !attachments.is_empty();
 
         let timestamp = utc_now_timestamp_msec();
@@ -154,6 +154,7 @@ impl SignalManager for PresageManager {
             ..Default::default()
         };
 
+        let mut saved_attachments: Vec<Attachment> = Vec::new();
         if has_attachments {
             for (spec, data) in &attachments {
                 let attachment_pointer = AttachmentPointer {
@@ -168,9 +169,7 @@ impl SignalManager for PresageManager {
                 };
                 match attachment::save(&self.data_dir, attachment_pointer, data) {
                     Ok(attachment) => {
-                        let line_break = if message.is_empty() { "" } else { "\n" };
-                        message +=
-                            &format!("{line_break}<file://{}>", attachment.filename.display());
+                        saved_attachments.push(attachment);
                     }
                     Err(error) => {
                         error!(%error, "failed to save attachment");
@@ -262,7 +261,7 @@ impl SignalManager for PresageManager {
             message: Some(message),
             arrived_at: timestamp,
             quote: quote_message,
-            attachments: Default::default(),
+            attachments: saved_attachments,
             reactions: Default::default(),
             receipt: Receipt::Sent,
             body_ranges: Default::default(),

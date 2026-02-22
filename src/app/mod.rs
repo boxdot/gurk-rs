@@ -315,7 +315,12 @@ pub(super) fn open_url(message: &Message, url_regex: &Regex) -> Option<()> {
     let text = message.message.as_ref()?;
     let m = url_regex.find(text)?;
     let url = m.as_str();
-    if let Err(error) = opener::open(url) {
+    let result = if let Some(path) = url.strip_prefix("file://") {
+        opener::open(Path::new(path))
+    } else {
+        opener::open(url)
+    };
+    if let Err(error) = result {
         error!(url, %error, "failed to open");
     }
     Some(())
