@@ -118,6 +118,7 @@ impl App {
                 name,
                 group_data: Some(group_data),
                 unread_messages: 0,
+                muted: false,
                 typing: TypingSet::GroupTyping(Default::default()),
             };
             self.storage.store_channel(channel);
@@ -195,6 +196,7 @@ impl App {
                 name: self.config.user.display_name.clone(),
                 group_data: None,
                 unread_messages: 0,
+                muted: false,
                 typing: TypingSet::SingleTyping(false),
             };
             let channel = self.storage.store_channel(channel);
@@ -229,6 +231,7 @@ impl App {
                 name: name.to_string(),
                 group_data: None,
                 unread_messages: 0,
+                muted: false,
                 typing: TypingSet::SingleTyping(false),
             };
             let channel = self.storage.store_channel(channel);
@@ -295,5 +298,15 @@ impl App {
 
     pub fn select_channel_next(&mut self) {
         self.select_channel.next();
+    }
+
+    pub fn toggle_mute_channel(&mut self) {
+        if let Some(&channel_id) = self.channels.selected_item()
+            && let Some(channel) = self.storage.channel(channel_id)
+        {
+            let mut channel = channel.into_owned();
+            channel.muted = !channel.muted;
+            self.storage.store_channel(channel);
+        }
     }
 }

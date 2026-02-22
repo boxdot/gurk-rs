@@ -109,6 +109,9 @@ impl App {
                     ChannelId::User(target_author_uuid.parse()?)
                 };
 
+                let channel_muted = self.storage.channel(channel_id)
+                    .map(|c| c.muted)
+                    .unwrap_or(false);
                 self.handle_reaction(
                     channel_id,
                     target_sent_timestamp,
@@ -116,8 +119,8 @@ impl App {
                     emoji,
                     HandleReactionOptions::new()
                         .remove(remove.unwrap_or(false))
-                        .notify(self.config.notifications.show_reactions)
-                        .bell(!self.config.notifications.mute_reactions_bell),
+                        .notify(self.config.notifications.show_reactions && !channel_muted)
+                        .bell(!self.config.notifications.mute_reactions_bell && !channel_muted),
                 )
                 .await;
                 read.into_iter().for_each(|r| {
@@ -159,6 +162,9 @@ impl App {
                     ChannelId::User(sender.raw_uuid())
                 };
 
+                let channel_muted = self.storage.channel(channel_id)
+                    .map(|c| c.muted)
+                    .unwrap_or(false);
                 self.handle_reaction(
                     channel_id,
                     target_sent_timestamp,
@@ -166,8 +172,8 @@ impl App {
                     emoji,
                     HandleReactionOptions::new()
                         .remove(remove.unwrap_or(false))
-                        .notify(self.config.notifications.show_reactions)
-                        .bell(!self.config.notifications.mute_reactions_bell),
+                        .notify(self.config.notifications.show_reactions && !channel_muted)
+                        .bell(!self.config.notifications.mute_reactions_bell && !channel_muted),
                 )
                 .await;
                 return Ok(());
@@ -315,7 +321,13 @@ impl App {
                 add_emoji_from_sticker(&mut body, sticker);
 
                 let attachments = self.save_attachments(attachment_pointers).await;
-                self.notify_about_message(&from, body.as_deref(), &attachments);
+                let channel_muted = self.channels.items.get(channel_idx)
+                    .and_then(|&id| self.storage.channel(id))
+                    .map(|c| c.muted)
+                    .unwrap_or(false);
+                if !channel_muted {
+                    self.notify_about_message(&from, body.as_deref(), &attachments);
+                }
 
                 // Send "Delivered" receipt
                 self.add_receipt_event(ReceiptEvent::new(

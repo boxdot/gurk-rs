@@ -19,6 +19,7 @@ pub struct Channel {
     pub name: String,
     pub group_data: Option<GroupData>,
     pub unread_messages: u32,
+    pub muted: bool,
     pub typing: TypingSet,
 }
 

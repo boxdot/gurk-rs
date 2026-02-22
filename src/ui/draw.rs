@@ -111,9 +111,11 @@ fn draw_channels(f: &mut Frame, app: &mut App, area: Rect) {
             } else {
                 String::new()
             };
-            let label = format!("{}{}", app.channel_name(&channel), unread_messages_label);
+            let mute_label = if channel.muted { " [M]" } else { "" };
+            let suffix = format!("{}{}", unread_messages_label, mute_label);
+            let label = format!("{}{}", app.channel_name(&channel), suffix);
             let label_width = label.width();
-            let label = if label.width() <= channel_list_width || unread_messages_label.is_empty() {
+            let label = if label_width <= channel_list_width || suffix.is_empty() {
                 label
             } else {
                 let diff = label_width - channel_list_width;
@@ -121,7 +123,7 @@ fn draw_channels(f: &mut Frame, app: &mut App, area: Rect) {
                 while !channel.name.is_char_boundary(end) {
                     end += 1;
                 }
-                format!("{}{}", &channel.name[0..end], unread_messages_label)
+                format!("{}{}", &channel.name[0..end], suffix)
             };
             ListItem::new(vec![Line::from(Span::raw(label))])
         });

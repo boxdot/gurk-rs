@@ -99,6 +99,7 @@ impl App {
                 // TODO: prevent overscrolling
                 self.help_scroll.0 += 1
             }
+            Command::ToggleMuteChannel => self.toggle_mute_channel(),
             Command::NoOp => {}
         }
         Ok(())
