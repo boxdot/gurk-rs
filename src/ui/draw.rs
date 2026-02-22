@@ -508,12 +508,9 @@ fn display_message(
 
     let (from, from_color) = names.resolve(msg.from_id);
 
+    let from_width = from.width();
     let from = Span::styled(from.into_owned(), Style::default().fg(from_color));
     let delimiter = Span::from(": ");
-
-    let wrap_opts = textwrap::Options::new(width)
-        .initial_indent(prefix)
-        .subsequent_indent(prefix);
 
     // collect message text
     let text = strip_ansi_escapes::strip_str(msg.message.as_deref().unwrap_or_default());
@@ -574,24 +571,29 @@ fn display_message(
     } else {
         Style::default()
     };
+
+    const DELIMITER_WIDTH: usize = 2;
+    let first_line_prefix = " ".repeat(prefix.len() + from_width + DELIMITER_WIDTH);
+    let wrap_opts = textwrap::Options::new(width)
+        .initial_indent(if add_time { &first_line_prefix } else { prefix })
+        .subsequent_indent(prefix);
+    let mut wrapped_text = textwrap::wrap(&text, &wrap_opts).into_iter();
+
+    if add_time && let Some(first_line) = wrapped_text.next() {
+        let line = first_line
+            .strip_prefix(&first_line_prefix)
+            .expect("logic error")
+            .to_owned();
+        spans.push(Line::from(vec![
+            receipt,
+            time,
+            from,
+            delimiter,
+            Span::styled(line, message_style),
+        ]));
+    }
     spans.extend(
-        textwrap::wrap(&text, &wrap_opts)
-            .into_iter()
-            .enumerate()
-            .map(|(idx, line)| {
-                let res = if add_time && idx == 0 {
-                    vec![
-                        receipt.clone(),
-                        time.clone(),
-                        from.clone(),
-                        delimiter.clone(),
-                        Span::styled(line.strip_prefix(prefix).unwrap().to_owned(), message_style),
-                    ]
-                } else {
-                    vec![Span::styled(line.into_owned(), message_style)]
-                };
-                Line::from(res)
-            }),
+        wrapped_text.map(|line| Line::from(Span::styled(line.into_owned(), message_style))),
     );
 
     if let Some(reason) = msg.send_failed.as_deref() {
@@ -1154,9 +1156,9 @@ mod tests {
                 ),
                 Span::styled("boxdot", Style::default().fg(Color::Green)),
                 Span::raw(": "),
-                Span::raw("Mention @boxdot  and even more @boxdot ."),
+                Span::raw("Mention @boxdot  and even more"),
             ]),
-            Line::from(vec![Span::raw("                  End")]),
+            Line::from(vec![Span::raw("                  @boxdot . End")]),
         ]));
         assert_eq!(rendered, Some(expected));
     }
@@ -1192,11 +1194,12 @@ mod tests {
                 ),
                 Span::styled("boxdot", Style::default().fg(Color::Green)),
                 Span::raw(": "),
-                Span::raw("This is a very long message that should"),
+                Span::raw("This is a very long message that"),
             ]),
             Line::from(vec![Span::raw(
-                "                  wrap across multiple lines in the display",
+                "                  should wrap across multiple lines in the",
             )]),
+            Line::from(vec![Span::raw("                  display")]),
         ]));
         assert_eq!(rendered, Some(expected));
     }
