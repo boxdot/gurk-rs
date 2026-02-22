@@ -84,6 +84,7 @@ struct SqlChannel {
     group_master_key: Option<Vec<u8>>,
     group_revision: Option<i64>,
     group_members: Option<BlobData<Vec<Uuid>>>,
+    muted: bool,
 }
 
 impl SqlChannel {
@@ -94,6 +95,7 @@ impl SqlChannel {
             group_master_key,
             group_revision,
             group_members,
+            muted,
         } = self;
         use ChannelConvertError::*;
         let group_data = match (group_master_key, group_revision, group_members) {
@@ -110,6 +112,7 @@ impl SqlChannel {
             name,
             group_data,
             unread_messages: Default::default(),
+            muted,
             typing: TypingSet::new(is_group),
         })
     }
@@ -226,7 +229,8 @@ impl Storage for SqliteStorage {
                          name,
                          group_master_key,
                          group_revision,
-                         group_members AS "group_members: _"
+                         group_members AS "group_members: _",
+                         muted AS "muted: _"
                     FROM channels
                 "#
             )
@@ -252,7 +256,8 @@ impl Storage for SqliteStorage {
                             name,
                             group_master_key,
                             group_revision,
-                            group_members AS "group_members: _"
+                            group_members AS "group_members: _",
+                            muted AS "muted: _"
                         FROM channels
                         WHERE id = ?
                     "#,
@@ -278,17 +283,19 @@ impl Storage for SqliteStorage {
                 )
             })
             .unwrap_or_default();
+        let muted = channel.muted;
         block_async_in_place(
             query!(
                 r#"
-                    REPLACE INTO channels(id, name, group_master_key, group_revision, group_members)
-                    VALUES (?, ?, ?, ?, ?)
+                    REPLACE INTO channels(id, name, group_master_key, group_revision, group_members, muted)
+                    VALUES (?, ?, ?, ?, ?, ?)
                 "#,
                 id,
                 name,
                 group_master_key,
                 group_revision,
-                group_members
+                group_members,
+                muted
             )
             .execute(&self.pool),
         )
@@ -616,6 +623,7 @@ mod tests {
             name: "direct-channel".to_owned(),
             group_data: None,
             unread_messages: 1,
+            muted: false,
             typing: TypingSet::new(false),
         });
         storage.store_message(
@@ -644,6 +652,7 @@ mod tests {
             name: "group-channel".to_owned(),
             group_data: None,
             unread_messages: 2,
+            muted: false,
             typing: TypingSet::new(true),
         });
         storage.store_message(

@@ -109,6 +109,11 @@ impl App {
                     ChannelId::User(target_author_uuid.parse()?)
                 };
 
+                let channel_muted = self
+                    .storage
+                    .channel(channel_id)
+                    .map(|c| c.muted)
+                    .unwrap_or(false);
                 self.handle_reaction(
                     channel_id,
                     target_sent_timestamp,
@@ -116,8 +121,8 @@ impl App {
                     emoji,
                     HandleReactionOptions::new()
                         .remove(remove.unwrap_or(false))
-                        .notify(self.config.notifications.show_reactions)
-                        .bell(!self.config.notifications.mute_reactions_bell),
+                        .notify(self.config.notifications.show_reactions && !channel_muted)
+                        .bell(!self.config.notifications.mute_reactions_bell && !channel_muted),
                 )
                 .await;
                 read.into_iter().for_each(|r| {
@@ -159,6 +164,11 @@ impl App {
                     ChannelId::User(sender.raw_uuid())
                 };
 
+                let channel_muted = self
+                    .storage
+                    .channel(channel_id)
+                    .map(|c| c.muted)
+                    .unwrap_or(false);
                 self.handle_reaction(
                     channel_id,
                     target_sent_timestamp,
@@ -166,8 +176,8 @@ impl App {
                     emoji,
                     HandleReactionOptions::new()
                         .remove(remove.unwrap_or(false))
-                        .notify(self.config.notifications.show_reactions)
-                        .bell(!self.config.notifications.mute_reactions_bell),
+                        .notify(self.config.notifications.show_reactions && !channel_muted)
+                        .bell(!self.config.notifications.mute_reactions_bell && !channel_muted),
                 )
                 .await;
                 return Ok(());
@@ -257,7 +267,7 @@ impl App {
                     ..
                 }),
             ) => {
-                let (channel_idx, from) = if let Some(GroupContextV2 {
+                let (channel_idx, from, channel_muted) = if let Some(GroupContextV2 {
                     master_key: Some(master_key),
                     revision: Some(revision),
                     ..
@@ -284,8 +294,12 @@ impl App {
                     self.ensure_user_is_known(sender.raw_uuid(), profile_key)
                         .await;
                     let from = self.name_by_id(sender.raw_uuid()).await;
-
-                    (channel_idx, from)
+                    let channel_id = self.channels.items[channel_idx];
+                    let channel = self
+                        .storage
+                        .channel(channel_id)
+                        .expect("non-existent channel");
+                    (channel_idx, from, channel.muted)
                 } else {
                     // incoming direct message
                     let profile_key = profile_key
@@ -306,16 +320,19 @@ impl App {
                         .expect("non-existent channel")
                         .into_owned();
                     let from = channel.name.clone();
+                    let channel_muted = channel.muted;
                     if channel.reset_writing(sender.raw_uuid()) {
                         self.storage.store_channel(channel);
                     }
-                    (channel_idx, from)
+                    (channel_idx, from, channel_muted)
                 };
 
                 add_emoji_from_sticker(&mut body, sticker);
 
                 let attachments = self.save_attachments(attachment_pointers).await;
-                self.notify_about_message(&from, body.as_deref(), &attachments);
+                if !channel_muted {
+                    self.notify_about_message(&from, body.as_deref(), &attachments);
+                }
 
                 // Send "Delivered" receipt
                 self.add_receipt_event(ReceiptEvent::new(

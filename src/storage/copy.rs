@@ -30,6 +30,7 @@ pub async fn sync_from_signal(manager: &dyn SignalManager, storage: &mut dyn Sto
                 name: contact.name.trim().to_owned(),
                 group_data: None,
                 unread_messages: 0,
+                muted: false,
                 typing: TypingSet::new(false),
             });
         }
@@ -94,6 +95,7 @@ pub async fn sync_from_signal(manager: &dyn SignalManager, storage: &mut dyn Sto
                     name: group.title,
                     group_data: Some(new_group_data()),
                     unread_messages: 0,
+                    muted: false,
                     typing: TypingSet::new(true),
                 });
             }

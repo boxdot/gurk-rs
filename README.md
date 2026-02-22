@@ -117,6 +117,7 @@ libraries that are not available on crates.io.
   * `ctrl+j / Up` Select previous channel.
   * `ctrl+k / Down` Select next channel.
   * `ctrl+p` Open / close channel selection popup.
+  * `alt+m` Toggle mute for the selected channel (silences notifications; muted channels are marked with `[M]`).
 * Clipboard
   * `alt+y` Copy selected message to clipboard.
 * Help menu
@@ -170,6 +171,7 @@ delete_character previous
 edit_message
 open_url
 open_file
+toggle_mute_channel
 ```
 
 ### Example configuration

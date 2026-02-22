@@ -111,9 +111,12 @@ fn draw_channels(f: &mut Frame, app: &mut App, area: Rect) {
             } else {
                 String::new()
             };
-            let label = format!("{}{}", app.channel_name(&channel), unread_messages_label);
+            let mute_label = if channel.muted { " [M]" } else { "" };
+            let suffix = format!("{unread_messages_label}{mute_label}");
+            let channel_name = app.channel_name(&channel);
+            let label = format!("{channel_name}{suffix}");
             let label_width = label.width();
-            let label = if label.width() <= channel_list_width || unread_messages_label.is_empty() {
+            let label = if label_width <= channel_list_width || suffix.is_empty() {
                 label
             } else {
                 let diff = label_width - channel_list_width;
@@ -121,7 +124,7 @@ fn draw_channels(f: &mut Frame, app: &mut App, area: Rect) {
                 while !channel.name.is_char_boundary(end) {
                     end += 1;
                 }
-                format!("{}{}", &channel.name[0..end], unread_messages_label)
+                format!("{}{}", &channel.name[0..end], suffix)
             };
             ListItem::new(vec![Line::from(Span::raw(label))])
         });
@@ -778,8 +781,31 @@ fn bindings_mode<'a>(app: &App, mode: &WindowMode) -> Vec<Line<'a>> {
     v
 }
 
+fn help_indicators<'a>() -> Vec<Line<'a>> {
+    let indicators: &[(&str, &str)] = &[
+        ("(N)", "N unread messages in channel"),
+        ("[M]", "Channel is muted (notifications silenced)"),
+        ("○", "Message sent"),
+        ("◉", "Message delivered"),
+        ("●", "Message read"),
+    ];
+    let label_len = indicators.iter().map(|i| i.0.len()).max().unwrap_or(0);
+    let mut v = vec![
+        Line::default(),
+        Line::styled("Indicators", Style::default().add_modifier(Modifier::BOLD)),
+        Line::default(),
+    ];
+    v.extend(
+        indicators
+            .iter()
+            .map(|i| Line::raw(format!("{: <label_len$}   {}", i.0, i.1))),
+    );
+    v
+}
+
 fn draw_help(f: &mut Frame, app: &mut App, area: Rect) {
     let mut command_bindings = help_commands();
+    command_bindings.extend(help_indicators());
     command_bindings.extend(bindings(app));
     let command_bindings = Paragraph::new(Text::from(command_bindings))
         .block(Block::bordered().title("Available commands and configured shortcuts"))

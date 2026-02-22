@@ -387,6 +387,7 @@ pub(crate) mod tests {
                 revision: 1,
             }),
             unread_messages: 1,
+            muted: false,
             typing: TypingSet::GroupTyping(Default::default()),
         };
         storage.store_channel(channel);

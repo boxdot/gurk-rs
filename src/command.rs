@@ -225,6 +225,8 @@ pub enum Command {
     OpenUrl,
     #[strum(props(desc = "Try to open the first file attachment of the selected message"))]
     OpenFile,
+    #[strum(props(desc = "Toggle mute for the selected channel"))]
+    ToggleMuteChannel,
     // ReplyMessage,
     // DeleteMessage,
 }
@@ -434,6 +436,7 @@ end = "end_of_line"
 ctrl-e = "end_of_line"
 backspace = "delete_character previous"
 tab = "react"
+alt-m = "toggle_mute_channel"
 
 [message_selected]
 alt-y = "copy_message selected"
