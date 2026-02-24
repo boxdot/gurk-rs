@@ -22,7 +22,7 @@ use crate::util::{ATTACHMENT_REGEX, URL_REGEX};
 use super::{App, HandleReactionOptions, open_file, open_url, to_emoji};
 
 impl App {
-    pub async fn on_command(&mut self, command: Command) -> anyhow::Result<()> {
+    async fn on_command(&mut self, command: Command) -> anyhow::Result<()> {
         match command {
             Command::Help => self.toggle_help(),
             Command::MoveText(MoveDirection::Previous, MoveAmountText::Word) => {
@@ -86,7 +86,9 @@ impl App {
             Command::DeleteCharacter(MoveDirection::Previous) => {
                 self.get_input().on_backspace();
             }
-            Command::DeleteCharacter(MoveDirection::Next) => {} // unimplemented!("{command:?}")},
+            Command::DeleteCharacter(MoveDirection::Next) => {
+                self.get_input().on_delete();
+            }
             Command::Quit => {
                 self.should_quit = true;
             }

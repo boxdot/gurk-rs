@@ -167,7 +167,7 @@ kill_word
 copy_message selected
 beginning_of_line
 end_of_line
-delete_character previous
+delete_character previous|next
 edit_message
 open_url
 open_file

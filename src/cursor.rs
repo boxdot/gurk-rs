@@ -124,6 +124,12 @@ impl Cursor {
         }
     }
 
+    pub fn delete_forward(&mut self, text: &mut String) {
+        if self.idx < text.len() {
+            text.remove(self.idx);
+        }
+    }
+
     pub fn delete_line_backward(&mut self, text: &mut String) {
         (0..self.col.max(1)).for_each(|_| self.delete_backward(text))
     }
@@ -453,6 +459,40 @@ mod tests {
         assert_eq!(text, "");
     }
 
+    #[test]
+    fn test_delete_forward() {
+        let mut text = "Hello\n  new🌍\n\nWorld".to_string();
+        let mut cursor = Cursor::begin();
+
+        cursor.delete_forward(&mut text);
+        assert_eq!(cursor, Cursor::new(0, 0, 0));
+        assert_eq!(text, "ello\n  new🌍\n\nWorld");
+
+        cursor.delete_forward(&mut text);
+        cursor.delete_forward(&mut text);
+        cursor.delete_forward(&mut text);
+        cursor.delete_forward(&mut text);
+        assert_eq!(cursor, Cursor::new(0, 0, 0));
+        assert_eq!(text, "\n  new🌍\n\nWorld");
+
+        cursor.delete_forward(&mut text);
+        assert_eq!(cursor, Cursor::new(0, 0, 0));
+        assert_eq!(text, "  new🌍\n\nWorld");
+
+        for _ in 0..5 {
+            cursor.move_right(&text);
+        }
+        assert_eq!(cursor, Cursor::new(5, 0, 5));
+        cursor.delete_forward(&mut text);
+        assert_eq!(cursor, Cursor::new(5, 0, 5));
+        assert_eq!(text, "  new\n\nWorld");
+
+        let mut cursor = Cursor::end(&text);
+        let snapshot = text.clone();
+        cursor.delete_forward(&mut text);
+        assert_eq!(text, snapshot);
+    }
+
     #[derive(Debug, Clone, Copy)]
     enum Operation {
         Left,
@@ -461,6 +501,7 @@ mod tests {
         Up,
         Put(char),
         DeleteBackward,
+        DeleteForward,
     }
 
     impl Arbitrary for Operation {
@@ -472,7 +513,7 @@ mod tests {
                 c = char::arbitrary(g);
             }
 
-            *g.choose(&[Left, Right, Up, Down, Put(c), DeleteBackward])
+            *g.choose(&[Left, Right, Up, Down, Put(c), DeleteBackward, DeleteForward])
                 .unwrap()
         }
     }
@@ -526,6 +567,10 @@ mod tests {
                 }
                 Operation::DeleteBackward => {
                     cursor.delete_backward(&mut text);
+                    index_matrix = calc_index_matrix(&text);
+                }
+                Operation::DeleteForward => {
+                    cursor.delete_forward(&mut text);
                     index_matrix = calc_index_matrix(&text);
                 }
             }

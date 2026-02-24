@@ -259,7 +259,35 @@ fn parse(input: &str) -> Result<Command, CommandParseError> {
     })?;
     match cmd {
         Command::Scroll(_, _, _) => {
-            let usage = E::InsufficientArgs {
+            let widget = args.first().ok_or_else(|| {
+                E::InsufficientArgs {
+                    cmd: cmd_str.to_string(),
+                    hint: Some(
+                        [
+                            Widget::VARIANTS.join("|"),
+                            DirectionVertical::VARIANTS.join("|"),
+                            MoveAmountVisual::VARIANTS.join("|"),
+                        ]
+                        .join(" "),
+                    ),
+                }
+                .clone()
+            })?;
+            let dir = args.get(1).ok_or_else(|| {
+                E::InsufficientArgs {
+                    cmd: cmd_str.to_string(),
+                    hint: Some(
+                        [
+                            Widget::VARIANTS.join("|"),
+                            DirectionVertical::VARIANTS.join("|"),
+                            MoveAmountVisual::VARIANTS.join("|"),
+                        ]
+                        .join(" "),
+                    ),
+                }
+                .clone()
+            })?;
+            let amount = args.get(2).ok_or_else(|| E::InsufficientArgs {
                 cmd: cmd_str.to_string(),
                 hint: Some(
                     [
@@ -269,10 +297,7 @@ fn parse(input: &str) -> Result<Command, CommandParseError> {
                     ]
                     .join(" "),
                 ),
-            };
-            let widget = args.first().ok_or(usage.clone())?;
-            let dir = args.get(1).ok_or(usage.clone())?;
-            let amount = args.get(2).ok_or(usage)?;
+            })?;
             let widget = Widget::from_str(widget).map_err(|_e| E::BadEnumArg {
                 arg: widget.to_string(),
                 accept: Widget::VARIANTS,
@@ -291,7 +316,20 @@ fn parse(input: &str) -> Result<Command, CommandParseError> {
             Ok(Command::Scroll(widget, dir, amount))
         }
         Command::MoveText(_, _) => {
-            let usage = E::InsufficientArgs {
+            let direction = args.first().ok_or_else(|| {
+                E::InsufficientArgs {
+                    cmd: cmd_str.to_string(),
+                    hint: Some(
+                        [
+                            MoveDirection::VARIANTS.join("|"),
+                            MoveAmountText::VARIANTS.join("|"),
+                        ]
+                        .join(" "),
+                    ),
+                }
+                .clone()
+            })?;
+            let amount = args.get(1).ok_or_else(|| E::InsufficientArgs {
                 cmd: cmd_str.to_string(),
                 hint: Some(
                     [
@@ -300,9 +338,7 @@ fn parse(input: &str) -> Result<Command, CommandParseError> {
                     ]
                     .join(" "),
                 ),
-            };
-            let direction = args.first().ok_or(usage.clone())?;
-            let amount = args.get(1).ok_or(usage)?;
+            })?;
             let direction = MoveDirection::from_str(direction).map_err(|_e| E::BadEnumArg {
                 arg: direction.to_string(),
                 accept: MoveDirection::VARIANTS,
@@ -316,11 +352,10 @@ fn parse(input: &str) -> Result<Command, CommandParseError> {
             Ok(Command::MoveText(direction, amount))
         }
         Command::SelectChannel(_) => {
-            let usage = E::InsufficientArgs {
+            let direction = args.first().ok_or_else(|| E::InsufficientArgs {
                 cmd: cmd_str.to_string(),
                 hint: Some(MoveDirection::VARIANTS.join("|")),
-            };
-            let direction = args.first().ok_or(usage)?;
+            })?;
             let direction = MoveDirection::from_str(direction).map_err(|_e| E::BadEnumArg {
                 arg: direction.to_string(),
                 accept: MoveDirection::VARIANTS,
@@ -330,11 +365,10 @@ fn parse(input: &str) -> Result<Command, CommandParseError> {
             // Ok(Command::SelectChannel(MoveDirection::from_str(args.first().unwrap_or(&""))?))
         }
         Command::SelectChannelModal(_) => {
-            let usage = E::InsufficientArgs {
+            let direction = args.first().ok_or_else(|| E::InsufficientArgs {
                 cmd: cmd_str.to_string(),
                 hint: Some(MoveDirection::VARIANTS.join("|")),
-            };
-            let direction = args.first().ok_or(usage)?;
+            })?;
             let direction = MoveDirection::from_str(direction).map_err(|_e| E::BadEnumArg {
                 arg: direction.to_string(),
                 accept: MoveDirection::VARIANTS,
@@ -344,7 +378,20 @@ fn parse(input: &str) -> Result<Command, CommandParseError> {
             // Ok(Command::SelectChannelModal(MoveDirection::from_str(args.first().unwrap_or(&""))?))
         }
         Command::SelectMessage(_, _) => {
-            let usage = E::InsufficientArgs {
+            let direction = args.first().ok_or_else(|| {
+                E::InsufficientArgs {
+                    cmd: cmd_str.to_string(),
+                    hint: Some(
+                        [
+                            MoveDirection::VARIANTS.join("|"),
+                            MoveAmountVisual::VARIANTS.join("|"),
+                        ]
+                        .join(" "),
+                    ),
+                }
+                .clone()
+            })?;
+            let amount = args.get(1).ok_or(E::InsufficientArgs {
                 cmd: cmd_str.to_string(),
                 hint: Some(
                     [
@@ -353,9 +400,7 @@ fn parse(input: &str) -> Result<Command, CommandParseError> {
                     ]
                     .join(" "),
                 ),
-            };
-            let direction = args.first().ok_or(usage.clone())?;
-            let amount = args.get(1).ok_or(usage)?;
+            })?;
             let direction = MoveDirection::from_str(direction).map_err(|_e| E::BadEnumArg {
                 arg: direction.to_string(),
                 accept: MoveDirection::VARIANTS,
@@ -369,37 +414,44 @@ fn parse(input: &str) -> Result<Command, CommandParseError> {
             Ok(Command::SelectMessage(direction, amount))
         }
         Command::CopyMessage(_) => {
-            let usage = E::InsufficientArgs {
+            let selector = args.first().ok_or_else(|| E::InsufficientArgs {
                 cmd: cmd_str.to_string(),
                 hint: Some(MessageSelector::VARIANTS.join("|")),
-            };
-            let selector = args.first().ok_or(usage)?;
+            })?;
             let selector = MessageSelector::from_str(selector).map_err(|_e| E::BadEnumArg {
                 arg: selector.to_string(),
                 accept: MessageSelector::VARIANTS,
                 optional: false,
             })?;
             Ok(Command::CopyMessage(selector))
-            // Ok(Command::CopyMessage(MessageSelector::from_str(args.first().unwrap_or(&""))?))
         }
-        Command::React(_) => {
-            let usage = E::InsufficientArgs {
+        Command::DeleteCharacter(_) => {
+            let direction = args.first().ok_or_else(|| E::InsufficientArgs {
                 cmd: cmd_str.to_string(),
-                hint: Some("Optional emoji or :emoji code:".into()),
-            };
-            match args.first() {
-                None => Ok(Command::React(None)),
-                Some(&s) => match to_emoji(s) {
-                    Some(em) => Ok(Command::React(Some(em.into()))),
-                    None => Err(usage),
-                },
-            }
+                hint: Some(MoveDirection::VARIANTS.join("|")),
+            })?;
+            let direction = MoveDirection::from_str(direction).map_err(|_e| E::BadEnumArg {
+                arg: direction.to_string(),
+                accept: MoveDirection::VARIANTS,
+                optional: false,
+            })?;
+            Ok(Command::DeleteCharacter(direction))
         }
+        Command::React(_) => match args.first() {
+            None => Ok(Command::React(None)),
+            Some(&s) => match to_emoji(s) {
+                Some(em) => Ok(Command::React(Some(em.into()))),
+                None => Err(E::InsufficientArgs {
+                    cmd: cmd_str.to_string(),
+                    hint: Some("Optional emoji or :emoji code:".into()),
+                }),
+            },
+        },
         _ => Ok(cmd),
     }
 }
 
-pub const DEFAULT_KEYBINDINGS: &str = r#"
+const DEFAULT_KEYBINDINGS: &str = r#"
 [anywhere]
 F1 = "help"
 ctrl-c = "quit"
@@ -435,6 +487,7 @@ ctrl-a = "beginning_of_line"
 end = "end_of_line"
 ctrl-e = "end_of_line"
 backspace = "delete_character previous"
+delete = "delete_character next"
 tab = "react"
 alt-m = "toggle_mute_channel"
 
@@ -469,6 +522,7 @@ ctrl-a = "beginning_of_line"
 end = "end_of_line"
 ctrl-e = "end_of_line"
 backspace = "delete_character previous"
+delete = "delete_character next"
 
 [multiline]
 down = "move_text next line"
