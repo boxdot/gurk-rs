@@ -1,6 +1,7 @@
 use ratatui::{
     layout::HorizontalAlignment,
     style::Style,
+    text::Line,
     widgets::{BorderType, Padding},
 };
 use serde::{Deserialize, Serialize};
@@ -95,6 +96,10 @@ impl ThemedText {
         String: From<S>,
     {
         Self::new(text, Style::new())
+    }
+
+    pub fn widget<'a>(&'a self) -> Line<'a> {
+        Line::from(self.text.as_str()).style(self.style)
     }
 }
 
