@@ -296,7 +296,6 @@ impl BlockConfig {
     }
 
     pub fn widget<'a>(&'a self) -> Block<'a> {
-        dbg!(self);
         let mut block = Block::new()
             .border_style(self.border_style)
             .title(self.title.widget())

@@ -51,9 +51,6 @@ pub struct Config {
     #[serde(default)]
     /// If set, enables encryption of the key store and messages database
     pub passphrase: Option<Passphrase>,
-    /// If set, the full message text will be colored, not only the author name
-    #[serde(default)]
-    pub colored_messages: bool,
     #[serde(default)]
     /// Keymaps
     pub keybindings: ModeKeybindingConfig,
@@ -191,7 +188,6 @@ impl Config {
             developer: Default::default(),
             sqlite: Default::default(),
             passphrase: None,
-            colored_messages: false,
             default_keybindings: true,
             keybindings: ModeKeybindingConfig::default(),
             theme: ThemeConfig::default(),
