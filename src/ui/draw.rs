@@ -23,6 +23,7 @@ use crate::app::App;
 use crate::channels::SelectChannel;
 use crate::command::{Command, WindowMode};
 use crate::config::Config;
+use crate::config::theme::ReceiptsConfig;
 use crate::cursor::Cursor;
 use crate::data::{AssociatedValue, Message};
 use crate::receipt::{Receipt, ReceiptEvent};
@@ -371,7 +372,7 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
                 show_receipt,
                 date_division,
                 new_messages_division,
-                app.config.colored_messages,
+                &app.config,
             )
         });
 
@@ -472,15 +473,15 @@ impl ShowReceipt {
     }
 }
 
-fn display_receipt(receipt: Receipt, show: ShowReceipt) -> &'static str {
+fn display_receipt(config: &ReceiptsConfig, receipt: Receipt, show: ShowReceipt) -> Span<'static> {
     use ShowReceipt::*;
     match (show, receipt) {
-        (Yes, Receipt::Nothing) => "  ",
-        (Yes, Receipt::Sent) => "○ ",
-        (Yes, Receipt::Delivered) => "◉ ",
-        (Yes, Receipt::Read) => "● ",
-        (No, _) => "  ",
-        (Never, _) => "",
+        (Yes, Receipt::Nothing) => config.nothing.span_owned(),
+        (Yes, Receipt::Sent) => config.sent.span_owned(),
+        (Yes, Receipt::Delivered) => config.delivered.span_owned(),
+        (Yes, Receipt::Read) => config.read.span_owned(),
+        (No, _) => Span::from("  "),
+        (Never, _) => Span::from(""),
     }
 }
 
@@ -494,12 +495,9 @@ fn display_message(
     show_receipt: ShowReceipt,
     date_division: Option<String>,
     unread_messages_division: Option<String>,
-    colored_messages: bool,
+    config: &Config,
 ) -> Option<ListItem<'static>> {
-    let receipt = Span::styled(
-        display_receipt(msg.receipt, show_receipt),
-        Style::default().fg(Color::Yellow),
-    );
+    let receipt = display_receipt(&config.theme.messages.receipts, msg.receipt, show_receipt);
 
     let time = Span::styled(
         display_time(msg.arrived_at),
@@ -566,7 +564,7 @@ fn display_message(
     }
 
     let add_time = quote_text.is_none();
-    let message_style = if colored_messages {
+    let message_style = if config.colored_messages {
         Style::default().fg(from_color)
     } else {
         Style::default()
@@ -844,6 +842,7 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 
 #[cfg(test)]
 mod tests {
+    use crate::config::User;
     use crate::data::{AssociatedValue, BodyRange};
     use crate::signal::Attachment;
 
@@ -863,6 +862,12 @@ mod tests {
             filename: "/tmp/gurk/signal-2022-01-16T11:59:58.405665+00:00.jpg".into(),
             size: 238987,
         }
+    }
+
+    fn test_config() -> Config {
+        Config::with_user(User {
+            display_name: String::from("boxdot"),
+        })
     }
 
     fn name_resolver() -> NameResolver<'static> {
@@ -901,7 +906,7 @@ mod tests {
             ShowReceipt::Never,
             None,
             None,
-            false,
+            &test_config(),
         );
 
         let expected = ListItem::new(Text::from(vec![
@@ -939,7 +944,7 @@ mod tests {
             ShowReceipt::Never,
             None,
             None,
-            false,
+            &test_config(),
         );
 
         let expected = ListItem::new(Text::from(vec![
@@ -981,7 +986,7 @@ mod tests {
             show_receipt,
             None,
             None,
-            false,
+            &test_config(),
         );
 
         let expected = ListItem::new(Text::from(vec![Line::from(vec![
@@ -1015,7 +1020,7 @@ mod tests {
             show_receipt,
             None,
             None,
-            false,
+            &test_config(),
         );
 
         let expected = ListItem::new(Text::from(vec![Line::from(vec![
@@ -1049,7 +1054,7 @@ mod tests {
             show_receipt,
             None,
             None,
-            false,
+            &test_config(),
         );
 
         let expected = ListItem::new(Text::from(vec![Line::from(vec![
@@ -1083,7 +1088,7 @@ mod tests {
             show_receipt,
             None,
             None,
-            false,
+            &test_config(),
         );
 
         let expected = ListItem::new(Text::from(vec![Line::from(vec![
@@ -1119,7 +1124,7 @@ mod tests {
             show_receipt,
             None,
             None,
-            false,
+            &test_config(),
         );
 
         let expected = ListItem::new(Text::from(vec![Line::from(vec![
@@ -1167,7 +1172,7 @@ mod tests {
             show_receipt,
             None,
             None,
-            false,
+            &test_config(),
         );
 
         let expected = ListItem::new(Text::from(vec![
@@ -1205,7 +1210,7 @@ mod tests {
             ShowReceipt::Never,
             None,
             None,
-            false,
+            &test_config(),
         );
 
         let expected = ListItem::new(Text::from(vec![
@@ -1244,7 +1249,7 @@ mod tests {
             ShowReceipt::Never,
             None,
             Some(division.clone()),
-            false,
+            &test_config(),
         );
 
         let expected = ListItem::new(Text::from(vec![

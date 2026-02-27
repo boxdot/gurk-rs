@@ -1,7 +1,7 @@
 use ratatui::{
     layout::{HorizontalAlignment, Rect},
     style::Style,
-    text::{Line, Text},
+    text::{Line, Span, Text},
     widgets::{Block, BorderType, Borders, List, ListItem, Padding, Paragraph},
 };
 use serde::{Deserialize, Serialize};
@@ -125,11 +125,19 @@ impl ThemedText {
     }
 
     pub fn line<'a>(&'a self) -> Line<'a> {
-        Line::from(self.text.as_str()).style(self.style)
+        self.span().into()
     }
 
     pub fn text<'a>(&'a self) -> Text<'a> {
-        Text::from(self.text.as_str()).style(self.style)
+        self.span().into()
+    }
+
+    pub fn span(&self) -> Span<'_> {
+        Span::from(self.text.as_str()).style(self.style)
+    }
+
+    pub fn span_owned(&self) -> Span<'static> {
+        Span::from(self.text.clone()).style(self.style)
     }
 }
 

@@ -8,7 +8,7 @@ use url::Url;
 
 use std::path::{Path, PathBuf};
 use std::{fmt, fs};
-mod theme;
+pub mod theme;
 
 use crate::{command::ModeKeybindingConfig, config::theme::ThemeConfig, passphrase::Passphrase};
 
