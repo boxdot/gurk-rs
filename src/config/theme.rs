@@ -15,6 +15,12 @@ pub struct ThemeConfig {
     pub channels: ListThemeConfig,
     #[serde(default)]
     pub input: InputConfig,
+    #[serde(default = "InputConfig::default_editing")]
+    pub input_editing: InputConfig,
+    #[serde(default = "InputConfig::default_editing_multiline")]
+    pub input_editing_multiline: InputConfig,
+    #[serde(default = "InputConfig::default_multiline")]
+    pub input_multiline: InputConfig,
     #[serde(default)]
     pub messages: MessagesThemeConfig,
 }
@@ -25,7 +31,21 @@ impl Default for ThemeConfig {
             channel_popup: ChannelPopupConfig::default(),
             channels: ListThemeConfig::default_channel_list(),
             input: InputConfig::default(),
+            input_editing: InputConfig::default_editing(),
+            input_editing_multiline: InputConfig::default_editing_multiline(),
+            input_multiline: InputConfig::default_multiline(),
             messages: MessagesThemeConfig::default(),
+        }
+    }
+}
+
+impl ThemeConfig {
+    pub fn input_config(&self, is_editing: bool, is_multiline: bool) -> &InputConfig {
+        match (is_editing, is_multiline) {
+            (true, true) => &self.input_editing_multiline,
+            (true, false) => &self.input_editing,
+            (false, true) => &self.input_multiline,
+            (false, false) => &self.input,
         }
     }
 }
@@ -323,6 +343,18 @@ impl InputConfig {
 
     fn default_channel_popup() -> InputConfig {
         Self::unstyled("Select channel")
+    }
+
+    fn default_editing() -> InputConfig {
+        Self::unstyled("Input (Editing)")
+    }
+
+    fn default_editing_multiline() -> InputConfig {
+        Self::unstyled("Input (Editing, Multiline)")
+    }
+
+    fn default_multiline() -> InputConfig {
+        Self::unstyled("Input (Multiline)")
     }
 
     pub fn widget<'a, S>(&'a self, content: S) -> Paragraph<'a>
