@@ -1,4 +1,9 @@
 use anyhow::{Context, anyhow, bail};
+use ratatui::{
+    layout::HorizontalAlignment,
+    style::Style,
+    widgets::{BorderType, Padding},
+};
 use serde::{
     Deserialize, Serialize,
     de::{self, MapAccess, Visitor},
@@ -8,8 +13,9 @@ use url::Url;
 
 use std::path::{Path, PathBuf};
 use std::{fmt, fs};
+mod theme;
 
-use crate::{command::ModeKeybindingConfig, passphrase::Passphrase};
+use crate::{command::ModeKeybindingConfig, config::theme::ThemeConfig, passphrase::Passphrase};
 
 const GURK_DB_NAME: &str = "gurk.sqlite";
 const SIGNAL_DB_NAME: &str = "signal.sqlite";
@@ -59,6 +65,8 @@ pub struct Config {
     /// Whether to enable the default keybindings
     #[serde(default = "default_true")]
     pub default_keybindings: bool,
+    #[serde(default)]
+    pub theme: ThemeConfig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
