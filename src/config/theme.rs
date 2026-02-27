@@ -228,6 +228,10 @@ impl BlockTitleConfig {
     {
         Self::new(ThemedText::unstyled(title), HorizontalAlignment::default())
     }
+
+    pub fn widget<'a>(&'a self) -> Line<'a> {
+        self.themed_text.widget().alignment(self.alignment)
+    }
 }
 
 fn default_user_styles() -> Vec<Style> {
