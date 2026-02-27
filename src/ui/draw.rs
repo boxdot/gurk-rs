@@ -69,21 +69,20 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
 fn draw_select_channel_popup(f: &mut Frame, select_channel: &mut SelectChannel, config: &Config) {
     let area = centered_rect(60, 60, f.area());
+    let input_theme = &config.theme.channel_popup.input;
+    let input_constraint = Constraint::Length(input_theme.recommended_height());
     let chunks = Layout::default()
-        .constraints([Constraint::Length(1 + 2), Constraint::Min(0)].as_ref())
+        .constraints([input_constraint, Constraint::Min(0)].as_ref())
         .direction(Direction::Vertical)
         .split(area);
     f.render_widget(Clear, area);
-    let input = config
-        .theme
-        .channel_popup
-        .input
-        .widget(select_channel.input.data.clone());
+    let input = input_theme.widget(select_channel.input.data.clone());
     f.render_widget(input, chunks[0]);
+    let offset = input_theme.block.inset_offset();
     let cursor = &select_channel.input.cursor;
     f.set_cursor_position((
-        chunks[0].x + cursor.col as u16 + 1,
-        chunks[0].y + cursor.line as u16 + 1,
+        chunks[0].x + cursor.col as u16 + offset.x,
+        chunks[0].y + cursor.line as u16 + offset.y,
     ));
     let items: Vec<_> = select_channel.filtered_names().map(ListItem::new).collect();
     match select_channel.state.selected() {
@@ -192,7 +191,13 @@ fn wrap(text: &str, mut cursor: Cursor, width: usize) -> (String, Cursor, usize)
 }
 
 fn draw_chat(f: &mut Frame, app: &mut App, area: Rect) {
-    let text_width = area.width.saturating_sub(2) as usize;
+    let config = app
+        .config
+        .theme
+        .input_config(app.is_editing(), app.is_multiline_input);
+    let input_inset = config.block.inset();
+
+    let text_width = area.width.saturating_sub(input_inset.width) as usize;
     let (wrapped_input, cursor, num_input_lines) =
         wrap(&app.input.data, app.input.cursor.clone(), text_width);
 
@@ -200,7 +205,7 @@ fn draw_chat(f: &mut Frame, app: &mut App, area: Rect) {
         .constraints(
             [
                 Constraint::Min(0),
-                Constraint::Length(num_input_lines as u16 + 2),
+                Constraint::Length(num_input_lines as u16 + input_inset.height),
             ]
             .as_ref(),
         )
@@ -208,7 +213,6 @@ fn draw_chat(f: &mut Frame, app: &mut App, area: Rect) {
         .split(area);
 
     draw_messages(f, app, chunks[0]);
-
     let config = app
         .config
         .theme
@@ -216,10 +220,11 @@ fn draw_chat(f: &mut Frame, app: &mut App, area: Rect) {
 
     let input = config.widget(wrapped_input);
     f.render_widget(input, chunks[1]);
+    let offset = config.block.inset_offset();
     if !app.select_channel.is_shown {
         f.set_cursor_position((
-            chunks[1].x + cursor.col as u16 + 1,  // +1 for frame
-            chunks[1].y + cursor.line as u16 + 1, // +1 for frame
+            chunks[1].x + cursor.col as u16 + offset.x,
+            chunks[1].y + cursor.line as u16 + offset.y,
         ));
     }
 }

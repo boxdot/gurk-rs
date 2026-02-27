@@ -1,5 +1,5 @@
 use ratatui::{
-    layout::{HorizontalAlignment, Rect},
+    layout::{HorizontalAlignment, Position, Rect, Size},
     style::{Color, Style},
     text::{Line, Span, Text},
     widgets::{Block, BorderType, Borders, List, ListItem, Padding, Paragraph},
@@ -315,18 +315,34 @@ impl BlockConfig {
         this
     }
 
-    fn border_width(&self) -> u16 {
-        if self.border.is_some() { 1 } else { 0 }
+    pub fn border_width(&self) -> u16 {
+        self.border.is_some() as u16
+    }
+
+    pub fn inset_offset(&self) -> Position {
+        Position::new(
+            self.border_width() + self.padding.left,
+            self.border_width() + self.padding.top,
+        )
+    }
+
+    pub fn inset(&self) -> Size {
+        let offset = self.inset_offset();
+
+        let m_height = offset.y + self.border_width() + self.padding.bottom;
+        let m_width = offset.x + self.border_width() + self.padding.right;
+
+        Size::new(m_width, m_height)
     }
 
     /// Gets the area minus the padding and borders
     pub fn internal_area(&self, area: Rect) -> Rect {
         let x_offset = self.border_width() + self.padding.left;
         let y_offset = self.border_width() + self.padding.top;
-
-        let m_height = y_offset + self.border_width() + self.padding.bottom;
+        let size = self.inset();
+        let m_height = size.height;
+        let m_width = size.width;
         let height = area.height.saturating_sub(m_height);
-        let m_width = x_offset + self.border_width() + self.padding.right;
         let width = area.width.saturating_sub(m_width);
         let x = area.x + x_offset;
         let y = area.y + y_offset;
@@ -441,6 +457,10 @@ impl InputConfig {
         Text<'a>: From<S>,
     {
         Paragraph::new(Text::from(content).style(self.text)).block(self.block.widget())
+    }
+
+    pub fn recommended_height(&self) -> u16 {
+        self.block.inset().height + 1
     }
 }
 
