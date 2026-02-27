@@ -2,7 +2,7 @@ use ratatui::{
     layout::HorizontalAlignment,
     style::Style,
     text::Line,
-    widgets::{BorderType, Padding},
+    widgets::{Block, BorderType, Padding},
 };
 use serde::{Deserialize, Serialize};
 
@@ -204,6 +204,14 @@ impl BlockConfig {
 
     fn default_messages() -> BlockConfig {
         Self::unstyled("Messages")
+    }
+
+    pub fn widget<'a>(&'a self) -> Block<'a> {
+        Block::new()
+            .border_type(self.border)
+            .border_style(self.border_style)
+            .title(self.title.widget())
+            .padding(self.padding)
     }
 }
 
