@@ -128,9 +128,7 @@ fn draw_channels(f: &mut Frame, app: &mut App, area: Rect) {
             ListItem::new(vec![Line::from(Span::raw(label))])
         });
 
-    let channels = List::new(channels)
-        .block(Block::default().borders(Borders::ALL).title("Channels"))
-        .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray));
+    let channels = app.config.theme.channels.widget(channels);
     let no_channels = channels.is_empty();
     f.render_stateful_widget(channels, area, &mut app.channels.state);
 

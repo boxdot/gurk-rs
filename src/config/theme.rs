@@ -7,6 +7,7 @@ use ratatui::{
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ThemeConfig {
     #[serde(default)]
     pub channel_popup: ChannelPopupConfig,
@@ -30,6 +31,7 @@ impl Default for ThemeConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ChannelPopupConfig {
     #[serde(default = "InputConfig::default_channel_popup")]
     pub input: InputConfig,
@@ -47,6 +49,7 @@ impl Default for ChannelPopupConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct MessagesThemeConfig {
     #[serde(default = "BlockConfig::default_messages")]
     pub block: BlockConfig,
@@ -77,6 +80,7 @@ impl Default for MessagesThemeConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct ThemedText {
     pub text: String,
     pub style: Style,
@@ -110,6 +114,7 @@ impl ThemedText {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ReceiptsConfig {
     #[serde(default = "default_receipt_nothing")]
     pub nothing: ThemedText,
@@ -148,6 +153,7 @@ pub fn default_receipt_read() -> ThemedText {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ListThemeConfig {
     #[serde(default)]
     pub style: Style,
@@ -200,6 +206,7 @@ fn default_highlight_style() -> Style {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct BlockConfig {
     #[serde(default = "default_block_border")]
     pub border: Option<BorderType>,
@@ -255,6 +262,7 @@ fn default_block_border() -> Option<BorderType> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct BlockTitleConfig {
     #[serde(flatten)]
     pub themed_text: ThemedText,
@@ -295,6 +303,7 @@ fn default_user_styles() -> Vec<Style> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct InputConfig {
     pub block: BlockConfig,
     #[serde(default)]
