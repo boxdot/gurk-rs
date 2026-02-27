@@ -21,6 +21,7 @@ use uuid::Uuid;
 use crate::app::App;
 use crate::channels::SelectChannel;
 use crate::command::{Command, WindowMode};
+use crate::config::Config;
 use crate::cursor::Cursor;
 use crate::data::{AssociatedValue, Message};
 use crate::receipt::{Receipt, ReceiptEvent};
@@ -60,22 +61,22 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     draw_chat(f, app, chunks[1]);
 
     if app.select_channel.is_shown {
-        draw_select_channel_popup(f, &mut app.select_channel);
+        draw_select_channel_popup(f, &mut app.select_channel, &app.config);
     }
 }
 
-fn draw_select_channel_popup(f: &mut Frame, select_channel: &mut SelectChannel) {
+fn draw_select_channel_popup(f: &mut Frame, select_channel: &mut SelectChannel, config: &Config) {
     let area = centered_rect(60, 60, f.area());
     let chunks = Layout::default()
         .constraints([Constraint::Length(1 + 2), Constraint::Min(0)].as_ref())
         .direction(Direction::Vertical)
         .split(area);
     f.render_widget(Clear, area);
-    let input = Paragraph::new(Text::from(select_channel.input.data.clone())).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .title("Select channel"),
-    );
+    let input = config
+        .theme
+        .channel_popup
+        .input
+        .widget(select_channel.input.data.clone());
     f.render_widget(input, chunks[0]);
     let cursor = &select_channel.input.cursor;
     f.set_cursor_position((
@@ -92,9 +93,7 @@ fn draw_select_channel_popup(f: &mut Frame, select_channel: &mut SelectChannel) 
         }
         _ => (),
     }
-    let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL))
-        .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray));
+    let list = config.theme.channel_popup.list.widget(items);
     f.render_stateful_widget(list, chunks[1], &mut select_channel.state);
 }
 
