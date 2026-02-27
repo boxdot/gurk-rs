@@ -1,12 +1,13 @@
 //! Draw the UI
 
+use std::borrow::Cow;
 use std::fmt;
 
 use chrono::Datelike;
 use itertools::Itertools;
 use ratatui::Frame;
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, Borders, Clear, List, ListDirection, ListItem, Paragraph};
+use ratatui::widgets::{Block, Clear, List, ListDirection, ListItem, Paragraph};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     widgets::Padding,
@@ -271,23 +272,20 @@ fn prepare_receipts(app: &mut App, height: usize) {
 }
 
 fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
-    // area without borders
-    let height = area.height.saturating_sub(2) as usize;
+    let internal_area = app.config.theme.messages.block.internal_area(area);
+    let height = internal_area.height as usize;
+    let width = internal_area.width as usize;
     if height == 0 {
         return;
     }
-    let width = area.width.saturating_sub(2) as usize;
 
     prepare_receipts(app, height);
 
     let Some(&channel_id) = app.channels.selected_item() else {
+        let block = app.config.theme.messages.block.widget();
         f.render_widget(
             Paragraph::new("No Channel selected")
-                .block(
-                    Block::bordered()
-                        .title("Messages")
-                        .padding(Padding::top(area.height / 2)),
-                )
+                .block(block.padding(Padding::top(area.height / 2)))
                 .centered(),
             area,
         );
@@ -406,14 +404,19 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     let offset = offset + first_idx;
     items = items.split_off(first_idx);
 
-    let title: String = if let Some(writing_people) = writing_people {
-        format!("Messages {writing_people}")
+    let block_theme = &app.config.theme.messages.block;
+    let block = if let Some(writing_people) = writing_people {
+        let block = block_theme
+            .clone()
+            .append_title(" ")
+            .append_title(&writing_people);
+        Cow::Owned(block)
     } else {
-        "Messages".to_string()
+        Cow::Borrowed(block_theme)
     };
 
     let list = List::new(items)
-        .block(Block::default().title(title).borders(Borders::ALL))
+        .block(block.widget())
         .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray))
         .direction(ListDirection::BottomToTop);
 
