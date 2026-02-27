@@ -1,5 +1,5 @@
 use ratatui::{
-    layout::HorizontalAlignment,
+    layout::{HorizontalAlignment, Rect},
     style::Style,
     text::{Line, Text},
     widgets::{Block, BorderType, Borders, List, ListItem, Padding, Paragraph},
@@ -274,6 +274,32 @@ impl BlockConfig {
             block = block.border_type(border).borders(Borders::ALL);
         }
         block
+    }
+
+    /// Appends a string to the title
+    pub fn append_title(self, s: &str) -> Self {
+        let mut this = self.clone();
+        this.title.themed_text.text.push_str(s);
+        this
+    }
+
+    fn border_width(&self) -> u16 {
+        if self.border.is_some() { 1 } else { 0 }
+    }
+
+    /// Gets the area minus the padding and borders
+    pub fn internal_area(&self, area: Rect) -> Rect {
+        let x_offset = self.border_width() + self.padding.left;
+        let y_offset = self.border_width() + self.padding.top;
+
+        let m_height = y_offset + self.border_width() + self.padding.bottom;
+        let height = area.height.saturating_sub(m_height);
+        let m_width = x_offset + self.border_width() + self.padding.right;
+        let width = area.width.saturating_sub(m_width);
+        let x = area.x + x_offset;
+        let y = area.y + y_offset;
+
+        Rect::new(x, y, width, height)
     }
 }
 
