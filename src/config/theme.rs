@@ -103,6 +103,7 @@ impl Default for MessagesThemeConfig {
 #[serde(deny_unknown_fields)]
 pub struct UserStyle {
     pub username: Style,
+    #[serde(default)]
     pub message: Style,
 }
 
@@ -126,6 +127,7 @@ impl UserStyle {
 #[serde(deny_unknown_fields)]
 pub struct ThemedText {
     pub text: String,
+    #[serde(default)]
     pub style: Style,
 }
 
