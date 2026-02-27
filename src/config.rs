@@ -1,9 +1,4 @@
 use anyhow::{Context, anyhow, bail};
-use ratatui::{
-    layout::HorizontalAlignment,
-    style::Style,
-    widgets::{BorderType, Padding},
-};
 use serde::{
     Deserialize, Serialize,
     de::{self, MapAccess, Visitor},
@@ -199,6 +194,7 @@ impl Config {
             colored_messages: false,
             default_keybindings: true,
             keybindings: ModeKeybindingConfig::default(),
+            theme: ThemeConfig::default(),
         }
     }
 
