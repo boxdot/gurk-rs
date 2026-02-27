@@ -424,10 +424,13 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     let offset = offset + first_idx;
     items = items.split_off(first_idx);
 
-    let title: String = if let Some(writing_people) = writing_people {
-        format!("Messages {writing_people}")
-    } else {
-        "Messages".to_string()
+    let title = {
+        let channel_name = app.channel_name(&channel);
+        if let Some(writing_people) = writing_people {
+            format!("{} - Messages {}", channel_name, writing_people)
+        } else {
+            format!("{} - Messages", channel_name)
+        }
     };
 
     let list = List::new(items)
