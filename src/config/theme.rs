@@ -2,7 +2,7 @@ use ratatui::{
     layout::HorizontalAlignment,
     style::Style,
     text::{Line, Text},
-    widgets::{Block, BorderType, List, ListItem, Padding, Paragraph},
+    widgets::{Block, BorderType, Borders, List, ListItem, Padding, Paragraph},
 };
 use serde::{Deserialize, Serialize};
 
@@ -149,8 +149,11 @@ pub fn default_receipt_read() -> ThemedText {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ListThemeConfig {
+    #[serde(default)]
     pub style: Style,
+    #[serde(default = "default_highlight_style")]
     pub highlight_style: Style,
+    #[serde(default)]
     pub block: BlockConfig,
 }
 
@@ -171,7 +174,7 @@ impl ListThemeConfig {
     {
         Self {
             style: Style::new(),
-            highlight_style: Style::new().reversed(),
+            highlight_style: default_highlight_style(),
             block: BlockConfig::unstyled(title),
         }
     }
@@ -192,11 +195,19 @@ impl ListThemeConfig {
     }
 }
 
+fn default_highlight_style() -> Style {
+    Style::new().reversed()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct BlockConfig {
-    pub border: BorderType,
+    #[serde(default = "default_block_border")]
+    pub border: Option<BorderType>,
+    #[serde(default)]
     pub border_style: Style,
+    #[serde(default)]
     pub title: BlockTitleConfig,
+    #[serde(default)]
     pub padding: Padding,
 }
 
@@ -216,18 +227,27 @@ impl BlockConfig {
     }
 
     pub fn widget<'a>(&'a self) -> Block<'a> {
-        Block::new()
-            .border_type(self.border)
+        dbg!(self);
+        let mut block = Block::new()
             .border_style(self.border_style)
             .title(self.title.widget())
-            .padding(self.padding)
+            .padding(self.padding);
+        if let Some(border) = self.border {
+            block = block.border_type(border).borders(Borders::ALL);
+        }
+        block
     }
+}
+
+fn default_block_border() -> Option<BorderType> {
+    Some(BorderType::Plain)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct BlockTitleConfig {
     #[serde(flatten)]
     pub themed_text: ThemedText,
+    #[serde(default)]
     pub alignment: HorizontalAlignment,
 }
 
@@ -266,6 +286,7 @@ fn default_user_styles() -> Vec<Style> {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InputConfig {
     pub block: BlockConfig,
+    #[serde(default)]
     pub text: Style,
 }
 
