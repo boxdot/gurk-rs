@@ -207,15 +207,12 @@ fn draw_chat(f: &mut Frame, app: &mut App, area: Rect) {
 
     draw_messages(f, app, chunks[0]);
 
-    let title = match (app.is_editing(), app.is_multiline_input) {
-        (true, true) => "Input (Editing, Multiline)",
-        (true, false) => "Input (Editing)",
-        (false, true) => "Input (Multiline)",
-        (false, false) => "Input",
-    };
+    let config = app
+        .config
+        .theme
+        .input_config(app.is_editing(), app.is_multiline_input);
 
-    let input = Paragraph::new(Text::from(wrapped_input))
-        .block(Block::default().borders(Borders::ALL).title(title));
+    let input = config.widget(wrapped_input);
     f.render_widget(input, chunks[1]);
     if !app.select_channel.is_shown {
         f.set_cursor_position((
