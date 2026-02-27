@@ -1,6 +1,6 @@
 use ratatui::{
     layout::{HorizontalAlignment, Rect},
-    style::Style,
+    style::{Color, Style},
     text::{Line, Span, Text},
     widgets::{Block, BorderType, Borders, List, ListItem, Padding, Paragraph},
 };
@@ -80,7 +80,7 @@ pub struct MessagesThemeConfig {
     #[serde(default)]
     pub list: ListThemeConfig,
     #[serde(default = "default_user_styles")]
-    pub user_styles: Vec<Style>,
+    pub user_styles: Vec<UserStyle>,
 }
 
 fn default_time_style() -> Style {
@@ -95,6 +95,29 @@ impl Default for MessagesThemeConfig {
             list: ListThemeConfig::default_style_unamed(),
             user_styles: default_user_styles(),
             time: default_time_style(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Copy)]
+#[serde(deny_unknown_fields)]
+pub struct UserStyle {
+    pub username: Style,
+    pub message: Style,
+}
+
+impl UserStyle {
+    pub fn from_color(color: Color) -> UserStyle {
+        Self {
+            username: Style::new().fg(color),
+            message: Style::reset(),
+        }
+    }
+
+    pub fn logic_error() -> UserStyle {
+        UserStyle {
+            username: Style::new().magenta(),
+            message: Style::new(),
         }
     }
 }
@@ -344,15 +367,36 @@ impl BlockTitleConfig {
     }
 }
 
-fn default_user_styles() -> Vec<Style> {
+fn default_user_styles() -> Vec<UserStyle> {
     vec![
-        Style::new().red(),
-        Style::new().green(),
-        Style::new().yellow(),
-        Style::new().blue(),
-        Style::new().magenta(),
-        Style::new().cyan(),
-        Style::reset(),
+        UserStyle {
+            username: Style::new().red(),
+            message: Style::new(),
+        },
+        UserStyle {
+            username: Style::new().green(),
+            message: Style::new(),
+        },
+        UserStyle {
+            username: Style::new().yellow(),
+            message: Style::new(),
+        },
+        UserStyle {
+            username: Style::new().blue(),
+            message: Style::new(),
+        },
+        UserStyle {
+            username: Style::new().magenta(),
+            message: Style::new(),
+        },
+        UserStyle {
+            username: Style::new().cyan(),
+            message: Style::new(),
+        },
+        UserStyle {
+            username: Style::reset(),
+            message: Style::reset(),
+        },
     ]
 }
 

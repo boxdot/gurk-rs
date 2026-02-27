@@ -501,10 +501,10 @@ fn display_message(
 
     let time = Span::styled(display_time(msg.arrived_at), config.theme.messages.time);
 
-    let (from, from_color) = names.resolve(msg.from_id);
+    let (from, from_user_style) = names.resolve(msg.from_id);
 
     let from_width = from.width();
-    let from = Span::styled(from.into_owned(), Style::default().fg(from_color));
+    let from = Span::styled(from.into_owned(), from_user_style.username);
     let delimiter = Span::from(": ");
 
     // collect message text
@@ -562,11 +562,7 @@ fn display_message(
     }
 
     let add_time = quote_text.is_none();
-    let message_style = if config.colored_messages {
-        Style::default().fg(from_color)
-    } else {
-        Style::default()
-    };
+    let message_style = from_user_style.message;
 
     const DELIMITER_WIDTH: usize = 2;
     let first_line_prefix = " ".repeat(prefix.len() + from_width + DELIMITER_WIDTH);
@@ -842,6 +838,7 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 #[cfg(test)]
 mod tests {
     use crate::config::User;
+    use crate::config::theme::UserStyle;
     use crate::data::{AssociatedValue, BodyRange};
     use crate::signal::Attachment;
 
@@ -870,7 +867,11 @@ mod tests {
     }
 
     fn name_resolver() -> NameResolver<'static> {
-        NameResolver::single_user(USER_ID, "boxdot".to_string(), Color::Green)
+        NameResolver::single_user(
+            USER_ID,
+            "boxdot".to_string(),
+            UserStyle::from_color(Color::Green),
+        )
     }
 
     fn test_message() -> Message {
@@ -1106,7 +1107,11 @@ mod tests {
     #[test]
     fn test_display_receipts_for_incoming_message() {
         let user_id = Uuid::from_u128(1);
-        let names = NameResolver::single_user(user_id, "boxdot".to_string(), Color::Green);
+        let names = NameResolver::single_user(
+            user_id,
+            "boxdot".to_string(),
+            UserStyle::from_color(Color::Green),
+        );
         let msg = Message {
             from_id: user_id,
             message: Some("Hello, World!".into()),
@@ -1142,7 +1147,11 @@ mod tests {
     #[test]
     fn test_display_mention() {
         let user_id = Uuid::from_u128(1);
-        let names = NameResolver::single_user(user_id, "boxdot".to_string(), Color::Green);
+        let names = NameResolver::single_user(
+            user_id,
+            "boxdot".to_string(),
+            UserStyle::from_color(Color::Green),
+        );
         let msg = Message {
             from_id: user_id,
             message: Some("Mention ￼  and even more ￼ . End".into()),
