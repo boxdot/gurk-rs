@@ -443,7 +443,7 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
 
 fn display_time(timestamp: u64) -> String {
     utc_timestamp_msec_to_local(timestamp)
-        .format("%R ")
+        .format("%R")
         .to_string()
 }
 
@@ -499,10 +499,7 @@ fn display_message(
 ) -> Option<ListItem<'static>> {
     let receipt = display_receipt(&config.theme.messages.receipts, msg.receipt, show_receipt);
 
-    let time = Span::styled(
-        display_time(msg.arrived_at),
-        Style::default().fg(Color::Yellow),
-    );
+    let time = Span::styled(display_time(msg.arrived_at), config.theme.messages.time);
 
     let (from, from_color) = names.resolve(msg.from_id);
 
@@ -548,6 +545,7 @@ fn display_message(
                         vec![
                             receipt.clone(),
                             time.clone(),
+                            Span::from(" "),
                             from.clone(),
                             delimiter.clone(),
                             Span::styled(
@@ -585,6 +583,7 @@ fn display_message(
         spans.push(Line::from(vec![
             receipt,
             time,
+            Span::from(" "),
             from,
             delimiter,
             Span::styled(line, message_style),
