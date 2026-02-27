@@ -102,6 +102,7 @@ impl App {
                 self.help_scroll.0 += 1
             }
             Command::ToggleMuteChannel => self.toggle_mute_channel(),
+            Command::ToggleChannelList => self.toggle_channel_list(),
             Command::NoOp => {}
         }
         Ok(())

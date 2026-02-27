@@ -45,19 +45,31 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         draw_help(f, app, chunks[1]);
         return;
     }
-    let chunks = Layout::default()
-        .constraints(
-            [
-                Constraint::Ratio(1, CHANNEL_VIEW_RATIO),
-                Constraint::Ratio(3, CHANNEL_VIEW_RATIO),
-            ]
-            .as_ref(),
-        )
-        .direction(Direction::Horizontal)
-        .split(f.area());
 
-    draw_channels(f, app, chunks[0]);
-    draw_chat(f, app, chunks[1]);
+    let chunks = if app.is_channel_list_shown() {
+        Layout::default()
+            .constraints(
+                [
+                    Constraint::Ratio(1, CHANNEL_VIEW_RATIO),
+                    Constraint::Ratio(3, CHANNEL_VIEW_RATIO),
+                ]
+                .as_ref(),
+            )
+            .direction(Direction::Horizontal)
+            .split(f.area())
+    } else {
+        Layout::default()
+            .constraints([Constraint::Percentage(100)].as_ref())
+            .direction(Direction::Horizontal)
+            .split(f.area())
+    };
+
+    if app.is_channel_list_shown() {
+        draw_channels(f, app, chunks[0]);
+        draw_chat(f, app, chunks[1]);
+    } else {
+        draw_chat(f, app, chunks[0]);
+    }
 
     if app.select_channel.is_shown {
         draw_select_channel_popup(f, &mut app.select_channel);
