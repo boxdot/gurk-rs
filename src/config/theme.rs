@@ -199,7 +199,7 @@ fn default_highlight_style() -> Style {
     Style::new().reversed()
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BlockConfig {
     #[serde(default = "default_block_border")]
     pub border: Option<BorderType>,
@@ -209,6 +209,17 @@ pub struct BlockConfig {
     pub title: BlockTitleConfig,
     #[serde(default)]
     pub padding: Padding,
+}
+
+impl Default for BlockConfig {
+    fn default() -> Self {
+        Self {
+            border: default_block_border(),
+            border_style: Default::default(),
+            title: Default::default(),
+            padding: Default::default(),
+        }
+    }
 }
 
 impl BlockConfig {
