@@ -261,12 +261,16 @@ fn default_highlight_style() -> Style {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BlockConfig {
-    #[serde(default = "default_block_border")]
+    // BODGE: We have to default to accepting no borders because
+    // toml doesn't have any concept of a null value. This means
+    // that setting any individiual field in a block config makes
+    // this property different from its perceived default value.
+    #[serde(default)]
     pub border: Option<BorderType>,
     #[serde(default)]
     pub border_style: Style,
     #[serde(default)]
-    pub title: BlockTitleConfig,
+    pub title: Option<BlockTitleConfig>,
     #[serde(default)]
     pub padding: Padding,
 }
@@ -274,7 +278,7 @@ pub struct BlockConfig {
 impl Default for BlockConfig {
     fn default() -> Self {
         Self {
-            border: default_block_border(),
+            border: Some(BorderType::Plain),
             border_style: Default::default(),
             title: Default::default(),
             padding: Default::default(),
@@ -288,7 +292,7 @@ impl BlockConfig {
         String: From<S>,
     {
         BlockConfig {
-            title: BlockTitleConfig::unstyled(title),
+            title: Some(BlockTitleConfig::unstyled(title)),
             ..Default::default()
         }
     }
@@ -300,8 +304,10 @@ impl BlockConfig {
     pub fn widget<'a>(&'a self) -> Block<'a> {
         let mut block = Block::new()
             .border_style(self.border_style)
-            .title(self.title.widget())
             .padding(self.padding);
+        if let Some(title) = &self.title {
+            block = block.title(title.widget());
+        }
         if let Some(border) = self.border {
             block = block.border_type(border).borders(Borders::ALL);
         }
@@ -311,7 +317,9 @@ impl BlockConfig {
     /// Appends a string to the title
     pub fn append_title(self, s: &str) -> Self {
         let mut this = self.clone();
-        this.title.themed_text.text.push_str(s);
+        if let Some(title) = &mut this.title {
+            title.themed_text.text.push_str(s);
+        }
         this
     }
 
@@ -319,10 +327,14 @@ impl BlockConfig {
         self.border.is_some() as u16
     }
 
+    pub fn top_border_width(&self) -> u16 {
+        (self.border.is_some() || self.title.is_some()) as u16
+    }
+
     pub fn inset_offset(&self) -> Position {
         Position::new(
             self.border_width() + self.padding.left,
-            self.border_width() + self.padding.top,
+            self.top_border_width() + self.padding.top,
         )
     }
 
@@ -337,22 +349,8 @@ impl BlockConfig {
 
     /// Gets the area minus the padding and borders
     pub fn internal_area(&self, area: Rect) -> Rect {
-        let x_offset = self.border_width() + self.padding.left;
-        let y_offset = self.border_width() + self.padding.top;
-        let size = self.inset();
-        let m_height = size.height;
-        let m_width = size.width;
-        let height = area.height.saturating_sub(m_height);
-        let width = area.width.saturating_sub(m_width);
-        let x = area.x + x_offset;
-        let y = area.y + y_offset;
-
-        Rect::new(x, y, width, height)
+        self.widget().inner(area)
     }
-}
-
-fn default_block_border() -> Option<BorderType> {
-    Some(BorderType::Plain)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
