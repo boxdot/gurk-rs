@@ -49,10 +49,16 @@ pub struct MessagesThemeConfig {
     pub block: BlockConfig,
     #[serde(default)]
     pub receipts: ReceiptsConfig,
+    #[serde(default = "default_time_style")]
+    pub time: Style,
     #[serde(default)]
     pub list: ListThemeConfig,
     #[serde(default = "default_user_styles")]
     pub user_styles: Vec<Style>,
+}
+
+fn default_time_style() -> Style {
+    Style::new().yellow()
 }
 
 impl Default for MessagesThemeConfig {
@@ -62,6 +68,7 @@ impl Default for MessagesThemeConfig {
             receipts: ReceiptsConfig::default(),
             list: ListThemeConfig::default_style_unamed(),
             user_styles: default_user_styles(),
+            time: default_time_style(),
         }
     }
 }
