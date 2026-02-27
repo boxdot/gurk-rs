@@ -111,7 +111,7 @@ impl UserStyle {
     pub fn from_color(color: Color) -> UserStyle {
         Self {
             username: Style::new().fg(color),
-            message: Style::reset(),
+            message: Style::new(),
         }
     }
 
@@ -150,19 +150,19 @@ impl ThemedText {
     }
 
     pub fn line<'a>(&'a self) -> Line<'a> {
-        self.span().into()
+        Line::styled(self.text.as_str(), self.style)
     }
 
     pub fn text<'a>(&'a self) -> Text<'a> {
-        self.span().into()
+        Text::styled(self.text.as_str(), self.style)
     }
 
     pub fn span(&self) -> Span<'_> {
-        Span::from(self.text.as_str()).style(self.style)
+        Span::styled(self.text.as_str(), self.style)
     }
 
     pub fn span_owned(&self) -> Span<'static> {
-        Span::from(self.text.clone()).style(self.style)
+        Span::styled(self.text.clone(), self.style)
     }
 }
 
@@ -395,8 +395,8 @@ fn default_user_styles() -> Vec<UserStyle> {
             message: Style::new(),
         },
         UserStyle {
-            username: Style::reset(),
-            message: Style::reset(),
+            username: Style::new(),
+            message: Style::new(),
         },
     ]
 }

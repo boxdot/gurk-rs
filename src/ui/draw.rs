@@ -911,11 +911,12 @@ mod tests {
 
         let expected = ListItem::new(Text::from(vec![
             Line::from(vec![
-                Span::styled("", Style::default().fg(Color::Yellow)),
+                Span::default(),
                 Span::styled(
                     display_time(msg.arrived_at),
                     Style::default().fg(Color::Yellow),
                 ),
+                Span::styled(" ", Style::default()),
                 Span::styled("boxdot", Style::default().fg(Color::Green)),
                 Span::raw(": "),
                 Span::raw("<file:///tmp/gurk/signal-2022-01-"),
@@ -949,11 +950,12 @@ mod tests {
 
         let expected = ListItem::new(Text::from(vec![
             Line::from(vec![
-                Span::styled("", Style::default().fg(Color::Yellow)),
+                Span::default(),
                 Span::styled(
                     display_time(msg.arrived_at),
                     Style::default().fg(Color::Yellow),
                 ),
+                Span::styled(" ", Style::default()),
                 Span::styled("boxdot", Style::default().fg(Color::Green)),
                 Span::raw(": "),
                 Span::raw("Hello, World!"),
@@ -995,6 +997,7 @@ mod tests {
                 display_time(msg.arrived_at),
                 Style::default().fg(Color::Yellow),
             ),
+            Span::styled(" ", Style::default()),
             Span::styled("boxdot", Style::default().fg(Color::Green)),
             Span::raw(": "),
             Span::raw("Hello, World!"),
@@ -1029,6 +1032,7 @@ mod tests {
                 display_time(msg.arrived_at),
                 Style::default().fg(Color::Yellow),
             ),
+            Span::styled(" ", Style::default()),
             Span::styled("boxdot", Style::default().fg(Color::Green)),
             Span::raw(": "),
             Span::raw("Hello, World!"),
@@ -1063,6 +1067,7 @@ mod tests {
                 display_time(msg.arrived_at),
                 Style::default().fg(Color::Yellow),
             ),
+            Span::styled(" ", Style::default()),
             Span::styled("boxdot", Style::default().fg(Color::Green)),
             Span::raw(": "),
             Span::raw("Hello, World!"),
@@ -1092,11 +1097,12 @@ mod tests {
         );
 
         let expected = ListItem::new(Text::from(vec![Line::from(vec![
-            Span::styled("", Style::default().fg(Color::Yellow)),
+            Span::default(),
             Span::styled(
                 display_time(msg.arrived_at),
                 Style::default().fg(Color::Yellow),
             ),
+            Span::styled(" ", Style::default()),
             Span::styled("boxdot", Style::default().fg(Color::Green)),
             Span::raw(": "),
             Span::raw("Hello, World!"),
@@ -1132,11 +1138,12 @@ mod tests {
         );
 
         let expected = ListItem::new(Text::from(vec![Line::from(vec![
-            Span::styled("  ", Style::default().fg(Color::Yellow)),
+            Span::raw("  "),
             Span::styled(
                 display_time(msg.arrived_at),
                 Style::default().fg(Color::Yellow),
             ),
+            Span::styled(" ", Style::default()),
             Span::styled("boxdot", Style::default().fg(Color::Green)),
             Span::raw(": "),
             Span::raw("Hello, World!"),
@@ -1185,11 +1192,12 @@ mod tests {
 
         let expected = ListItem::new(Text::from(vec![
             Line::from(vec![
-                Span::styled("  ", Style::default().fg(Color::Yellow)),
+                Span::raw("  "),
                 Span::styled(
                     display_time(msg.arrived_at),
                     Style::default().fg(Color::Yellow),
                 ),
+                Span::styled(" ", Style::default()),
                 Span::styled("boxdot", Style::default().fg(Color::Green)),
                 Span::raw(": "),
                 Span::raw("Mention @boxdot  and even more"),
@@ -1223,11 +1231,12 @@ mod tests {
 
         let expected = ListItem::new(Text::from(vec![
             Line::from(vec![
-                Span::styled("", Style::default().fg(Color::Yellow)),
+                Span::default(),
                 Span::styled(
                     display_time(msg.arrived_at),
                     Style::default().fg(Color::Yellow),
                 ),
+                Span::styled(" ", Style::default()),
                 Span::styled("boxdot", Style::default().fg(Color::Green)),
                 Span::raw(": "),
                 Span::raw("This is a very long message that"),
@@ -1263,11 +1272,12 @@ mod tests {
         let expected = ListItem::new(Text::from(vec![
             Line::from(division),
             Line::from(vec![
-                Span::styled("", Style::default().fg(Color::Yellow)),
+                Span::default(),
                 Span::styled(
                     display_time(msg.arrived_at),
                     Style::default().fg(Color::Yellow),
                 ),
+                Span::styled(" ", Style::default()),
                 Span::styled("boxdot", Style::default().fg(Color::Green)),
                 Span::raw(": "),
                 Span::raw("Hello, World!"),
