@@ -2,7 +2,7 @@ use ratatui::{
     layout::HorizontalAlignment,
     style::Style,
     text::Line,
-    widgets::{Block, BorderType, Padding},
+    widgets::{Block, BorderType, List, ListItem, Padding},
 };
 use serde::{Deserialize, Serialize};
 
@@ -172,6 +172,17 @@ impl ListThemeConfig {
 
     fn default_channel_list() -> Self {
         Self::default_style("Channels")
+    }
+
+    pub fn widget<'a, T>(&'a self, items: T) -> List<'a>
+    where
+        T: IntoIterator,
+        <T as IntoIterator>::Item: Into<ListItem<'a>>,
+    {
+        List::new(items)
+            .style(self.style)
+            .highlight_style(self.highlight_style)
+            .block(self.block.widget())
     }
 }
 
