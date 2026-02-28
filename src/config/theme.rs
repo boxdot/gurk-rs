@@ -268,6 +268,8 @@ pub struct BlockConfig {
     #[serde(default)]
     pub border: Option<BorderType>,
     #[serde(default)]
+    pub style: Style,
+    #[serde(default)]
     pub border_style: Style,
     #[serde(default)]
     pub title: Option<BlockTitleConfig>,
@@ -282,6 +284,7 @@ impl Default for BlockConfig {
             border_style: Default::default(),
             title: Default::default(),
             padding: Default::default(),
+            style: Default::default(),
         }
     }
 }
@@ -304,7 +307,8 @@ impl BlockConfig {
     pub fn widget<'a>(&'a self) -> Block<'a> {
         let mut block = Block::new()
             .border_style(self.border_style)
-            .padding(self.padding);
+            .padding(self.padding)
+            .style(self.style);
         if let Some(title) = &self.title {
             block = block.title(title.widget());
         }
