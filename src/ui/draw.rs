@@ -280,7 +280,7 @@ fn prepare_receipts(app: &mut App, height: usize) {
 fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     let internal_area = app.config.theme.messages.block.internal_area(area);
     let height = internal_area.height as usize;
-    let width = internal_area.width as usize;
+    let width = dbg!(internal_area.width as usize);
     if height == 0 {
         return;
     }
@@ -336,7 +336,7 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     const TIME_WIDTH: usize = 6; // width of "00:00 "
     let mut prefix_width = TIME_WIDTH;
     if app.config.show_receipts {
-        prefix_width += RECEIPT_WIDTH;
+        prefix_width += receipts_width(&app.config.theme.messages.receipts);
     }
     let prefix = " ".repeat(prefix_width);
 
@@ -452,9 +452,8 @@ fn display_time(timestamp: u64) -> String {
         .to_string()
 }
 
-const RECEIPT_WIDTH: usize = 2;
-
 /// Ternary state whether to show receipt for a message
+#[derive(PartialEq)]
 enum ShowReceipt {
     // show receipt for this message
     Yes,
@@ -488,6 +487,14 @@ fn display_receipt(config: &ReceiptsConfig, receipt: Receipt, show: ShowReceipt)
         (No, _) => Span::from("  "),
         (Never, _) => Span::from(""),
     }
+}
+
+fn receipts_width(config: &ReceiptsConfig) -> usize {
+    let l1 = config.nothing.text.width();
+    let l2 = config.sent.text.width();
+    let l3 = config.delivered.text.width();
+    let l4 = config.read.text.width();
+    l1.max(l2.max(l3.max(l4))) + 1
 }
 
 #[allow(clippy::too_many_arguments)]
