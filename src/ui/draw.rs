@@ -280,7 +280,7 @@ fn prepare_receipts(app: &mut App, height: usize) {
 fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     let internal_area = app.config.theme.messages.block.internal_area(area);
     let height = internal_area.height as usize;
-    let width = dbg!(internal_area.width as usize);
+    let width = internal_area.width as usize;
     if height == 0 {
         return;
     }
