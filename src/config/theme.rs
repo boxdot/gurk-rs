@@ -1,5 +1,5 @@
 use ratatui::{
-    layout::{HorizontalAlignment, Position, Rect, Size},
+    layout::{HorizontalAlignment, Rect},
     style::{Color, Style},
     text::{Line, Span, Text},
     widgets::{Block, BorderType, Borders, List, ListItem, Padding, Paragraph},
@@ -327,29 +327,29 @@ impl BlockConfig {
         this
     }
 
-    pub fn border_width(&self) -> u16 {
-        self.border.is_some() as u16
-    }
+    // pub fn border_width(&self) -> u16 {
+    //     self.border.is_some() as u16
+    // }
 
-    pub fn top_border_width(&self) -> u16 {
-        (self.border.is_some() || self.title.is_some()) as u16
-    }
+    // pub fn top_border_width(&self) -> u16 {
+    //     (self.border.is_some() || self.title.is_some()) as u16
+    // }
 
-    pub fn inset_offset(&self) -> Position {
-        Position::new(
-            self.border_width() + self.padding.left,
-            self.top_border_width() + self.padding.top,
-        )
-    }
+    // pub fn inset_offset(&self) -> Position {
+    //     Position::new(
+    //         self.border_width() + self.padding.left,
+    //         self.top_border_width() + self.padding.top,
+    //     )
+    // }
 
-    pub fn inset(&self) -> Size {
-        let offset = self.inset_offset();
+    // pub fn inset(&self) -> Size {
+    //     let offset = self.inset_offset();
 
-        let m_height = offset.y + self.border_width() + self.padding.bottom;
-        let m_width = offset.x + self.border_width() + self.padding.right;
+    //     let m_height = offset.y + self.border_width() + self.padding.bottom;
+    //     let m_width = offset.x + self.border_width() + self.padding.right;
 
-        Size::new(m_width, m_height)
-    }
+    //     Size::new(m_width, m_height)
+    // }
 
     /// Gets the area minus the padding and borders
     pub fn internal_area(&self, area: Rect) -> Rect {
@@ -461,8 +461,10 @@ impl InputConfig {
         Paragraph::new(Text::from(content).style(self.text)).block(self.block.widget())
     }
 
-    pub fn recommended_height(&self) -> u16 {
-        self.block.inset().height + 1
+    pub fn vertical_padding(&self) -> u16 {
+        let area = Rect::new(0, 0, u16::MAX, u16::MAX);
+        let inner = self.block.internal_area(area);
+        area.height - inner.height
     }
 }
 
