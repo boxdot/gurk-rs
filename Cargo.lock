@@ -2039,7 +2039,6 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "tokio-stream",
- "tokio-util",
  "toml",
  "tracing",
  "tracing-appender",
@@ -5906,7 +5905,8 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 [[package]]
 name = "tokio"
 version = "1.49.0"
-source = "git+https://github.com/boxdot/tokio?rev=d0c0be175d932a3588b341d69d52b9de935b27ec#d0c0be175d932a3588b341d69d52b9de935b27ec"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72a2903cd7736441aac9df9d7688bd0ce48edccaadf181c3b90be801e81d3d86"
 dependencies = [
  "bytes",
  "libc",
@@ -5930,7 +5930,8 @@ dependencies = [
 [[package]]
 name = "tokio-macros"
 version = "2.6.0"
-source = "git+https://github.com/boxdot/tokio?rev=d0c0be175d932a3588b341d69d52b9de935b27ec#d0c0be175d932a3588b341d69d52b9de935b27ec"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af407857209536a95c8e56f8231ef2c2e2aff839b22e07a1ffcbc617e9db9fa5"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5986,13 +5987,13 @@ dependencies = [
 [[package]]
 name = "tokio-util"
 version = "0.7.18"
-source = "git+https://github.com/boxdot/tokio?rev=d0c0be175d932a3588b341d69d52b9de935b27ec#d0c0be175d932a3588b341d69d52b9de935b27ec"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ae9cec805b01e8fc3fd2fe289f89149a9b66dd16786abd8b19cfa7b48cb0098"
 dependencies = [
  "bytes",
  "futures-core",
  "futures-io",
  "futures-sink",
- "futures-util",
  "pin-project-lite",
  "tokio",
 ]

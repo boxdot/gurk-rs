@@ -5,7 +5,7 @@ use base64::prelude::*;
 use presage::libsignal_service::protocol::ServiceId;
 use presage::libsignal_service::{
     content::{Content, Metadata},
-    prelude::DeviceId,
+    protocol::DeviceId,
 };
 use presage::proto;
 use prost::Message;

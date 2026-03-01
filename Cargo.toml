@@ -91,7 +91,6 @@ tempfile = "3.14.0"
 crokey = "1.1.0"
 strum_macros = "0.27.1"
 strum = { version = "0.27.1", features = ["derive"] }
-tokio-util = { version = "0.7.13", features = ["rt"] }
 qrcode = { version = "0.14.1", default-features = false, features = ["image"] }
 sha2 = "0.10.8"
 strip-ansi-escapes = "0.2.1"
@@ -128,5 +127,3 @@ libsignal-service = { path = "../libsignal-service-rs" }
 "curve25519-dalek" = { git = 'https://github.com/signalapp/curve25519-dalek', tag = 'signal-curve25519-4.1.3' }
 libsqlite3-sys = { version = "0.36.0", git = "https://github.com/whisperfish/rusqlite", rev = '2a42b3354c9194700d08aa070f70a131a470e7dc' }
 sqlx = { version = "0.8.6", git = "https://github.com/gferon/sqlx", rev = "53c3a26c1b484175f3beb21853a1061b488bf7af" }
-tokio = { git = "https://github.com/boxdot/tokio", rev = "d0c0be175d932a3588b341d69d52b9de935b27ec" }
-tokio-util = { git = "https://github.com/boxdot/tokio", rev = "d0c0be175d932a3588b341d69d52b9de935b27ec" }

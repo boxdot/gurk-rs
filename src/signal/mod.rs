@@ -1,5 +1,6 @@
 mod attachment;
 mod r#impl;
+mod local_pool;
 mod manager;
 pub mod test;
 
@@ -10,13 +11,13 @@ use futures_channel::oneshot;
 use image::Luma;
 use presage::{libsignal_service::configuration::SignalServers, model::identity::OnNewIdentity};
 use presage_store_sqlite::SqliteStore;
-use tokio_util::task::LocalPoolHandle;
 use tracing::{error, info};
 use url::Url;
 
 use crate::{config::Config, passphrase::Passphrase};
 
 use self::r#impl::PresageManager;
+pub use self::local_pool::LocalPool;
 pub use self::manager::{Attachment, ResolvedGroup, SignalManager};
 
 // TODO: these should be either re-exported from presage/libsignal-service
@@ -31,7 +32,7 @@ pub type GroupIdentifierBytes = [u8; GROUP_IDENTIFIER_LEN];
 /// Links a new device if manager fails with `NotYetRegisteredError` or if `relink` is true.
 pub async fn ensure_linked_device(
     relink: bool,
-    local_pool: LocalPoolHandle,
+    local_pool: LocalPool,
     config: &Config,
     passphrase: &Passphrase,
 ) -> anyhow::Result<Box<dyn SignalManager + Send>> {
@@ -70,7 +71,7 @@ pub async fn ensure_linked_device(
 }
 
 async fn relink_device(
-    local_pool: LocalPoolHandle,
+    local_pool: LocalPool,
     config: &Config,
     store: SqliteStore,
 ) -> anyhow::Result<Box<dyn SignalManager + Send>> {

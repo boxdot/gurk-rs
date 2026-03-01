@@ -15,6 +15,7 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
+use gurk::signal::LocalPool;
 use gurk::{app::App, config::Config};
 use gurk::{backoff::Backoff, passphrase::Passphrase};
 use gurk::{
@@ -26,9 +27,7 @@ use presage::libsignal_service::content::Content;
 use ratatui::{Terminal, backend::CrosstermBackend};
 use tokio::{runtime, select};
 use tokio_stream::StreamExt;
-use tokio_util::task::LocalPoolHandle;
-use tracing::debug;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 use url::Url;
 
 const TARGET_FPS: u64 = 144;
@@ -119,7 +118,7 @@ pub enum Event {
 }
 
 async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Result<()> {
-    let local_pool = LocalPoolHandle::new(2);
+    let local_pool = LocalPool::new();
 
     let mut signal_manager =
         signal::ensure_linked_device(relink, local_pool.clone(), &config, &passphrase).await?;
@@ -168,7 +167,7 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
 
     let inner_tx = tx.clone();
 
-    local_pool.spawn_pinned(|| async move {
+    local_pool.spawn(move || async move {
         let mut backoff = Backoff::new();
         loop {
             let mut messages = if !is_online().await {
