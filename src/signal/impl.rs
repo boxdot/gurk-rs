@@ -359,6 +359,7 @@ impl SignalManager for PresageManager {
     }
 
     async fn contact(&self, id: Uuid) -> Option<Contact> {
+        let id = ServiceId::Aci(id.into());
         self.manager.store().contact_by_id(&id).await.ok()?
     }
 

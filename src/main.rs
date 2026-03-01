@@ -231,10 +231,9 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
         let mut interval = tokio::time::interval(RECEIPT_BUDGET);
         loop {
             interval.tick().await;
-            tick_tx
-                .send(Event::Tick)
-                .await
-                .expect("Cannot tick: events channel closed.");
+            if tick_tx.send(Event::Tick).await.is_err() {
+                break;
+            }
         }
     });
 
