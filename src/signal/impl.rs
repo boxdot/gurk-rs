@@ -281,7 +281,8 @@ impl SignalManager for PresageManager {
             reaction: Some(Reaction {
                 emoji: Some(emoji.clone()),
                 remove: Some(remove),
-                target_author_aci: Some(target_author_uuid.to_string()),
+                target_author_aci_binary: Some(target_author_uuid.as_bytes().to_vec()),
+                target_author_aci: None,
                 target_sent_timestamp: Some(target_sent_timestamp),
             }),
             ..Default::default()
