@@ -90,6 +90,7 @@ fn main() -> anyhow::Result<()> {
     };
 
     let runtime = runtime::Builder::new_multi_thread()
+        .thread_stack_size(8 * 1024 * 1024)
         .worker_threads(2)
         .enable_all()
         .build()?;
