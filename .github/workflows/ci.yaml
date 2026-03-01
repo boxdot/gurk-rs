@@ -56,7 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: system dependencies
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler gcc-aarch64-linux-gnu git
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler gcc-aarch64-linux-gnu git cmake
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@v1
         with:
@@ -84,7 +84,7 @@ jobs:
         - /usr/local/cargo/registry
     steps:
       - name: system dependencies
-        run: apk add --no-cache tar musl-dev lld protoc bash clang llvm make perl git
+        run: apk add --no-cache tar musl-dev lld protoc bash clang llvm make perl git cmake
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@v1
         with:
