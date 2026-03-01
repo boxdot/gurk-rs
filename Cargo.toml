@@ -115,12 +115,12 @@ quickcheck_macros = "1.0.0"
 name = "app"
 harness = false
 
-# [patch."https://github.com/whisperfish/presage.git"]
-# presage = { path = "../presage/presage" }
-# presage-store-sqlite = { path = "../presage/presage-store-sqlite" }
+[patch."https://github.com/whisperfish/presage.git"]
+presage = { path = "../presage/presage" }
+presage-store-sqlite = { path = "../presage/presage-store-sqlite" }
 
-# [patch."https://github.com/whisperfish/libsignal-service-rs"]
-# libsignal-service = { path = "../libsignal-service-rs" }
+[patch."https://github.com/whisperfish/libsignal-service-rs"]
+libsignal-service = { path = "../libsignal-service-rs" }
 
 [patch.crates-io]
 # signal-protocol uses a fork of this library via the patch mechanism of cargo.
