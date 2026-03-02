@@ -72,7 +72,7 @@ jobs:
       CXX: clang++
     steps:
       - name: system dependencies
-        run: apk add --no-cache musl-dev lld protoc bash clang llvm make perl cmake
+        run: apk add --no-cache musl-dev lld protoc bash clang llvm make perl cmake g++
       - uses: actions/checkout@v4
         with:
           fetch-depth: ${{ env.FETCH_DEPTH }}
