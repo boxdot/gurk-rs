@@ -4,11 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [0.9.0] - 2026-03-03
 
-This is a major release due to fundamental changes in the underlying signal
-libraries. In particular, a dependency on `boringssl` has been introduced by
-signal. Due to `boringssl` compilation issues on musl and aarch64, the binary
-releases for these platforms have been suspended as long as the issues are not
-resolved.
+This is a major release due to fundamental changes in the underlying Signal
+libraries.
 
 ### 🚀 Features
 
