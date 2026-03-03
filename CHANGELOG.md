@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0] - 2026-03-03
+
+This is a major release due to fundamental changes in the underlying signal
+libraries. In particular, a dependency on `boringssl` has been introduced by
+signal. Due to `boringssl` compilation issues on musl and aarch64, the binary
+releases for these platforms have been suspended as long as the issues are not
+resolved.
+
+### 🚀 Features
+
+- Add Nix flake for reproducible builds (#474)
+- Remove user name alignment at the longest user name (#480)
+- Allow to mute channels locally (#484)
+- Add and implement delete button mapping (#485)
+
+### 🐛 Bug Fixes
+
+- Correct message selection with date separators (#468)
+- Missing author after date separator (#479)
+- Cut off lines (#481)
+- Pass absolute path to xdg-open consistently (#482)
+- Support old notification config format (#483)
+- App stopped working (#495)
+
+### 🚜 Refactor
+
+- Split app into modules (#475)
+
+### ⚙️ Miscellaneous Tasks
+
+- Upgrade dependencies (#466)
+- Fix typos (#477)
+
+
+* @chrstnwhlrt made their first contribution in #474
+
 ## [0.8.1] - 2026-01-15
 
 ### 🐛 Bug Fixes
