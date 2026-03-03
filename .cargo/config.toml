@@ -2,10 +2,7 @@
 xtask = "run --package xtask --"
 
 [env]
-CC_aarch64_unknown_linux_gnu = "aarch64-linux-gnu-gcc"
-CXX_aarch64_unknown_linux_gnu = "aarch64-linux-gnu-g++"
 CC_aarch64_unknown_linux_musl = "clang"
-CXX_aarch64_unknown_linux_musl = "clang++"
 AR_aarch64_unknown_linux_musl = "llvm-ar"
 
 [target.aarch64-unknown-linux-gnu]
