@@ -52,8 +52,7 @@ jobs:
       matrix:
         target:
           - x86_64-unknown-linux-gnu
-          # TODO: enable when building boringssl works
-          # - aarch64-unknown-linux-gnu
+          - aarch64-unknown-linux-gnu
     runs-on: ubuntu-latest
     steps:
       - name: system dependencies
@@ -72,34 +71,33 @@ jobs:
       - run: cargo xtask --help
         if: ${{ matrix.target == 'x86_64-unknown-linux-gnu' }}
 
-  # TODO: enable when building boringssl works
-  # build-musl:
-  #   strategy:
-  #     matrix:
-  #       target:
-  #         - x86_64-unknown-linux-musl
-  #         - aarch64-unknown-linux-musl
-  #   runs-on: ubuntu-latest
-  #   container:
-  #     image: rust:alpine
-  #     volumes:
-  #       - /usr/local/cargo/registry
-  #   steps:
-  #     - name: system dependencies
-  #       run: apk add --no-cache tar musl-dev lld protoc bash clang llvm make perl
-  #     - uses: actions/checkout@v4
-  #     - uses: dtolnay/rust-toolchain@v1
-  #       with:
-  #         toolchain: stable
-  #         targets: ${{ matrix.target }}
-  #     - uses: Swatinem/rust-cache@v2
-  #       with:
-  #         key: ${{ matrix.target }}
-  #     - run: cargo build --target ${{ matrix.target }}
-  #     - run: cargo test --target ${{ matrix.target }}
-  #       if: ${{ matrix.target == 'x86_64-unknown-linux-musl' }}
-  #     - run: cargo run -p xtask --target ${{ matrix.target }} -- --help
-  #       if: ${{ matrix.target == 'x86_64-unknown-linux-musl' }}
+  build-musl:
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-musl
+          - aarch64-unknown-linux-musl
+    runs-on: ubuntu-latest
+    container:
+      image: rust:alpine
+      volumes:
+        - /usr/local/cargo/registry
+    steps:
+      - name: system dependencies
+        run: apk add --no-cache tar musl-dev lld protoc bash clang llvm make perl
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - run: cargo build --target ${{ matrix.target }}
+      - run: cargo test --target ${{ matrix.target }}
+        if: ${{ matrix.target == 'x86_64-unknown-linux-musl' }}
+      - run: cargo run -p xtask --target ${{ matrix.target }} -- --help
+        if: ${{ matrix.target == 'x86_64-unknown-linux-musl' }}
 
   build-apple:
     strategy:
