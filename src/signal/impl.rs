@@ -21,7 +21,6 @@ use presage_store_sqlite::SqliteStore;
 use sha2::Digest;
 use tokio::sync::oneshot;
 use tokio_stream::{Stream, StreamExt};
-use tokio_util::task::LocalPoolHandle;
 use tracing::{error, warn};
 use uuid::Uuid;
 
@@ -30,20 +29,21 @@ use crate::receipt::Receipt;
 use crate::util::utc_now_timestamp_msec;
 
 use super::{
-    Attachment, GroupMasterKeyBytes, ProfileKeyBytes, ResolvedGroup, SignalManager, attachment,
+    Attachment, GroupMasterKeyBytes, LocalPool, ProfileKeyBytes, ResolvedGroup, SignalManager,
+    attachment,
 };
 
 pub(super) struct PresageManager {
     manager: presage::Manager<SqliteStore, Registered>,
     data_dir: PathBuf,
-    local_pool: LocalPoolHandle,
+    local_pool: LocalPool,
 }
 
 impl PresageManager {
     pub(super) fn new(
         manager: presage::Manager<SqliteStore, Registered>,
         data_dir: PathBuf,
-        local_pool: LocalPoolHandle,
+        local_pool: LocalPool,
     ) -> Self {
         Self {
             manager,
@@ -115,7 +115,7 @@ impl SignalManager for PresageManager {
         };
 
         let mut manager = self.manager.clone();
-        self.local_pool.spawn_pinned(move || async move {
+        self.local_pool.spawn(move || async move {
             let body = ContentBody::ReceiptMessage(data_message);
             if let Err(error) = manager
                 .send_message(ServiceId::Aci(sender_uuid.into()), body, now_timestamp)
@@ -182,7 +182,7 @@ impl SignalManager for PresageManager {
         match channel.id {
             ChannelId::User(uuid) => {
                 let mut manager = self.manager.clone();
-                self.local_pool.spawn_pinned(move || async move {
+                self.local_pool.spawn(move || async move {
                     if let Err(error) =
                         upload_attachments(&manager, attachments, &mut data_message).await
                     {
@@ -222,7 +222,7 @@ impl SignalManager for PresageManager {
                         ..Default::default()
                     });
 
-                    self.local_pool.spawn_pinned(move || async move {
+                    self.local_pool.spawn(move || async move {
                         if let Err(error) =
                             upload_attachments(&manager, attachments, &mut data_message).await
                         {
@@ -281,7 +281,8 @@ impl SignalManager for PresageManager {
             reaction: Some(Reaction {
                 emoji: Some(emoji.clone()),
                 remove: Some(remove),
-                target_author_aci: Some(target_author_uuid.to_string()),
+                target_author_aci_binary: Some(target_author_uuid.as_bytes().to_vec()),
+                target_author_aci: None,
                 target_sent_timestamp: Some(target_sent_timestamp),
             }),
             ..Default::default()
@@ -291,7 +292,7 @@ impl SignalManager for PresageManager {
             (ChannelId::User(uuid), _) => {
                 let mut manager = self.manager.clone();
                 let body = ContentBody::DataMessage(data_message);
-                self.local_pool.spawn_pinned(move || async move {
+                self.local_pool.spawn(move || async move {
                     if let Err(e) = manager
                         .send_message(ServiceId::Aci(uuid.into()), body, timestamp)
                         .await
@@ -311,7 +312,7 @@ impl SignalManager for PresageManager {
                     ..Default::default()
                 });
 
-                self.local_pool.spawn_pinned(move || async move {
+                self.local_pool.spawn(move || async move {
                     if let Err(e) = manager
                         .send_message_to_group(&master_key_bytes, data_message, timestamp)
                         .await
@@ -358,6 +359,7 @@ impl SignalManager for PresageManager {
     }
 
     async fn contact(&self, id: Uuid) -> Option<Contact> {
+        let id = ServiceId::Aci(id.into());
         self.manager.store().contact_by_id(&id).await.ok()?
     }
 

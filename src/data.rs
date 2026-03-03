@@ -258,6 +258,10 @@ impl BodyRange {
                     .map(Style::from_proto)
                     .unwrap_or_default(),
             ),
+            proto::body_range::AssociatedValue::MentionAciBinary(uuid) => {
+                let uuid = Uuid::from_slice(&uuid).ok()?;
+                AssociatedValue::MentionUuid(uuid)
+            }
         };
         Some(Self {
             start: proto.start?.try_into().ok()?,

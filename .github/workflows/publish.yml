@@ -33,7 +33,8 @@ jobs:
       matrix:
         target:
           - x86_64-unknown-linux-gnu
-          - aarch64-unknown-linux-gnu
+          # TODO: enable when building boringssl works
+          # - aarch64-unknown-linux-gnu
     runs-on: ubuntu-latest
     env:
       GURK_TARGET: ${{ matrix.target }}
@@ -54,37 +55,38 @@ jobs:
           name: dist-${{ matrix.target }}
           path: dist
 
-  dist-musl:
-    strategy:
-      fail-fast: false
-      matrix:
-        target:
-          - x86_64-unknown-linux-musl
-          - aarch64-unknown-linux-musl
-    runs-on: ubuntu-latest
-    container:
-      image: rust:alpine
-      volumes:
-        - /usr/local/cargo/registry
-    env:
-      GURK_TARGET: ${{ matrix.target }}
-    steps:
-      - name: system dependencies
-        run: apk add --no-cache musl-dev lld protoc bash clang llvm make perl
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: ${{ env.FETCH_DEPTH }}
-      - uses: dtolnay/rust-toolchain@v1
-        with:
-          toolchain: stable
-          targets: ${{ matrix.target }}
-      - name: dist
-        # FIXME: building xtask without explicit target segfaults rustc
-        run: cargo run -p xtask --target x86_64-unknown-linux-musl -- dist
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist-${{ matrix.target }}
-          path: dist
+  # TODO: enable when building boringssl works
+  # dist-musl:
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       target:
+  #         - x86_64-unknown-linux-musl
+  #         - aarch64-unknown-linux-musl
+  #   runs-on: ubuntu-latest
+  #   container:
+  #     image: rust:alpine
+  #     volumes:
+  #       - /usr/local/cargo/registry
+  #   env:
+  #     GURK_TARGET: ${{ matrix.target }}
+  #   steps:
+  #     - name: system dependencies
+  #       run: apk add --no-cache musl-dev lld protoc bash clang llvm make perl
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         fetch-depth: ${{ env.FETCH_DEPTH }}
+  #     - uses: dtolnay/rust-toolchain@v1
+  #       with:
+  #         toolchain: stable
+  #         targets: ${{ matrix.target }}
+  #     - name: dist
+  #       # FIXME: building xtask without explicit target segfaults rustc
+  #       run: cargo run -p xtask --target x86_64-unknown-linux-musl -- dist
+  #     - uses: actions/upload-artifact@v4
+  #       with:
+  #         name: dist-${{ matrix.target }}
+  #         path: dist
 
   dist-apple:
     strategy:
@@ -124,7 +126,7 @@ jobs:
     needs:
       - dist-changelog
       - dist-gnu
-      - dist-musl
+      # - dist-musl
       - dist-apple
     steps:
       - uses: actions/download-artifact@v4
@@ -143,18 +145,18 @@ jobs:
         with:
           name: dist-x86_64-unknown-linux-gnu
           path: dist
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist-x86_64-unknown-linux-musl
-          path: dist
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist-aarch64-unknown-linux-gnu
-          path: dist
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist-aarch64-unknown-linux-musl
-          path: dist
+      # - uses: actions/download-artifact@v4
+      #   with:
+      #     name: dist-x86_64-unknown-linux-musl
+      #     path: dist
+      # - uses: actions/download-artifact@v4
+      #   with:
+      #     name: dist-aarch64-unknown-linux-gnu
+      #     path: dist
+      # - uses: actions/download-artifact@v4
+      #   with:
+      #     name: dist-aarch64-unknown-linux-musl
+      #     path: dist
       - run: ls -al
         working-directory: dist
       - name: release

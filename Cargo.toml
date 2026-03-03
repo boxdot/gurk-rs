@@ -29,8 +29,8 @@ debug = true
 dev = ["prost", "base64", "serde_json"]
 
 [dependencies]
-presage = { git = "https://github.com/whisperfish/presage", rev = "47faeca3d53d2fc736ae5d9a1ffcf0d17b4e25d5" }
-presage-store-sqlite = { git = "https://github.com/whisperfish/presage", rev = "47faeca3d53d2fc736ae5d9a1ffcf0d17b4e25d5" }
+presage = { git = "https://github.com/whisperfish/presage", rev = "c3d4dd56444e264bbd9b416968e121c1fdc6972e", default-features = false }
+presage-store-sqlite = { git = "https://github.com/whisperfish/presage", rev = "c3d4dd56444e264bbd9b416968e121c1fdc6972e" }
 
 # dev feature dependenciestoml
 prost = { version = "0.13.4", optional = true }
@@ -50,8 +50,8 @@ hex = "0.4.3"
 hostname = "0.4.0"
 image = { version = "0.25.5", default-features = false, features = ["png"] }
 itertools = "0.14.0"
-libsqlite3-sys = { version = "0.30.1", features = [
-    "bundled-sqlcipher-vendored-openssl",
+libsqlite3-sys = { version = "0.36.0", features = [
+    "bundled-sqlcipher-custom-crypto",
 ] }
 log-panics = "2.1.0"
 mime_guess = "2.0.5"
@@ -65,7 +65,7 @@ regex = "1.11.1"
 scopeguard = "1.2.0"
 serde = { version = "1.0.216", features = ["derive"] }
 serde_json = { version = "1.0.134", optional = true }
-sqlx = { version = "0.8.2", features = [
+sqlx = { version = "0.8.6", features = [
     "sqlite",
     "runtime-tokio-rustls",
     "uuid",
@@ -91,7 +91,6 @@ tempfile = "3.14.0"
 crokey = "1.1.0"
 strum_macros = "0.27.1"
 strum = { version = "0.27.1", features = ["derive"] }
-tokio-util = { version = "0.7.13", features = ["rt"] }
 qrcode = { version = "0.14.1", default-features = false, features = ["image"] }
 sha2 = "0.10.8"
 strip-ansi-escapes = "0.2.1"
@@ -118,7 +117,7 @@ harness = false
 # [patch."https://github.com/whisperfish/presage.git"]
 # presage = { path = "../presage/presage" }
 # presage-store-sqlite = { path = "../presage/presage-store-sqlite" }
-
+#
 # [patch."https://github.com/whisperfish/libsignal-service-rs"]
 # libsignal-service = { path = "../libsignal-service-rs" }
 
@@ -126,3 +125,5 @@ harness = false
 # signal-protocol uses a fork of this library via the patch mechanism of cargo.
 # Since it is not transitive, we have to add the patch here explicitly.
 "curve25519-dalek" = { git = 'https://github.com/signalapp/curve25519-dalek', tag = 'signal-curve25519-4.1.3' }
+libsqlite3-sys = { version = "0.36.0", git = "https://github.com/boxdot/rusqlite", rev = 'd4523ff6cdb6472db55789ae92d518989ee8bfd6' }
+sqlx = { version = "0.8.6", git = "https://github.com/gferon/sqlx", rev = "53c3a26c1b484175f3beb21853a1061b488bf7af" }
