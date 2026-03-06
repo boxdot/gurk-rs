@@ -427,9 +427,9 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     let title = {
         let channel_name = app.channel_name(&channel);
         if let Some(writing_people) = writing_people {
-            format!("{} - Messages {}", channel_name, writing_people)
+            format!("{channel_name} - Messages {writing_people}")
         } else {
-            format!("{} - Messages", channel_name)
+            format!("{channel_name} - Messages")
         }
     };
 
