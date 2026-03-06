@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context as _, anyhow};
 use itertools::Itertools;
 use presage::libsignal_service::content::{Content, ContentBody, Metadata};
+use presage::libsignal_service::protocol::ServiceId;
 use presage::proto::sync_message::{Read, Sent};
 use presage::proto::{
     AttachmentPointer, DataMessage, EditMessage, ReceiptMessage, SyncMessage, TypingMessage,
@@ -46,7 +47,8 @@ impl App {
                 ContentBody::SynchronizeMessage(SyncMessage {
                     sent:
                         Some(Sent {
-                            destination_service_id: Some(destination_uuid),
+                            destination_service_id: ref dest_str,
+                            destination_service_id_binary: ref dest_binary,
                             timestamp: Some(timestamp),
                             message:
                                 Some(DataMessage {
@@ -60,7 +62,7 @@ impl App {
                         }),
                     ..
                 }),
-            ) if destination_uuid.parse() == Ok(user_id) => {
+            ) if parse_uuid(dest_str.as_deref(), dest_binary.as_deref()) == Some(user_id) => {
                 let channel_idx = self.ensure_own_channel_exists();
                 let attachments = self.save_attachments(attachment_pointers).await;
                 add_emoji_from_sticker(&mut body, sticker);
@@ -76,7 +78,8 @@ impl App {
                 ContentBody::SynchronizeMessage(SyncMessage {
                     sent:
                         Some(Sent {
-                            destination_service_id: destination_uuid,
+                            destination_service_id: ref dest_str,
+                            destination_service_id_binary: ref dest_binary,
                             message:
                                 Some(DataMessage {
                                     body: None,
@@ -103,8 +106,8 @@ impl App {
                 }) = group_v2
                 {
                     ChannelId::from_master_key_bytes(master_key)?
-                } else if let Some(uuid) = destination_uuid {
-                    ChannelId::User(uuid.parse()?)
+                } else if let Some(uuid) = parse_uuid(dest_str.as_deref(), dest_binary.as_deref()) {
+                    ChannelId::User(uuid)
                 } else {
                     ChannelId::User(target_author_uuid.parse()?)
                 };
@@ -127,7 +130,7 @@ impl App {
                 .await;
                 read.into_iter().for_each(|r| {
                     self.handle_receipt(
-                        Uuid::parse_str(r.sender_aci.unwrap().as_str()).unwrap(),
+                        r.parse_sender_aci().unwrap_or_default(),
                         Receipt::Read,
                         vec![r.timestamp.unwrap()],
                     );
@@ -188,7 +191,8 @@ impl App {
                 ContentBody::SynchronizeMessage(SyncMessage {
                     sent:
                         Some(Sent {
-                            destination_service_id: destination_uuid,
+                            destination_service_id: ref dest_str,
+                            destination_service_id_binary: ref dest_binary,
                             timestamp: Some(timestamp),
                             message:
                                 Some(DataMessage {
@@ -219,12 +223,13 @@ impl App {
                     self.ensure_group_channel_exists(master_key, revision)
                         .await
                         .context("failed to create group channel")?
-                } else if let Some(destination_uuid) = destination_uuid {
+                } else if let Some(destination_uuid) =
+                    parse_uuid(dest_str.as_deref(), dest_binary.as_deref())
+                {
                     let profile_key = profile_key
                         .context("sync message with destination without profile key")?
                         .try_into()
                         .map_err(|_| anyhow!("invalid profile key"))?;
-                    let destination_uuid = destination_uuid.parse()?;
                     let name = self.name_by_id(destination_uuid).await;
                     self.ensure_user_is_known(destination_uuid, Some(profile_key))
                         .await;
@@ -771,11 +776,7 @@ impl MessageExt for SyncMessage {
     fn channel_id(&self) -> Option<ChannelId> {
         // only sent sync message are attached to a conversation
         let sent = self.sent.as_ref()?;
-        if let Some(uuid) = sent
-            .destination_service_id
-            .as_ref()
-            .and_then(|id| id.parse().ok())
-        {
+        if let Some(uuid) = sent.parse_destination_uuid() {
             Some(ChannelId::User(uuid))
         } else {
             let group_v2 = sent
@@ -792,6 +793,41 @@ impl MessageExt for SyncMessage {
                 })?;
             ChannelId::from_master_key_bytes(group_v2.master_key.as_deref()?).ok()
         }
+    }
+}
+
+trait SyncReadExt {
+    fn parse_sender_aci(&self) -> Option<Uuid>;
+}
+
+impl SyncReadExt for Read {
+    fn parse_sender_aci(&self) -> Option<Uuid> {
+        if let Some(bytes) = self.sender_aci_binary.as_deref() {
+            ServiceId::parse_from_service_id_binary(bytes).map(|sid| sid.raw_uuid())
+        } else {
+            self.sender_aci.as_deref().and_then(|s| s.parse().ok())
+        }
+    }
+}
+
+/// First parse the binary field, then fallback to the string field
+fn parse_uuid(str_field: Option<&str>, binary_field: Option<&[u8]>) -> Option<Uuid> {
+    binary_field
+        .and_then(ServiceId::parse_from_service_id_binary)
+        .map(|sid| sid.raw_uuid())
+        .or_else(|| str_field.and_then(|s| s.parse().ok()))
+}
+
+trait SyncSentExt {
+    fn parse_destination_uuid(&self) -> Option<Uuid>;
+}
+
+impl SyncSentExt for Sent {
+    fn parse_destination_uuid(&self) -> Option<Uuid> {
+        parse_uuid(
+            self.destination_service_id.as_deref(),
+            self.destination_service_id_binary.as_deref(),
+        )
     }
 }
 
