@@ -91,6 +91,10 @@ pub static SHORTCUTS: &[ShortCut] = &[
         description: "Next line",
     },
     ShortCut {
+        event: "alt+l",
+        description: "Toggle channel list pane visibility",
+    },
+    ShortCut {
         event: "alt+y",
         description: "Copy selected message to clipboard",
     },
