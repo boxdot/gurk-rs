@@ -8,8 +8,9 @@ use url::Url;
 
 use std::path::{Path, PathBuf};
 use std::{fmt, fs};
+pub mod theme;
 
-use crate::{command::ModeKeybindingConfig, passphrase::Passphrase};
+use crate::{command::ModeKeybindingConfig, config::theme::ThemeConfig, passphrase::Passphrase};
 
 const GURK_DB_NAME: &str = "gurk.sqlite";
 const SIGNAL_DB_NAME: &str = "signal.sqlite";
@@ -50,15 +51,14 @@ pub struct Config {
     #[serde(default)]
     /// If set, enables encryption of the key store and messages database
     pub passphrase: Option<Passphrase>,
-    /// If set, the full message text will be colored, not only the author name
-    #[serde(default)]
-    pub colored_messages: bool,
     #[serde(default)]
     /// Keymaps
     pub keybindings: ModeKeybindingConfig,
     /// Whether to enable the default keybindings
     #[serde(default = "default_true")]
     pub default_keybindings: bool,
+    #[serde(default)]
+    pub theme: ThemeConfig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -188,9 +188,9 @@ impl Config {
             developer: Default::default(),
             sqlite: Default::default(),
             passphrase: None,
-            colored_messages: false,
             default_keybindings: true,
             keybindings: ModeKeybindingConfig::default(),
+            theme: ThemeConfig::default(),
         }
     }
 

@@ -60,7 +60,7 @@ opener = "0.8.2"
 phonenumber = "0.3.6"
 postcard = { version = "1.1.1", features = ["alloc"] }
 qr2term = "0.3.3"
-ratatui = "0.30.0"
+ratatui = { version = "0.30.0", features = ["serde"] }
 regex = "1.11.1"
 scopeguard = "1.2.0"
 serde = { version = "1.0.216", features = ["derive"] }

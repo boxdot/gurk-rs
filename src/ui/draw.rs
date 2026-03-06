@@ -1,12 +1,13 @@
 //! Draw the UI
 
+use std::borrow::Cow;
 use std::fmt;
 
 use chrono::Datelike;
 use itertools::Itertools;
 use ratatui::Frame;
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, Borders, Clear, List, ListDirection, ListItem, Paragraph};
+use ratatui::widgets::{Block, Clear, List, ListDirection, ListItem, Paragraph};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     widgets::Padding,
@@ -21,6 +22,8 @@ use uuid::Uuid;
 use crate::app::App;
 use crate::channels::SelectChannel;
 use crate::command::{Command, WindowMode};
+use crate::config::Config;
+use crate::config::theme::ReceiptsConfig;
 use crate::cursor::Cursor;
 use crate::data::{AssociatedValue, Message};
 use crate::receipt::{Receipt, ReceiptEvent};
@@ -60,27 +63,27 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     draw_chat(f, app, chunks[1]);
 
     if app.select_channel.is_shown {
-        draw_select_channel_popup(f, &mut app.select_channel);
+        draw_select_channel_popup(f, &mut app.select_channel, &app.config);
     }
 }
 
-fn draw_select_channel_popup(f: &mut Frame, select_channel: &mut SelectChannel) {
+fn draw_select_channel_popup(f: &mut Frame, select_channel: &mut SelectChannel, config: &Config) {
     let area = centered_rect(60, 60, f.area());
+    let input_theme = &config.theme.channel_popup.input;
+    let input_constraint = Constraint::Length(input_theme.vertical_padding() + 1);
     let chunks = Layout::default()
-        .constraints([Constraint::Length(1 + 2), Constraint::Min(0)].as_ref())
+        .constraints([input_constraint, Constraint::Min(0)].as_ref())
         .direction(Direction::Vertical)
         .split(area);
     f.render_widget(Clear, area);
-    let input = Paragraph::new(Text::from(select_channel.input.data.clone())).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .title("Select channel"),
-    );
+
+    let input_inner_area = input_theme.block.internal_area(chunks[0]);
+    let input = input_theme.widget(select_channel.input.data.clone());
     f.render_widget(input, chunks[0]);
     let cursor = &select_channel.input.cursor;
     f.set_cursor_position((
-        chunks[0].x + cursor.col as u16 + 1,
-        chunks[0].y + cursor.line as u16 + 1,
+        input_inner_area.x + cursor.col as u16,
+        input_inner_area.y + cursor.line as u16,
     ));
     let items: Vec<_> = select_channel.filtered_names().map(ListItem::new).collect();
     match select_channel.state.selected() {
@@ -92,9 +95,7 @@ fn draw_select_channel_popup(f: &mut Frame, select_channel: &mut SelectChannel) 
         }
         _ => (),
     }
-    let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL))
-        .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray));
+    let list = config.theme.channel_popup.list.widget(items);
     f.render_stateful_widget(list, chunks[1], &mut select_channel.state);
 }
 
@@ -129,9 +130,7 @@ fn draw_channels(f: &mut Frame, app: &mut App, area: Rect) {
             ListItem::new(vec![Line::from(Span::raw(label))])
         });
 
-    let channels = List::new(channels)
-        .block(Block::default().borders(Borders::ALL).title("Channels"))
-        .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray));
+    let channels = app.config.theme.channels.widget(channels);
     let no_channels = channels.is_empty();
     f.render_stateful_widget(channels, area, &mut app.channels.state);
 
@@ -193,7 +192,12 @@ fn wrap(text: &str, mut cursor: Cursor, width: usize) -> (String, Cursor, usize)
 }
 
 fn draw_chat(f: &mut Frame, app: &mut App, area: Rect) {
-    let text_width = area.width.saturating_sub(2) as usize;
+    let input_theme = app
+        .config
+        .theme
+        .input_config(app.is_editing(), app.is_multiline_input);
+
+    let text_width = input_theme.block.internal_area(area).width as usize;
     let (wrapped_input, cursor, num_input_lines) =
         wrap(&app.input.data, app.input.cursor.clone(), text_width);
 
@@ -201,29 +205,26 @@ fn draw_chat(f: &mut Frame, app: &mut App, area: Rect) {
         .constraints(
             [
                 Constraint::Min(0),
-                Constraint::Length(num_input_lines as u16 + 2),
+                Constraint::Length(num_input_lines as u16 + input_theme.vertical_padding()),
             ]
             .as_ref(),
         )
         .direction(Direction::Vertical)
         .split(area);
+    let input_inner_area = input_theme.block.internal_area(chunks[1]);
 
     draw_messages(f, app, chunks[0]);
+    let config = app
+        .config
+        .theme
+        .input_config(app.is_editing(), app.is_multiline_input);
 
-    let title = match (app.is_editing(), app.is_multiline_input) {
-        (true, true) => "Input (Editing, Multiline)",
-        (true, false) => "Input (Editing)",
-        (false, true) => "Input (Multiline)",
-        (false, false) => "Input",
-    };
-
-    let input = Paragraph::new(Text::from(wrapped_input))
-        .block(Block::default().borders(Borders::ALL).title(title));
+    let input = config.widget(wrapped_input);
     f.render_widget(input, chunks[1]);
     if !app.select_channel.is_shown {
         f.set_cursor_position((
-            chunks[1].x + cursor.col as u16 + 1,  // +1 for frame
-            chunks[1].y + cursor.line as u16 + 1, // +1 for frame
+            input_inner_area.x + cursor.col as u16,
+            input_inner_area.y + cursor.line as u16,
         ));
     }
 }
@@ -277,23 +278,20 @@ fn prepare_receipts(app: &mut App, height: usize) {
 }
 
 fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
-    // area without borders
-    let height = area.height.saturating_sub(2) as usize;
+    let internal_area = app.config.theme.messages.block.internal_area(area);
+    let height = internal_area.height as usize;
+    let width = internal_area.width as usize;
     if height == 0 {
         return;
     }
-    let width = area.width.saturating_sub(2) as usize;
 
     prepare_receipts(app, height);
 
     let Some(&channel_id) = app.channels.selected_item() else {
+        let block = app.config.theme.messages.block.widget();
         f.render_widget(
             Paragraph::new("No Channel selected")
-                .block(
-                    Block::bordered()
-                        .title("Messages")
-                        .padding(Padding::top(area.height / 2)),
-                )
+                .block(block.padding(Padding::top(area.height / 2)))
                 .centered(),
             area,
         );
@@ -338,7 +336,7 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     const TIME_WIDTH: usize = 6; // width of "00:00 "
     let mut prefix_width = TIME_WIDTH;
     if app.config.show_receipts {
-        prefix_width += RECEIPT_WIDTH;
+        prefix_width += receipts_width(&app.config.theme.messages.receipts);
     }
     let prefix = " ".repeat(prefix_width);
 
@@ -379,7 +377,7 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
                 show_receipt,
                 date_division,
                 new_messages_division,
-                app.config.colored_messages,
+                &app.config,
             )
         });
 
@@ -412,14 +410,19 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     let offset = offset + first_idx;
     items = items.split_off(first_idx);
 
-    let title: String = if let Some(writing_people) = writing_people {
-        format!("Messages {writing_people}")
+    let block_theme = &app.config.theme.messages.block;
+    let block = if let Some(writing_people) = writing_people {
+        let block = block_theme
+            .clone()
+            .append_title(" ")
+            .append_title(&writing_people);
+        Cow::Owned(block)
     } else {
-        "Messages".to_string()
+        Cow::Borrowed(block_theme)
     };
 
     let list = List::new(items)
-        .block(Block::default().title(title).borders(Borders::ALL))
+        .block(block.widget())
         .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray))
         .direction(ListDirection::BottomToTop);
 
@@ -445,13 +448,12 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
 
 fn display_time(timestamp: u64) -> String {
     utc_timestamp_msec_to_local(timestamp)
-        .format("%R ")
+        .format("%R")
         .to_string()
 }
 
-const RECEIPT_WIDTH: usize = 2;
-
 /// Ternary state whether to show receipt for a message
+#[derive(PartialEq)]
 enum ShowReceipt {
     // show receipt for this message
     Yes,
@@ -475,16 +477,24 @@ impl ShowReceipt {
     }
 }
 
-fn display_receipt(receipt: Receipt, show: ShowReceipt) -> &'static str {
+fn display_receipt(config: &ReceiptsConfig, receipt: Receipt, show: ShowReceipt) -> Span<'static> {
     use ShowReceipt::*;
     match (show, receipt) {
-        (Yes, Receipt::Nothing) => "  ",
-        (Yes, Receipt::Sent) => "○ ",
-        (Yes, Receipt::Delivered) => "◉ ",
-        (Yes, Receipt::Read) => "● ",
-        (No, _) => "  ",
-        (Never, _) => "",
+        (Yes, Receipt::Nothing) => config.nothing.span_owned(),
+        (Yes, Receipt::Sent) => config.sent.span_owned(),
+        (Yes, Receipt::Delivered) => config.delivered.span_owned(),
+        (Yes, Receipt::Read) => config.read.span_owned(),
+        (No, _) => Span::from("  "),
+        (Never, _) => Span::from(""),
     }
+}
+
+fn receipts_width(config: &ReceiptsConfig) -> usize {
+    let l1 = config.nothing.text.width();
+    let l2 = config.sent.text.width();
+    let l3 = config.delivered.text.width();
+    let l4 = config.read.text.width();
+    l1.max(l2.max(l3.max(l4))) + 1
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -497,22 +507,16 @@ fn display_message(
     show_receipt: ShowReceipt,
     date_division: Option<String>,
     unread_messages_division: Option<String>,
-    colored_messages: bool,
+    config: &Config,
 ) -> Option<ListItem<'static>> {
-    let receipt = Span::styled(
-        display_receipt(msg.receipt, show_receipt),
-        Style::default().fg(Color::Yellow),
-    );
+    let receipt = display_receipt(&config.theme.messages.receipts, msg.receipt, show_receipt);
 
-    let time = Span::styled(
-        display_time(msg.arrived_at),
-        Style::default().fg(Color::Yellow),
-    );
+    let time = Span::styled(display_time(msg.arrived_at), config.theme.messages.time);
 
-    let (from, from_color) = names.resolve(msg.from_id);
+    let (from, from_user_style) = names.resolve(msg.from_id);
 
     let from_width = from.width();
-    let from = Span::styled(from.into_owned(), Style::default().fg(from_color));
+    let from = Span::styled(from.into_owned(), from_user_style.username);
     let delimiter = Span::from(": ");
 
     // collect message text
@@ -553,6 +557,7 @@ fn display_message(
                         vec![
                             receipt.clone(),
                             time.clone(),
+                            Span::from(" "),
                             from.clone(),
                             delimiter.clone(),
                             Span::styled(
@@ -569,11 +574,7 @@ fn display_message(
     }
 
     let add_time = quote_text.is_none();
-    let message_style = if colored_messages {
-        Style::default().fg(from_color)
-    } else {
-        Style::default()
-    };
+    let message_style = from_user_style.message;
 
     const DELIMITER_WIDTH: usize = 2;
     let first_line_prefix = " ".repeat(prefix.len() + from_width + DELIMITER_WIDTH);
@@ -590,6 +591,7 @@ fn display_message(
         spans.push(Line::from(vec![
             receipt,
             time,
+            Span::from(" "),
             from,
             delimiter,
             Span::styled(line, message_style),
@@ -847,6 +849,8 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 
 #[cfg(test)]
 mod tests {
+    use crate::config::User;
+    use crate::config::theme::UserStyle;
     use crate::data::{AssociatedValue, BodyRange};
     use crate::signal::Attachment;
 
@@ -868,8 +872,18 @@ mod tests {
         }
     }
 
+    fn test_config() -> Config {
+        Config::with_user(User {
+            display_name: String::from("boxdot"),
+        })
+    }
+
     fn name_resolver() -> NameResolver<'static> {
-        NameResolver::single_user(USER_ID, "boxdot".to_string(), Color::Green)
+        NameResolver::single_user(
+            USER_ID,
+            "boxdot".to_string(),
+            UserStyle::from_color(Color::Green),
+        )
     }
 
     fn test_message() -> Message {
@@ -904,16 +918,17 @@ mod tests {
             ShowReceipt::Never,
             None,
             None,
-            false,
+            &test_config(),
         );
 
         let expected = ListItem::new(Text::from(vec![
             Line::from(vec![
-                Span::styled("", Style::default().fg(Color::Yellow)),
+                Span::default(),
                 Span::styled(
                     display_time(msg.arrived_at),
                     Style::default().fg(Color::Yellow),
                 ),
+                Span::styled(" ", Style::default()),
                 Span::styled("boxdot", Style::default().fg(Color::Green)),
                 Span::raw(": "),
                 Span::raw("<file:///tmp/gurk/signal-2022-01-"),
@@ -942,16 +957,17 @@ mod tests {
             ShowReceipt::Never,
             None,
             None,
-            false,
+            &test_config(),
         );
 
         let expected = ListItem::new(Text::from(vec![
             Line::from(vec![
-                Span::styled("", Style::default().fg(Color::Yellow)),
+                Span::default(),
                 Span::styled(
                     display_time(msg.arrived_at),
                     Style::default().fg(Color::Yellow),
                 ),
+                Span::styled(" ", Style::default()),
                 Span::styled("boxdot", Style::default().fg(Color::Green)),
                 Span::raw(": "),
                 Span::raw("Hello, World!"),
@@ -984,7 +1000,7 @@ mod tests {
             show_receipt,
             None,
             None,
-            false,
+            &test_config(),
         );
 
         let expected = ListItem::new(Text::from(vec![Line::from(vec![
@@ -993,6 +1009,7 @@ mod tests {
                 display_time(msg.arrived_at),
                 Style::default().fg(Color::Yellow),
             ),
+            Span::styled(" ", Style::default()),
             Span::styled("boxdot", Style::default().fg(Color::Green)),
             Span::raw(": "),
             Span::raw("Hello, World!"),
@@ -1018,7 +1035,7 @@ mod tests {
             show_receipt,
             None,
             None,
-            false,
+            &test_config(),
         );
 
         let expected = ListItem::new(Text::from(vec![Line::from(vec![
@@ -1027,6 +1044,7 @@ mod tests {
                 display_time(msg.arrived_at),
                 Style::default().fg(Color::Yellow),
             ),
+            Span::styled(" ", Style::default()),
             Span::styled("boxdot", Style::default().fg(Color::Green)),
             Span::raw(": "),
             Span::raw("Hello, World!"),
@@ -1052,7 +1070,7 @@ mod tests {
             show_receipt,
             None,
             None,
-            false,
+            &test_config(),
         );
 
         let expected = ListItem::new(Text::from(vec![Line::from(vec![
@@ -1061,6 +1079,7 @@ mod tests {
                 display_time(msg.arrived_at),
                 Style::default().fg(Color::Yellow),
             ),
+            Span::styled(" ", Style::default()),
             Span::styled("boxdot", Style::default().fg(Color::Green)),
             Span::raw(": "),
             Span::raw("Hello, World!"),
@@ -1086,15 +1105,16 @@ mod tests {
             show_receipt,
             None,
             None,
-            false,
+            &test_config(),
         );
 
         let expected = ListItem::new(Text::from(vec![Line::from(vec![
-            Span::styled("", Style::default().fg(Color::Yellow)),
+            Span::default(),
             Span::styled(
                 display_time(msg.arrived_at),
                 Style::default().fg(Color::Yellow),
             ),
+            Span::styled(" ", Style::default()),
             Span::styled("boxdot", Style::default().fg(Color::Green)),
             Span::raw(": "),
             Span::raw("Hello, World!"),
@@ -1105,7 +1125,11 @@ mod tests {
     #[test]
     fn test_display_receipts_for_incoming_message() {
         let user_id = Uuid::from_u128(1);
-        let names = NameResolver::single_user(user_id, "boxdot".to_string(), Color::Green);
+        let names = NameResolver::single_user(
+            user_id,
+            "boxdot".to_string(),
+            UserStyle::from_color(Color::Green),
+        );
         let msg = Message {
             from_id: user_id,
             message: Some("Hello, World!".into()),
@@ -1122,15 +1146,16 @@ mod tests {
             show_receipt,
             None,
             None,
-            false,
+            &test_config(),
         );
 
         let expected = ListItem::new(Text::from(vec![Line::from(vec![
-            Span::styled("  ", Style::default().fg(Color::Yellow)),
+            Span::raw("  "),
             Span::styled(
                 display_time(msg.arrived_at),
                 Style::default().fg(Color::Yellow),
             ),
+            Span::styled(" ", Style::default()),
             Span::styled("boxdot", Style::default().fg(Color::Green)),
             Span::raw(": "),
             Span::raw("Hello, World!"),
@@ -1141,7 +1166,11 @@ mod tests {
     #[test]
     fn test_display_mention() {
         let user_id = Uuid::from_u128(1);
-        let names = NameResolver::single_user(user_id, "boxdot".to_string(), Color::Green);
+        let names = NameResolver::single_user(
+            user_id,
+            "boxdot".to_string(),
+            UserStyle::from_color(Color::Green),
+        );
         let msg = Message {
             from_id: user_id,
             message: Some("Mention ￼  and even more ￼ . End".into()),
@@ -1170,16 +1199,17 @@ mod tests {
             show_receipt,
             None,
             None,
-            false,
+            &test_config(),
         );
 
         let expected = ListItem::new(Text::from(vec![
             Line::from(vec![
-                Span::styled("  ", Style::default().fg(Color::Yellow)),
+                Span::raw("  "),
                 Span::styled(
                     display_time(msg.arrived_at),
                     Style::default().fg(Color::Yellow),
                 ),
+                Span::styled(" ", Style::default()),
                 Span::styled("boxdot", Style::default().fg(Color::Green)),
                 Span::raw(": "),
                 Span::raw("Mention @boxdot  and even more"),
@@ -1208,16 +1238,17 @@ mod tests {
             ShowReceipt::Never,
             None,
             None,
-            false,
+            &test_config(),
         );
 
         let expected = ListItem::new(Text::from(vec![
             Line::from(vec![
-                Span::styled("", Style::default().fg(Color::Yellow)),
+                Span::default(),
                 Span::styled(
                     display_time(msg.arrived_at),
                     Style::default().fg(Color::Yellow),
                 ),
+                Span::styled(" ", Style::default()),
                 Span::styled("boxdot", Style::default().fg(Color::Green)),
                 Span::raw(": "),
                 Span::raw("This is a very long message that"),
@@ -1247,17 +1278,18 @@ mod tests {
             ShowReceipt::Never,
             None,
             Some(division.clone()),
-            false,
+            &test_config(),
         );
 
         let expected = ListItem::new(Text::from(vec![
             Line::from(division),
             Line::from(vec![
-                Span::styled("", Style::default().fg(Color::Yellow)),
+                Span::default(),
                 Span::styled(
                     display_time(msg.arrived_at),
                     Style::default().fg(Color::Yellow),
                 ),
+                Span::styled(" ", Style::default()),
                 Span::styled("boxdot", Style::default().fg(Color::Green)),
                 Span::raw(": "),
                 Span::raw("Hello, World!"),
