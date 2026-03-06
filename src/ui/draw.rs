@@ -94,7 +94,7 @@ fn draw_select_channel_popup(f: &mut Frame, select_channel: &mut SelectChannel) 
     }
     let list = List::new(items)
         .block(Block::default().borders(Borders::ALL))
-        .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray));
+        .highlight_style(Style::default().reversed());
     f.render_stateful_widget(list, chunks[1], &mut select_channel.state);
 }
 
@@ -131,7 +131,7 @@ fn draw_channels(f: &mut Frame, app: &mut App, area: Rect) {
 
     let channels = List::new(channels)
         .block(Block::default().borders(Borders::ALL).title("Channels"))
-        .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray));
+        .highlight_style(Style::default().reversed());
     let no_channels = channels.is_empty();
     f.render_stateful_widget(channels, area, &mut app.channels.state);
 
@@ -420,7 +420,7 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
 
     let list = List::new(items)
         .block(Block::default().title(title).borders(Borders::ALL))
-        .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray))
+        .highlight_style(Style::default().reversed())
         .direction(ListDirection::BottomToTop);
 
     // re-borrow channel messages mutably

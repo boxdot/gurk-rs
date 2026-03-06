@@ -100,7 +100,7 @@ const USER_COLORS: &[Color] = &[
     Color::Blue,
     Color::Magenta,
     Color::Cyan,
-    Color::Gray,
+    Color::Reset,
 ];
 
 // Randomly but deterministically choose a color for a username
