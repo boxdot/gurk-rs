@@ -56,6 +56,7 @@ impl App {
                                     attachments: attachment_pointers,
                                     sticker,
                                     body_ranges,
+                                    reaction: None,
                                     ..
                                 }),
                             ..
@@ -88,7 +89,8 @@ impl App {
                                         Some(Reaction {
                                             emoji: Some(emoji),
                                             remove,
-                                            target_author_aci: Some(target_author_uuid),
+                                            target_author_aci: ref target_author_aci_str,
+                                            ref target_author_aci_binary,
                                             target_sent_timestamp: Some(target_sent_timestamp),
                                             ..
                                         }),
@@ -109,7 +111,12 @@ impl App {
                 } else if let Some(uuid) = parse_uuid(dest_str.as_deref(), dest_binary.as_deref()) {
                     ChannelId::User(uuid)
                 } else {
-                    ChannelId::User(target_author_uuid.parse()?)
+                    let uuid = parse_uuid(
+                        target_author_aci_str.as_deref(),
+                        target_author_aci_binary.as_deref(),
+                    )
+                    .context("missing target author ACI in sync reaction")?;
+                    ChannelId::User(uuid)
                 };
 
                 let channel_muted = self
@@ -147,7 +154,8 @@ impl App {
                             emoji: Some(emoji),
                             remove,
                             target_sent_timestamp: Some(target_sent_timestamp),
-                            target_author_aci: Some(target_author_uuid),
+                            target_author_aci: ref target_author_aci_str,
+                            ref target_author_aci_binary,
                             ..
                         }),
                     ..
@@ -161,7 +169,12 @@ impl App {
                     ChannelId::from_master_key_bytes(master_key)?
                 } else if sender.raw_uuid() == self.user_id {
                     // reaction from us => target author is the user channel
-                    ChannelId::User(target_author_uuid.parse()?)
+                    let uuid = parse_uuid(
+                        target_author_aci_str.as_deref(),
+                        target_author_aci_binary.as_deref(),
+                    )
+                    .context("missing target author ACI in reaction")?;
+                    ChannelId::User(uuid)
                 } else {
                     // reaction is from somebody else => they are the user channel
                     ChannelId::User(sender.raw_uuid())
@@ -203,6 +216,7 @@ impl App {
                                     attachments: attachment_pointers,
                                     sticker,
                                     body_ranges,
+                                    reaction: None,
                                     ..
                                 }),
                             ..
