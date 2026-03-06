@@ -1,5 +1,5 @@
 # gurk 🥒
-[![ci][ci-badge]][ci-link] [![chat][chat-badge]][chat-link]
+[![ci][ci-badge]][ci-link] [![chat][chat-badge]][chat-link] [![ko-fi][ko-fi-badge]][ko-fi-link]
 
 [Signal Messenger] client for terminal.
 
@@ -225,3 +225,5 @@ shall be licensed as above, without any additional terms or conditions.
 [config-location]: https://docs.rs/dirs/3.0.2/dirs/fn.config_dir.html
 [Releases]: https://github.com/boxdot/gurk-rs/releases
 [`protoc`]: https://github.com/protocolbuffers/protobuf?tab=readme-ov-file#protobuf-compiler-installation
+[ko-fi-badge]: https://img.shields.io/badge/Ko--fi-F16061?logo=ko-fi&logoColor=white
+[ko-fi-link]: https://ko-fi.com/boxdot
