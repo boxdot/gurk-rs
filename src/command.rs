@@ -221,8 +221,6 @@ pub enum Command {
     DeleteCharacter(MoveDirection),
     #[strum(props(desc = "Edit selected message"))]
     EditMessage,
-    #[strum(props(desc = "Try to open the first url in the selected message"))]
-    OpenUrl,
     #[strum(props(desc = "Try to open the first file attachment of the selected message"))]
     OpenFile,
     #[strum(props(desc = "Toggle mute for the selected channel"))]

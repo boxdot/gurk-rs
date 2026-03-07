@@ -17,9 +17,9 @@ use crate::command::{
 };
 use crate::data::Message;
 use crate::storage::MessageId;
-use crate::util::{ATTACHMENT_REGEX, URL_REGEX};
+use crate::util::ATTACHMENT_REGEX;
 
-use super::{App, HandleReactionOptions, open_file, open_url, to_emoji};
+use super::{App, HandleReactionOptions, open_file, to_emoji};
 
 impl App {
     async fn on_command(&mut self, command: Command) -> anyhow::Result<()> {
@@ -77,9 +77,6 @@ impl App {
                     self.add_reaction(idx, reaction).await;
                 }
             }
-            Command::OpenUrl => {
-                self.try_open_url();
-            }
             Command::OpenFile => {
                 self.try_open_file();
             }
@@ -124,7 +121,7 @@ impl App {
                             }
                         } else {
                             // input is empty
-                            self.try_open_url_or_file();
+                            self.try_open_file();
                         }
                     } else if self.select_channel.is_shown
                         && let Some(channel_id) = self.select_channel.selected_channel_id().copied()
@@ -150,20 +147,6 @@ impl App {
             }
         }
         Ok(())
-    }
-
-    fn try_open_url_or_file(&mut self) -> Option<()> {
-        self.try_open_url().or_else(|| self.try_open_file())
-    }
-
-    /// Tries to open the first url in the selected message.
-    ///
-    /// Does nothing if no message is selected and no url is contained in the message.
-    fn try_open_url(&mut self) -> Option<()> {
-        let message = self.selected_message()?;
-        open_url(&message, &URL_REGEX)?;
-        self.reset_message_selection();
-        Some(())
     }
 
     /// Tries to open the first file attachment in the selected message.
