@@ -6,7 +6,6 @@ use std::path::Path;
 
 use anyhow::Context as _;
 use itertools::Itertools;
-use regex::Regex;
 use tokio::sync::mpsc;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
@@ -319,21 +318,6 @@ pub fn to_emoji(s: &str) -> Option<&str> {
         let s = s.strip_prefix(':')?.strip_suffix(':')?;
         Some(emojis::get_by_shortcode(s)?.as_str())
     }
-}
-
-pub(super) fn open_url(message: &Message, url_regex: &Regex) -> Option<()> {
-    let text = message.message.as_ref()?;
-    let m = url_regex.find(text)?;
-    let url = m.as_str();
-    let result = if let Some(path) = url.strip_prefix("file://") {
-        opener::open(Path::new(path))
-    } else {
-        opener::open(url)
-    };
-    if let Err(error) = result {
-        error!(url, %error, "failed to open");
-    }
-    Some(())
 }
 
 pub(super) fn open_file(message: &Message) -> Option<()> {

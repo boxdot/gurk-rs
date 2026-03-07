@@ -113,15 +113,6 @@ pub fn is_phone_number(s: impl AsRef<str>) -> bool {
 }
 
 // Based on Alacritty, APACHE-2.0 License
-pub(crate) static URL_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        "(ipfs:|ipns:|magnet:|mailto:|gemini:|gopher:|https:|http:|news:|file:|git:|ssh:|ftp:)\
-     [^\u{0000}-\u{001F}\u{007F}-\u{009F}<>\"\\s{-}\\^⟨⟩`]+",
-    )
-    .unwrap()
-});
-
-// Based on Alacritty, APACHE-2.0 License
 pub(crate) static ATTACHMENT_REGEX: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new("file:[^\u{0000}-\u{001F}\u{007F}-\u{009F}<>\"\\s{-}\\^⟨⟩`]+").unwrap()
 });
