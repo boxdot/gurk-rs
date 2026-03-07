@@ -1,5 +1,4 @@
 use std::{
-    borrow::Cow,
     path::{Path, PathBuf},
     sync::LazyLock,
 };
@@ -88,26 +87,29 @@ static INVALID_CHARS: LazyLock<Regex> =
 
 fn derive_name(file_name: Option<String>, digest: &[u8], mime: &Mime) -> String {
     if let Some(name) = file_name {
-        match INVALID_CHARS.replace_all(&name, "-") {
-            Cow::Owned(name) => name,
-            Cow::Borrowed(_) => name,
+        let sanitized = INVALID_CHARS.replace_all(&name, "-");
+        // Take only the final path component to prevent directory traversal.
+        if let Some(filename) = Path::new(sanitized.as_ref()).file_name() {
+            let filename = filename.to_string_lossy().into_owned();
+            if !filename.is_empty() {
+                return filename;
+            }
         }
-    } else {
-        let mut name = hex::encode(&digest[..DIGEST_BYTES_LEN]);
-        let extension = if mime == &IMAGE_JPEG {
-            // special case due to: <https://github.com/abonander/mime_guess/issues/59>
-            Some("jpeg")
-        } else if mime == &APPLICATION_OCTET_STREAM {
-            None
-        } else {
-            get_mime_extensions(mime).and_then(|extensions| extensions.first().copied())
-        };
-        if let Some(extension) = extension {
-            name.push('.');
-            name.push_str(extension);
-        };
-        name
     }
+    let mut name = hex::encode(&digest[..DIGEST_BYTES_LEN]);
+    let extension = if mime == &IMAGE_JPEG {
+        // special case due to: <https://github.com/abonander/mime_guess/issues/59>
+        Some("jpeg")
+    } else if mime == &APPLICATION_OCTET_STREAM {
+        None
+    } else {
+        get_mime_extensions(mime).and_then(|extensions| extensions.first().copied())
+    };
+    if let Some(extension) = extension {
+        name.push('.');
+        name.push_str(extension);
+    };
+    name
 }
 
 #[cfg(test)]
@@ -226,6 +228,27 @@ mod tests {
                 &IMAGE_JPEG,
             ),
             "Screenshot-2000-00-00-at-12.00.00.png"
+        );
+    }
+
+    #[test]
+    fn test_derive_name_path_traversal() {
+        let digest = hex!("d51e9a355d4351ae5fbf2846d18bb384471555aa0ea6ee9075eb63f99ecddf77");
+
+        // directory traversal in filename must be stripped to just the final component
+        assert_eq!(
+            derive_name(Some("../../evil.sh".to_owned()), &digest, &IMAGE_JPEG),
+            "evil.sh"
+        );
+        // absolute path must be stripped
+        assert_eq!(
+            derive_name(Some("/etc/passwd".to_owned()), &digest, &IMAGE_JPEG),
+            "passwd"
+        );
+        // bare ".." has no file_name component -> fall back to digest-based name
+        assert_eq!(
+            derive_name(Some("..".to_owned()), &digest, &IMAGE_JPEG),
+            "d51e9a35.jpeg"
         );
     }
 }
