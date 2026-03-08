@@ -96,6 +96,11 @@ sha2 = "0.10.8"
 strip-ansi-escapes = "0.2.1"
 dialoguer = "0.12.0"
 zeroize = { version = "1.8.1", features = ["derive", "serde"] }
+ratatui-image = { version = "10.0.6", default-features = false, features = [
+    "tokio",
+    "image-defaults",
+    "crossterm",
+] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "3.2.0"

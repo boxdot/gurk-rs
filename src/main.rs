@@ -25,6 +25,7 @@ use gurk::{
 use gurk::{signal, ui};
 use presage::libsignal_service::content::Content;
 use ratatui::{Terminal, backend::CrosstermBackend};
+use ratatui_image::picker::Picker;
 use tokio::{runtime, select};
 use tokio_stream::StreamExt;
 use tracing::{debug, error, info};
@@ -146,6 +147,21 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
     let (mut app, mut app_events) = App::try_new(config, signal_manager.clone_boxed(), storage)?;
     app.populate_names_cache().await;
 
+    enable_raw_mode()?;
+    let _raw_mode_guard = scopeguard::guard((), |_| {
+        disable_raw_mode().unwrap();
+    });
+
+    let mut stdout = std::io::stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+    terminal.clear()?;
+
+    let picker = Picker::from_query_stdio()?;
+    info!(capabilities = ?picker.capabilities(), "terminal image capabilities");
+
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Event>(100);
     tokio::spawn({
         let tx = tx.clone();
@@ -208,18 +224,6 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
         }
     });
 
-    enable_raw_mode()?;
-    let _raw_mode_guard = scopeguard::guard((), |_| {
-        disable_raw_mode().unwrap();
-    });
-
-    let mut stdout = std::io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
-    terminal.clear()?;
-
     let mut res = Ok(()); // result on quit
     let mut last_render_at = Instant::now();
     let mut last_save_at = Instant::now();
@@ -257,8 +261,35 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
                 });
             }
         } else {
-            terminal.draw(|f| ui::draw(f, &mut app))?;
+            terminal.draw(|f| ui::draw(f, &mut app, &picker))?;
             last_render_at = Instant::now();
+
+            // Spawn background tasks for any images queued during rendering.
+            let pending = std::mem::take(&mut app.pending_image_loads);
+            for path in pending {
+                let picker = picker.clone();
+                let event_tx = app.event_tx();
+                let (font_w, font_h) = picker.font_size();
+                tokio::task::spawn_blocking(move || {
+                    use gurk::ui::image_width_columns;
+                    use ratatui::layout::Rect;
+                    use ratatui_image::Resize;
+                    let result = image::open(&path).ok().and_then(|img| {
+                        let width = image_width_columns(img.width(), img.height(), font_w, font_h);
+                        let rect = Rect {
+                            x: 0,
+                            y: 0,
+                            width,
+                            height: gurk::ui::IMAGE_HEIGHT_ROWS as u16,
+                        };
+                        picker
+                            .new_protocol(img, rect, Resize::Fit(None))
+                            .ok()
+                            .map(|p| (p, rect))
+                    });
+                    let _ = event_tx.send(gurk::event::Event::ImageLoaded { path, result });
+                });
+            }
         }
 
         let event = select! {

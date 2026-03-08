@@ -8,5 +8,6 @@ mod name_resolver;
 
 pub use coords::coords_within_channels_view;
 pub use draw::draw;
+pub use draw::{IMAGE_HEIGHT_ROWS, image_width_columns};
 
 pub const CHANNEL_VIEW_RATIO: u32 = 4;

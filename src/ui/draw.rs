@@ -1,6 +1,6 @@
 //! Draw the UI
 
-use std::fmt;
+use std::{fmt, iter, path::PathBuf};
 
 use chrono::Datelike;
 use itertools::Itertools;
@@ -15,6 +15,8 @@ use ratatui::{
     style::{Color, Modifier, Style},
     widgets::Wrap,
 };
+use ratatui_image::picker::Picker;
+use ratatui_image::Image;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use uuid::Uuid;
 
@@ -30,8 +32,18 @@ use crate::util::utc_timestamp_msec_to_local;
 use super::CHANNEL_VIEW_RATIO;
 use super::name_resolver::NameResolver;
 
+/// Number of rows to display for an image
+pub const IMAGE_HEIGHT_ROWS: usize = 10;
+
+/// Images to display in a message
+struct MessageImages {
+    paths: Vec<PathBuf>,
+    /// Row within the ListItem of the message where the image placeholder starts.
+    line_offset: u16,
+}
+
 /// The main function drawing the UI for each frame
-pub fn draw(f: &mut Frame, app: &mut App) {
+pub fn draw(f: &mut Frame, app: &mut App, _picker: &Picker) {
     if app.is_help() {
         // Display shortcut panel
         let chunks = Layout::default()
@@ -48,18 +60,15 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
     let chunks = if app.is_channel_list_shown() {
         Layout::default()
-            .constraints(
-                [
-                    Constraint::Ratio(1, CHANNEL_VIEW_RATIO),
-                    Constraint::Ratio(3, CHANNEL_VIEW_RATIO),
-                ]
-                .as_ref(),
-            )
+            .constraints([
+                Constraint::Ratio(1, CHANNEL_VIEW_RATIO),
+                Constraint::Ratio(3, CHANNEL_VIEW_RATIO),
+            ])
             .direction(Direction::Horizontal)
             .split(f.area())
     } else {
         Layout::default()
-            .constraints([Constraint::Percentage(100)].as_ref())
+            .constraints([Constraint::Percentage(100)])
             .direction(Direction::Horizontal)
             .split(f.area())
     };
@@ -79,7 +88,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 fn draw_select_channel_popup(f: &mut Frame, select_channel: &mut SelectChannel) {
     let area = centered_rect(60, 60, f.area());
     let chunks = Layout::default()
-        .constraints([Constraint::Length(1 + 2), Constraint::Min(0)].as_ref())
+        .constraints([Constraint::Length(1 + 2), Constraint::Min(0)])
         .direction(Direction::Vertical)
         .split(area);
     f.render_widget(Clear, area);
@@ -210,13 +219,10 @@ fn draw_chat(f: &mut Frame, app: &mut App, area: Rect) {
         wrap(&app.input.data, app.input.cursor.clone(), text_width);
 
     let chunks = Layout::default()
-        .constraints(
-            [
-                Constraint::Min(0),
-                Constraint::Length(num_input_lines as u16 + 2),
-            ]
-            .as_ref(),
-        )
+        .constraints([
+            Constraint::Min(0),
+            Constraint::Length(num_input_lines as u16 + 2),
+        ])
         .direction(Direction::Vertical)
         .split(area);
 
@@ -400,27 +406,39 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     let mut items_height = 0;
     let selected = messages.state.selected().unwrap_or(0);
 
-    let mut items: Vec<ListItem<'static>> = messages_from_offset
-        .enumerate()
-        .take_while(|(idx, item)| {
-            items_height += item.height();
-            items_height <= height || offset + *idx <= selected
-        })
-        .map(|(_, item)| item)
-        .collect();
+    // Collect all items, their heights, and inline images
+    let mut items: Vec<ListItem<'static>> = Vec::new();
+    let mut item_heights: Vec<u16> = Vec::new();
+    let mut inline_messages: Vec<Option<MessageImages>> = Vec::new();
 
-    // calculate the new offset by counting the messages down:
-    // we known that we either stopped at the last fitting message or at the selected message
-    let mut items_height = height;
-    let mut first_idx = 0;
-    for (idx, item) in items.iter().enumerate().rev() {
-        if item.height() <= items_height {
-            items_height -= item.height();
-            first_idx = idx;
-        } else {
+    for (idx, (item, images)) in messages_from_offset.enumerate() {
+        let item_height = item.height();
+        item_heights.push(item_height as u16);
+        items.push(item);
+        inline_messages.push(images);
+        items_height += item_height;
+        if height < items_height && selected < offset + idx {
             break;
         }
     }
+
+    // calculate the new offset by counting the messages down:
+    // we known that we either stopped at the last fitting message or at the selected message
+    let first_idx = if messages.state.selected().is_some() {
+        let mut items_height = height;
+        let mut first_idx = 0;
+        for (idx, item) in items.iter().enumerate().rev() {
+            if item.height() <= items_height {
+                items_height -= item.height();
+                first_idx = idx;
+            } else {
+                break;
+            }
+        }
+        first_idx
+    } else {
+        0
+    };
     let offset = offset + first_idx;
     items = items.split_off(first_idx);
 
@@ -435,7 +453,7 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
 
     let list = List::new(items)
         .block(Block::default().title(title).borders(Borders::ALL))
-        .highlight_style(Style::default().reversed())
+        .highlight_style(Style::default().fg(Color::Black).bg(Color::Gray))
         .direction(ListDirection::BottomToTop);
 
     // re-borrow channel messages mutably
@@ -448,7 +466,7 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     let state = &mut messages.state;
     let selected_global = state.selected();
     if let Some(selected) = selected_global {
-        state.select(Some(selected - offset));
+        state.select(Some(selected.saturating_sub(offset)));
     }
 
     f.render_stateful_widget(list, area, state);
@@ -456,6 +474,88 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     // restore selected state and update offset
     state.select(selected_global);
     messages.rendered.offset = offset;
+
+    // Render images
+    let inner_left = area.x + 1;
+    let inner_top = area.y + 1;
+    let inner_width = area.width.saturating_sub(2);
+    let inner_bottom = area.y + area.height.saturating_sub(2);
+
+    // cumulative y position of the rendered items from the bottom
+    let mut cumulative_y = 0;
+
+    for (&item_height, message_images) in item_heights[first_idx..]
+        .iter()
+        .zip(&inline_messages[first_idx..])
+    {
+        if let Some(message_images) = message_images {
+            // there are images to render
+            let item_top = inner_bottom
+                .saturating_sub(cumulative_y)
+                .saturating_sub(item_height)
+                .saturating_add(1);
+            let image_y = item_top + message_images.line_offset as u16;
+            if image_y >= inner_top {
+                // image fits
+                let mut cumulative_x = inner_left;
+                use crate::app::ImageCacheEntry;
+                let placeholder_w = inner_width / message_images.paths.len().max(1) as u16;
+                for path in &message_images.paths {
+                    // Determine width and whether a rebuild is needed (no borrows held).
+                    let (width, needs_queue) = match app.image_cache.get(path) {
+                        Some(ImageCacheEntry::Ready(_, rect)) => (rect.width, false),
+                        Some(ImageCacheEntry::Loading) | Some(ImageCacheEntry::Failed) => {
+                            (placeholder_w, false)
+                        }
+                        None => (placeholder_w, true),
+                    };
+
+                    if needs_queue {
+                        app.image_cache
+                            .insert(path.clone(), ImageCacheEntry::Loading);
+                        app.pending_image_loads.push(path.clone());
+                    }
+
+                    let img_rect = Rect {
+                        x: cumulative_x,
+                        y: image_y,
+                        width,
+                        height: IMAGE_HEIGHT_ROWS as u16,
+                    };
+
+                    // If ready but dimensions changed, re-queue for rebuild.
+                    let needs_rebuild = matches!(
+                        app.image_cache.get(path),
+                        Some(ImageCacheEntry::Ready(_, r))
+                            if r.width != img_rect.width || r.height != img_rect.height
+                    );
+                    if needs_rebuild {
+                        app.image_cache
+                            .insert(path.clone(), ImageCacheEntry::Loading);
+                        app.pending_image_loads.push(path.clone());
+                    }
+
+                    if let Some(ImageCacheEntry::Ready(protocol, _)) = app.image_cache.get(path) {
+                        f.render_widget(Image::new(protocol), img_rect);
+                    }
+
+                    cumulative_x += width;
+                    if cumulative_x >= inner_left + inner_width {
+                        break;
+                    }
+                }
+            }
+        }
+
+        cumulative_y += item_height;
+    }
+}
+
+/// Returns the width of an image in columns given the image dimensions in px and font size.
+pub fn image_width_columns(img_w: u32, img_h: u32, font_w: u16, font_h: u16) -> u16 {
+    let target_h_px = IMAGE_HEIGHT_ROWS as u64 * font_h as u64;
+    let target_w_px = img_w as u64 * target_h_px / img_h.max(1) as u64;
+    (target_w_px / font_w.max(1) as u64).max(1) as u16
 }
 
 fn display_time(timestamp: u64) -> String {
@@ -502,6 +602,7 @@ fn display_receipt(receipt: Receipt, show: ShowReceipt) -> &'static str {
     }
 }
 
+/// Returns the ListItem for the message and the images to display in the message, if any.
 #[allow(clippy::too_many_arguments)]
 fn display_message(
     names: &NameResolver,
@@ -513,7 +614,18 @@ fn display_message(
     date_division: Option<String>,
     unread_messages_division: Option<String>,
     colored_messages: bool,
-) -> Option<ListItem<'static>> {
+) -> Option<(ListItem<'static>, Option<MessageImages>)> {
+    let image_attachments = msg
+        .attachments
+        .iter()
+        .filter_map(|attachment| {
+            attachment
+                .content_type
+                .starts_with("image/")
+                .then(|| attachment.filename.clone())
+        })
+        .collect::<Vec<_>>();
+
     let receipt = Span::styled(
         display_receipt(msg.receipt, show_receipt),
         Style::default().fg(Color::Yellow),
@@ -534,8 +646,8 @@ fn display_message(
     let text = strip_ansi_escapes::strip_str(msg.message.as_deref().unwrap_or_default());
     let mut text = replace_mentions(msg, names, text);
     add_attachments(msg, &mut text);
-    if text.is_empty() {
-        return None; // no text => nothing to render
+    if text.is_empty() && image_attachments.is_empty() {
+        return None; // no text and no image attachments => nothing to render
     }
     add_reactions(msg, &mut text);
     add_edited(msg, &mut text);
@@ -629,7 +741,22 @@ fn display_message(
         spans.resize(height - 1, Line::from(""));
         spans.push(Line::from(format!("{prefix}[...]")));
     }
-    Some(ListItem::new(Text::from(spans)))
+
+    // Add image placeholders
+    let message_images = if !image_attachments.is_empty() {
+        let line_offset = spans.len() as u16;
+        spans.extend(iter::repeat_n(Line::from(""), IMAGE_HEIGHT_ROWS));
+        Some(MessageImages {
+            paths: image_attachments,
+            line_offset,
+        })
+    } else {
+        None
+    };
+
+    let list_item = ListItem::new(Text::from(spans));
+
+    Some((list_item, message_images))
 }
 
 fn replace_mentions(msg: &Message, names: &NameResolver, text: String) -> String {
@@ -638,7 +765,7 @@ fn replace_mentions(msg: &Message, names: &NameResolver, text: String) -> String
     }
 
     let ac = aho_corasick::AhoCorasickBuilder::new()
-        .build(std::iter::repeat_n("￼", msg.body_ranges.len())) // TODO: cache
+        .build(iter::repeat_n("￼", msg.body_ranges.len())) // TODO: cache
         .expect("failed to build obj replacer");
     let mut buf = String::with_capacity(text.len());
     let mut ranges = msg.body_ranges.iter();
@@ -684,20 +811,15 @@ fn add_attachments(msg: &Message, out: &mut String) {
         if !out.is_empty() {
             out.push('\n');
         }
-
-        fmt::write(
-            out,
-            format_args!(
-                "{}",
-                msg.attachments
-                    .iter()
-                    .format_with("\n", |attachment, f| f(&format_args!(
-                        "<file://{}>",
-                        attachment.filename.display()
-                    )))
-            ),
-        )
-        .expect("formatting attachments failed");
+        let attachments = msg
+            .attachments
+            .iter()
+            // Skip images; they will displayed visually
+            .filter(|attachment| !attachment.content_type.starts_with("image/"))
+            .format_with("\n", |attachment, f| {
+                f(&format_args!("<file://{}>", attachment.filename.display()))
+            });
+        fmt::write(out, format_args!("{attachments}")).expect("formatting attachments failed");
     }
 }
 
@@ -837,26 +959,20 @@ fn displayed_quote(names: &NameResolver, quote: &Message) -> Option<String> {
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Percentage((100 - percent_y) / 2),
-                Constraint::Percentage(percent_y),
-                Constraint::Percentage((100 - percent_y) / 2),
-            ]
-            .as_ref(),
-        )
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
         .split(r);
 
     Layout::default()
         .direction(Direction::Horizontal)
-        .constraints(
-            [
-                Constraint::Percentage((100 - percent_x) / 2),
-                Constraint::Percentage(percent_x),
-                Constraint::Percentage((100 - percent_x) / 2),
-            ]
-            .as_ref(),
-        )
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
         .split(popup_layout[1])[1]
 }
 
