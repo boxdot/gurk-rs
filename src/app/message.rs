@@ -137,7 +137,7 @@ impl App {
                 .await;
                 read.into_iter().for_each(|r| {
                     self.handle_receipt(
-                        r.parse_sender_aci().unwrap_or_default(),
+                        r.parse_sender_aci().map(Into::into).unwrap_or_default(),
                         Receipt::Read,
                         vec![r.timestamp.unwrap()],
                     );
