@@ -2,14 +2,18 @@ use std::borrow::Cow;
 use std::cell::Cell;
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 use anyhow::Context as _;
 use itertools::Itertools;
+use ratatui::layout::Rect;
 use regex::Regex;
 use tokio::sync::mpsc;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
+
+use ratatui_image::protocol::Protocol;
 
 use crate::channels::SelectChannel;
 use crate::command::{ModeKeybinding, get_keybindings};
@@ -50,6 +54,20 @@ pub struct App {
     // It is expensive to hit the signal manager contacts storage, so we cache it
     names_cache: Cell<Option<BTreeMap<Uuid, String>>>,
     pub mode_keybindings: ModeKeybinding,
+    /// Cache of image protocols keyed by file path.
+    pub image_cache: HashMap<PathBuf, ImageCacheEntry>,
+    /// Paths that need background loading on the next event-loop iteration.
+    pub pending_image_loads: Vec<PathBuf>,
+}
+
+/// State of a cached image.
+pub enum ImageCacheEntry {
+    /// Load dispatched but not yet complete.
+    Loading,
+    /// Load failed permanently.
+    Failed,
+    /// Successfully encoded for a given rect. Rebuild when rect dimensions change.
+    Ready(Protocol, Rect),
 }
 
 impl App {
@@ -112,6 +130,8 @@ impl App {
             event_tx,
             names_cache: Default::default(),
             mode_keybindings,
+            image_cache: HashMap::new(),
+            pending_image_loads: Vec::new(),
         };
         Ok((app, event_rx))
     }
@@ -265,6 +285,10 @@ impl App {
         self.show_channel_list = !self.show_channel_list;
     }
 
+    pub fn event_tx(&self) -> mpsc::UnboundedSender<Event> {
+        self.event_tx.clone()
+    }
+
     pub fn handle_event(&mut self, event: Event) -> anyhow::Result<()> {
         match event {
             Event::SentTextResult { message_id, result } => {
@@ -277,6 +301,13 @@ impl App {
                     message.send_failed = Some(error.to_string());
                     self.storage.store_message(message_id.channel_id, message);
                 }
+            }
+            Event::ImageLoaded { path, result } => {
+                let entry = match result {
+                    Some((protocol, rect)) => ImageCacheEntry::Ready(protocol, rect),
+                    None => ImageCacheEntry::Failed,
+                };
+                self.image_cache.insert(path, entry);
             }
         }
         Ok(())
