@@ -810,20 +810,6 @@ impl MessageExt for SyncMessage {
     }
 }
 
-trait SyncReadExt {
-    fn parse_sender_aci(&self) -> Option<Uuid>;
-}
-
-impl SyncReadExt for Read {
-    fn parse_sender_aci(&self) -> Option<Uuid> {
-        if let Some(bytes) = self.sender_aci_binary.as_deref() {
-            ServiceId::parse_from_service_id_binary(bytes).map(|sid| sid.raw_uuid())
-        } else {
-            self.sender_aci.as_deref().and_then(|s| s.parse().ok())
-        }
-    }
-}
-
 /// First parse the binary field, then fallback to the string field
 fn parse_uuid(str_field: Option<&str>, binary_field: Option<&[u8]>) -> Option<Uuid> {
     binary_field
