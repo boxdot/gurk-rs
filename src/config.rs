@@ -6,6 +6,7 @@ use serde::{
 use tracing::warn;
 use url::Url;
 
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::{fmt, fs};
 
@@ -173,6 +174,21 @@ where
     deserializer.deserialize_any(NotificationConfigVisitor)
 }
 
+/// Writes `content` to `path` with owner-only permissions (0o600 on Unix).
+///
+/// This is important in case the passphrase is stored in the config file.
+fn write_config(path: &Path, content: &str) -> anyhow::Result<()> {
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options.open(path)?.write_all(content.as_bytes())?;
+    Ok(())
+}
+
 impl Config {
     /// Create new config with default paths from the given user.
     pub fn with_user(user: User) -> Self {
@@ -298,7 +314,7 @@ impl Config {
             .parent()
             .ok_or_else(|| anyhow!("invalid config path {}: no parent dir", path.display()))?;
         fs::create_dir_all(parent_dir).unwrap();
-        fs::write(path, content)?;
+        write_config(path, &content)?;
         Ok(())
     }
 
