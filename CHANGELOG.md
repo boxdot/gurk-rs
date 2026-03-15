@@ -16,6 +16,10 @@ All notable changes to this project will be documented in this file.
 - Parse binary fields in messages (#504)
 - Replace `Color::Gray` with `Color::Reset` in name resolver (#492)
 
+
+* @Koleok made their first contribution in #488
+* @John-Toohey made their first contribution in #492
+
 ## [0.9.0] - 2026-03-03
 
 This is a major release due to fundamental changes in the underlying Signal
