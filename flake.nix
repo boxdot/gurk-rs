@@ -41,10 +41,12 @@
             lockFile = ./Cargo.lock;
             outputHashes = {
               "curve25519-dalek-4.1.3" = "sha256-bPh7eEgcZnq9C3wmSnnYv0C4aAP+7pnwk9Io29GrI4A=";
-              "libsignal-protocol-0.1.0" = "sha256-bHWbfi8plZ6OvMjWzH1/Hzfo60b/tWuT4L5Fnvrgnm4=";
-              "libsignal-service-0.1.0" = "sha256-v8vFexZ3zXkz86lSLlUDhuIfcxFCucpb3wj27mn58uY=";
-              "presage-0.8.0-dev" = "sha256-SeBJQBQUVRa6I+ujEPwTGQhYZsapDO96jSUManRxmjY=";
-              "spqr-1.2.0" = "sha256-nkInh9p0QZ7xWNM7JRpogTCfLBhZtNBKZW8S44aoyUs=";
+              "libsignal-protocol-0.1.0" = "sha256-k0V5wnHGUwE76mZlG/2kWRWVgpvTgGDt9JuxdsoJZ7Y=";
+              "libsignal-service-0.1.0" = "sha256-rnk+YCFZ1eGANrsHEq3mcaNrpUbKoVBGLYNeQG8EuXc=";
+              "presage-0.8.0-dev" = "sha256-OnbJCrDrGMDzwHfi0ygxa3ZAiZ2KnJ0Ux638O6O0GZo=";
+              "libsqlite3-sys-0.36.0" = "sha256-JK9U4zIveudVArQQS3roHXsUWGFVcI43uWVcT8++l2Q=";
+              "spqr-1.4.0" = "sha256-2jZGm9ePg431jvjqBXU7d1NJ00TPIKtwsfdspme1okM=";
+              "sqlx-0.8.6" = "sha256-miIFu+YavrRPbVXS0+OE3y3+85zZ5dsozG6M+Qb06fc=";
             };
           };
 
