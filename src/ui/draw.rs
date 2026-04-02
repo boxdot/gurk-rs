@@ -124,7 +124,8 @@ fn draw_channels(f: &mut Frame, app: &mut App, area: Rect) {
                 String::new()
             };
             let mute_label = if channel.muted { " [M]" } else { "" };
-            let suffix = format!("{unread_messages_label}{mute_label}");
+            let typing_label = if channel.is_writing() { " [T]" } else { "" };
+            let suffix = format!("{unread_messages_label}{mute_label}{typing_label}");
             let channel_name = app.channel_name(&channel);
             let label = format!("{channel_name}{suffix}");
             let label_width = label.width();
