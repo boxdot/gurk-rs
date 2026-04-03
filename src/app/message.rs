@@ -417,6 +417,81 @@ impl App {
                 return Ok(());
             }
 
+            // Incoming edit from another user
+            (
+                Metadata { sender, .. },
+                ContentBody::EditMessage(EditMessage {
+                    target_sent_timestamp: Some(target_sent_timestamp),
+                    data_message:
+                        Some(DataMessage {
+                            mut body,
+                            group_v2,
+                            timestamp: Some(timestamp),
+                            profile_key,
+                            body_ranges,
+                            sticker,
+                            ..
+                        }),
+                }),
+            ) => {
+                let channel_id = if let Some(GroupContextV2 {
+                    master_key: Some(master_key),
+                    revision: Some(revision),
+                    ..
+                }) = group_v2
+                {
+                    let profile_key = match profile_key {
+                        Some(pk) => {
+                            Some(pk.try_into().map_err(|_| anyhow!("invalid profile key"))?)
+                        }
+                        None => None,
+                    };
+                    let master_key = master_key
+                        .try_into()
+                        .map_err(|_| anyhow!("invalid group master key"))?;
+                    let channel_idx = self
+                        .ensure_group_channel_exists(master_key, revision)
+                        .await
+                        .context("failed to create group channel")?;
+                    self.ensure_user_is_known(sender.raw_uuid(), profile_key)
+                        .await;
+                    self.channels.items[channel_idx]
+                } else {
+                    let profile_key = profile_key.and_then(|pk| pk.try_into().ok());
+                    self.ensure_user_is_known(sender.raw_uuid(), profile_key)
+                        .await;
+                    let name = self.name_by_id(sender.raw_uuid()).await;
+                    let channel_idx = self
+                        .ensure_contact_channel_exists(sender.raw_uuid(), &name)
+                        .await;
+                    self.channels.items[channel_idx]
+                };
+
+                add_emoji_from_sticker(&mut body, sticker);
+                let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
+                let message = Message::new(sender.raw_uuid(), body, body_ranges, timestamp, vec![]);
+
+                if self
+                    .storage
+                    .store_edited_message(channel_id, target_sent_timestamp, message)
+                    .is_some()
+                {
+                    let channel_idx = self
+                        .channels
+                        .items
+                        .iter()
+                        .position(|id| id == &channel_id)
+                        .context("editing message in non-existent channel")?;
+                    self.touch_channel(channel_idx, sender.raw_uuid() == self.user_id);
+                } else {
+                    warn!(
+                        target_sent_timestamp,
+                        "could not find original message to apply edit"
+                    );
+                }
+                return Ok(());
+            }
+
             unhandled => {
                 info!(?unhandled, "skipping unhandled message");
                 return Ok(());
