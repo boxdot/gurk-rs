@@ -98,6 +98,22 @@ pub trait Storage {
         Some(self.store_message(channel_id, original))
     }
 
+    /// Marks a message as deleted (remote delete / delete for everyone)
+    ///
+    /// Clears the message body and attachments, and sets the `deleted` flag.
+    /// Returns the updated message if it existed.
+    fn delete_message(&mut self, message_id: MessageId) -> Option<Cow<'_, Message>> {
+        let mut message = self.message(message_id)?.into_owned();
+        message.message = None;
+        message.attachments.clear();
+        message.body_ranges.clear();
+        message.deleted = true;
+        Some(self.store_message(message_id.channel_id, message))
+    }
+
+    /// Fully removes a message from storage (delete for me)
+    fn remove_message(&mut self, message_id: MessageId);
+
     /// Names of contacts
     fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<'_, str>)> + '_>;
     /// Gets the name for the given contact `id`

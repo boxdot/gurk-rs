@@ -417,6 +417,7 @@ pub(crate) mod tests {
                 send_failed: Default::default(),
                 edit: Default::default(),
                 edited: Default::default(),
+                deleted: Default::default(),
             },
         );
 
