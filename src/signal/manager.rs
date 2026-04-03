@@ -49,6 +49,10 @@ pub trait SignalManager {
 
     fn send_reaction(&self, channel: &Channel, message: &Message, emoji: String, remove: bool);
 
+    fn send_delete(&self, channel: &Channel, target_sent_timestamp: u64);
+
+    fn send_delete_for_me(&self, channel: &Channel, message: &Message);
+
     async fn profile_name(&self, id: Uuid) -> Option<String>;
 
     /// Resolves contact name from user's profile via Signal server

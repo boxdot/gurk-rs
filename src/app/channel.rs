@@ -260,6 +260,21 @@ impl App {
         self.touch_channel(channel_idx, from_current_user);
     }
 
+    pub(super) fn remove_message_from_view(&mut self, channel_id: ChannelId, arrived_at: u64) {
+        if let Some(messages) = self.messages.get_mut(&channel_id)
+            && let Some(pos) = messages.items.iter().position(|&ts| ts == arrived_at)
+        {
+            messages.items.remove(pos);
+            if let Some(selected) = messages.state.selected() {
+                if messages.items.is_empty() {
+                    messages.state.select(None);
+                } else if selected > 0 && selected >= messages.items.len() {
+                    messages.state.select(Some(selected - 1));
+                }
+            }
+        }
+    }
+
     pub(crate) fn touch_channel(&mut self, channel_idx: usize, from_current_user: bool) {
         if !from_current_user && self.channels.state.selected() != Some(channel_idx) {
             let channel_id = self.channels.items[channel_idx];

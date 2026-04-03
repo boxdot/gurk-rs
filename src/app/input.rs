@@ -15,7 +15,7 @@ use tracing::{error, info};
 use crate::command::{
     Command, DirectionVertical, MoveAmountText, MoveAmountVisual, MoveDirection, Widget, WindowMode,
 };
-use crate::data::Message;
+use crate::data::{ChannelId, Message};
 use crate::storage::MessageId;
 use crate::util::{ATTACHMENT_REGEX, URL_REGEX};
 
@@ -62,7 +62,9 @@ impl App {
                 self.start_editing();
             }
             // Command::ReplyMessage => unimplemented!("{command:?}"),
-            // Command::DeleteMessage => unimplemented!("{command:?}"),
+            Command::DeleteMessage => {
+                self.delete_selected_message();
+            }
             Command::ToggleChannelModal => {
                 if !self.select_channel.is_shown {
                     self.select_channel.reset(&*self.storage);
@@ -353,6 +355,33 @@ impl App {
         self.editing.replace(message_id);
         self.input.data = text;
         self.input.on_end();
+
+        Some(())
+    }
+
+    fn delete_selected_message(&mut self) -> Option<()> {
+        let message_id = self.selected_message_id()?;
+        let message = self.storage.message(message_id)?.into_owned();
+
+        // Only allow deleting own messages
+        if message.from_id != self.user_id {
+            return None;
+        }
+
+        let channel_id = message_id.channel_id;
+        let channel = self.storage.channel(channel_id)?.into_owned();
+
+        if message.deleted || channel_id == ChannelId::User(self.user_id) {
+            // Tombstone or Note to Self: fully remove, sync via deleteForMe
+            self.signal_manager.send_delete_for_me(&channel, &message);
+            self.storage.remove_message(message_id);
+            self.remove_message_from_view(channel_id, message.arrived_at);
+        } else {
+            // Regular channel: delete for everyone (tombstone)
+            self.signal_manager
+                .send_delete(&channel, message.arrived_at);
+            self.storage.delete_message(message_id);
+        }
 
         Some(())
     }
