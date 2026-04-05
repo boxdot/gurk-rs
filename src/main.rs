@@ -263,6 +263,10 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
                 });
             }
         } else {
+            if app.should_clear {
+                terminal.clear()?;
+                app.should_clear = false;
+            }
             terminal.draw(|f| ui::draw(f, &mut app))?;
             last_render_at = Instant::now();
         }

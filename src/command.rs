@@ -233,6 +233,8 @@ pub enum Command {
     #[strum(props(desc = "Open external editor to compose a message"))]
     OpenEditor,
     // DeleteMessage,
+    #[strum(props(desc = "Force full screen redraw"))]
+    Redraw,
 }
 
 #[derive(Clone, Debug)]
@@ -459,6 +461,7 @@ const DEFAULT_KEYBINDINGS: &str = r#"
 [anywhere]
 F1 = "help"
 ctrl-c = "quit"
+ctrl-l = "redraw"
 
 [normal]
 ctrl-p = "toggle_channel_modal"
