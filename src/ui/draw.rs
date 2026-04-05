@@ -536,7 +536,7 @@ fn display_message(
     let delimiter = Span::from(": ");
 
     // collect message text
-    let text = if msg.deleted {
+    let mut text = if msg.deleted {
         String::from("[message deleted]")
     } else {
         let text = strip_ansi_escapes::strip_str(msg.message.as_deref().unwrap_or_default());
@@ -547,9 +547,9 @@ fn display_message(
         }
         add_reactions(msg, &mut text);
         add_edited(msg, &mut text);
-        add_expire_countdown(msg, &mut text);
         text
     };
+    add_expire_countdown(msg, &mut text);
 
     let mut spans: Vec<Line> = vec![];
     if let Some(date_division) = date_division {
