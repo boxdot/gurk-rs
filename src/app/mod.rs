@@ -50,6 +50,10 @@ pub struct App {
     // It is expensive to hit the signal manager contacts storage, so we cache it
     names_cache: Cell<Option<BTreeMap<Uuid, String>>>,
     pub mode_keybindings: ModeKeybinding,
+    /// When the current channel was selected (for dwell-based timer activation)
+    channel_selected_at: std::time::Instant,
+    /// Channel whose message timers have been activated (avoids repeated scanning)
+    timers_activated_for: Option<ChannelId>,
 }
 
 impl App {
@@ -112,6 +116,8 @@ impl App {
             event_tx,
             names_cache: Default::default(),
             mode_keybindings,
+            channel_selected_at: std::time::Instant::now(),
+            timers_activated_for: None,
         };
         Ok((app, event_rx))
     }
@@ -401,6 +407,7 @@ pub(crate) mod tests {
             unread_messages: 1,
             muted: false,
             typing: TypingSet::GroupTyping(Default::default()),
+            expire_timer: None,
         };
         storage.store_channel(channel);
         storage.store_message(
@@ -418,6 +425,8 @@ pub(crate) mod tests {
                 edit: Default::default(),
                 edited: Default::default(),
                 deleted: Default::default(),
+                expire_timer: None,
+                expires_at: None,
             },
         );
 

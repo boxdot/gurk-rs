@@ -276,6 +276,7 @@ impl App {
                                     sticker,
                                     body_ranges,
                                     reaction: None,
+                                    expire_timer,
                                     ..
                                 }),
                             ..
@@ -314,12 +315,18 @@ impl App {
                 };
 
                 add_emoji_from_sticker(&mut body, sticker);
+
+                // Update channel's expire timer if it changed
+                let channel_id = self.channels.items[channel_idx];
+                self.update_channel_expire_timer(channel_id, expire_timer);
+
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let attachments = self.save_attachments(attachment_pointers).await;
                 let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
 
                 let message = Message {
                     quote,
+                    expire_timer,
                     ..Message::new(user_id, body, body_ranges, timestamp, attachments)
                 };
 
@@ -387,6 +394,7 @@ impl App {
                     attachments: attachment_pointers,
                     sticker,
                     body_ranges,
+                    expire_timer,
                     ..
                 }),
             ) => {
@@ -452,6 +460,10 @@ impl App {
 
                 add_emoji_from_sticker(&mut body, sticker);
 
+                // Update channel's expire timer if it changed
+                let channel_id = self.channels.items[channel_idx];
+                self.update_channel_expire_timer(channel_id, expire_timer);
+
                 let attachments = self.save_attachments(attachment_pointers).await;
                 if !channel_muted {
                     self.notify_about_message(&from, body.as_deref(), &attachments);
@@ -468,6 +480,7 @@ impl App {
                 let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
                 let message = Message {
                     quote,
+                    expire_timer,
                     ..Message::new(sender.raw_uuid(), body, body_ranges, timestamp, attachments)
                 };
 
@@ -617,6 +630,16 @@ impl App {
             self.notify(from, &notification);
         }
         self.bell();
+    }
+
+    fn update_channel_expire_timer(&mut self, channel_id: ChannelId, expire_timer: Option<u32>) {
+        let new_timer = expire_timer.filter(|&t| t > 0);
+        if let Some(mut channel) = self.storage.channel(channel_id).map(|c| c.into_owned())
+            && channel.expire_timer != new_timer
+        {
+            channel.expire_timer = new_timer;
+            self.storage.store_channel(channel);
+        }
     }
 
     pub fn step_receipts(&mut self) {

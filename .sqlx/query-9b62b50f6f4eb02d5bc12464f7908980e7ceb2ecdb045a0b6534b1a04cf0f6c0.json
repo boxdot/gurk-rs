@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                        SELECT\n                            id AS \"id: _\",\n                            name,\n                            group_master_key,\n                            group_revision,\n                            group_members AS \"group_members: _\",\n                            muted AS \"muted: _\"\n                        FROM channels\n                        WHERE id = ?\n                    ",
+  "query": "\n                        SELECT\n                            id AS \"id: _\",\n                            name,\n                            group_master_key,\n                            group_revision,\n                            group_members AS \"group_members: _\",\n                            muted AS \"muted: _\",\n                            expire_timer\n                        FROM channels\n                        WHERE id = ?\n                    ",
   "describe": {
     "columns": [
       {
@@ -32,6 +32,11 @@
         "name": "muted: _",
         "ordinal": 5,
         "type_info": "Bool"
+      },
+      {
+        "name": "expire_timer",
+        "ordinal": 6,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
@@ -43,8 +48,9 @@
       true,
       true,
       true,
-      false
+      false,
+      true
     ]
   },
-  "hash": "381cd1427c2263024487e0cfe25d3c48ca0746fa4df009611eeb5bcd543047fe"
+  "hash": "9b62b50f6f4eb02d5bc12464f7908980e7ceb2ecdb045a0b6534b1a04cf0f6c0"
 }

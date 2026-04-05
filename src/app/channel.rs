@@ -17,13 +17,13 @@ impl App {
     }
 
     pub fn select_previous_channel(&mut self) {
-        self.reset_unread_messages();
         self.channels.previous();
+        self.on_channel_changed();
     }
 
     pub fn select_next_channel(&mut self) {
-        self.reset_unread_messages();
         self.channels.next();
+        self.on_channel_changed();
     }
 
     pub fn on_pgup(&mut self) {
@@ -108,6 +108,7 @@ impl App {
                 unread_messages: 0,
                 muted: false,
                 typing: TypingSet::GroupTyping(Default::default()),
+                expire_timer: None,
             };
             self.storage.store_channel(channel);
 
@@ -186,6 +187,7 @@ impl App {
                 unread_messages: 0,
                 muted: false,
                 typing: TypingSet::SingleTyping(false),
+                expire_timer: None,
             };
             let channel = self.storage.store_channel(channel);
 
@@ -221,6 +223,7 @@ impl App {
                 unread_messages: 0,
                 muted: false,
                 typing: TypingSet::SingleTyping(false),
+                expire_timer: None,
             };
             let channel = self.storage.store_channel(channel);
 
@@ -231,8 +234,18 @@ impl App {
         }
     }
 
-    pub(super) fn add_message_to_channel(&mut self, channel_idx: usize, message: Message) {
+    pub(super) fn add_message_to_channel(&mut self, channel_idx: usize, mut message: Message) {
         let channel_id = self.channels.items[channel_idx];
+
+        // Eagerly activate timer for messages arriving in the currently viewed channel
+        if message.expire_timer.is_some_and(|t| t > 0)
+            && message.expires_at.is_none()
+            && self.timers_activated_for == Some(channel_id)
+        {
+            let timer = message.expire_timer.unwrap();
+            let now_ms = crate::util::utc_now_timestamp_msec();
+            message.expires_at = Some(now_ms + u64::from(timer) * 1000);
+        }
 
         let message = self.storage.store_message(channel_id, message);
         let from_current_user = self.user_id == message.from_id;
@@ -303,6 +316,12 @@ impl App {
         self.select_channel.next();
     }
 
+    /// Reset dwell tracking when channel selection changes
+    pub fn on_channel_changed(&mut self) {
+        self.channel_selected_at = std::time::Instant::now();
+        self.timers_activated_for = None;
+    }
+
     pub fn toggle_mute_channel(&mut self) {
         if let Some(&channel_id) = self.channels.selected_item()
             && let Some(channel) = self.storage.channel(channel_id)
@@ -310,6 +329,82 @@ impl App {
             let mut channel = channel.into_owned();
             channel.muted = !channel.muted;
             self.storage.store_channel(channel);
+        }
+    }
+
+    /// Activate expire timers for messages in the currently viewed channel.
+    /// Runs once per channel selection after a 10-second dwell.
+    pub fn activate_expire_timers(&mut self) {
+        if self.channel_selected_at.elapsed() < std::time::Duration::from_secs(10) {
+            return;
+        }
+        let Some(&channel_id) = self.channels.selected_item() else {
+            return;
+        };
+        if self.timers_activated_for == Some(channel_id) {
+            return;
+        }
+        let has_timer = self
+            .storage
+            .channel(channel_id)
+            .is_some_and(|c| c.expire_timer.is_some_and(|t| t > 0));
+        if !has_timer {
+            return;
+        }
+
+        let now_ms = crate::util::utc_now_timestamp_msec();
+        let to_activate: Vec<(u64, u32)> = self
+            .storage
+            .messages(channel_id)
+            .filter_map(|msg| {
+                if msg.expires_at.is_none() && msg.expire_timer.is_some_and(|t| t > 0) {
+                    Some((msg.arrived_at, msg.expire_timer.unwrap()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        for (arrived_at, timer) in to_activate {
+            let message_id = crate::storage::MessageId::new(channel_id, arrived_at);
+            if let Some(mut msg) = self.storage.message(message_id).map(|m| m.into_owned()) {
+                msg.expires_at = Some(now_ms + u64::from(timer) * 1000);
+                self.storage.store_message(channel_id, msg);
+            }
+        }
+
+        self.timers_activated_for = Some(channel_id);
+    }
+
+    /// Remove messages that have expired.
+    /// All timestamps are UTC milliseconds — no locale dependency.
+    pub fn expire_messages(&mut self) {
+        let now_ms = crate::util::utc_now_timestamp_msec();
+        let channel_ids: Vec<ChannelId> = self
+            .channels
+            .items
+            .iter()
+            .copied()
+            .filter(|&id| {
+                self.storage
+                    .channel(id)
+                    .is_some_and(|c| c.expire_timer.is_some_and(|t| t > 0))
+            })
+            .collect();
+
+        for channel_id in channel_ids {
+            let expired: Vec<u64> = self
+                .storage
+                .messages(channel_id)
+                .filter(|msg| msg.expires_at.is_some_and(|ea| now_ms > ea))
+                .map(|msg| msg.arrived_at)
+                .collect();
+
+            for arrived_at in expired {
+                let message_id = crate::storage::MessageId::new(channel_id, arrived_at);
+                self.storage.remove_message(message_id);
+                self.remove_message_from_view(channel_id, arrived_at);
+            }
         }
     }
 }
