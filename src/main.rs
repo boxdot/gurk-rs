@@ -243,6 +243,8 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
         }
     });
 
+    let mut expire_tick_counter: u64 = 0;
+
     loop {
         // render
         let left_frame_budget = FRAME_BUDGET.checked_sub(last_render_at.elapsed());
@@ -275,6 +277,12 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
         match event {
             Some(Event::Tick) => {
                 app.step_receipts();
+                expire_tick_counter += 1;
+                if expire_tick_counter >= 5 {
+                    expire_tick_counter = 0;
+                    app.activate_expire_timers();
+                    app.expire_messages();
+                }
             }
             Some(Event::Click(event)) => match event.kind {
                 MouseEventKind::Down(MouseButton::Left) => {
@@ -286,6 +294,7 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
                             .filter(|&idx| idx < app.channels.items.len())
                     {
                         app.channels.state.select(Some(channel_idx));
+                        app.on_channel_changed();
                         app.reset_unread_messages();
                     }
                 }

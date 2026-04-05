@@ -1,10 +1,10 @@
 {
   "db_name": "SQLite",
-  "query": "\n                    SELECT\n                        m.arrived_at,\n                        m.from_id AS \"from_id: _\",\n                        m.message,\n                        m.receipt AS \"receipt: _\",\n                        m.body_ranges AS \"body_ranges: _\",\n                        m.attachments AS \"attachments: _\",\n                        m.reactions AS \"reactions: _\",\n                        q.arrived_at AS \"quote_arrived_at: _\",\n                        q.from_id AS \"quote_from_id: _\",\n                        q.message AS quote_message,\n                        q.attachments AS \"quote_attachments: _\",\n                        q.body_ranges AS \"quote_body_ranges: _\",\n                        q.receipt AS \"quote_receipt: _\",\n                        m.edit,\n                        m.edited as \"edited: _\",\n                        m.deleted as \"deleted: _\"\n                    FROM messages AS m\n                    LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1\n                    WHERE m.channel_id = ?1 AND m.arrived_at = ?2\n                    GROUP BY m.arrived_at\n                    LIMIT 1\n                ",
+  "query": "\n                    SELECT\n                        m.arrived_at AS \"arrived_at!\",\n                        m.from_id AS \"from_id: _\",\n                        m.message,\n                        m.receipt AS \"receipt: _\",\n                        m.body_ranges AS \"body_ranges: _\",\n                        m.attachments AS \"attachments: _\",\n                        m.reactions AS \"reactions: _\",\n                        q.arrived_at AS \"quote_arrived_at: _\",\n                        q.from_id AS \"quote_from_id: _\",\n                        q.message AS quote_message,\n                        q.attachments AS \"quote_attachments: _\",\n                        q.body_ranges AS \"quote_body_ranges: _\",\n                        q.receipt AS \"quote_receipt: _\",\n                        NULL AS \"edit: _\",\n                        m.edited AS \"edited: _\",\n                        m.deleted AS \"deleted: _\",\n                        m.expire_timer AS \"expire_timer: _\",\n                        m.expires_at AS \"expires_at: _\"\n                    FROM messages AS m\n                    LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1\n                    WHERE m.channel_id = ?1 AND m.edit == ?2\n                    ORDER BY m.arrived_at ASC\n                ",
   "describe": {
     "columns": [
       {
-        "name": "arrived_at",
+        "name": "arrived_at!",
         "ordinal": 0,
         "type_info": "Integer"
       },
@@ -69,9 +69,9 @@
         "type_info": "Blob"
       },
       {
-        "name": "edit",
+        "name": "edit: _",
         "ordinal": 13,
-        "type_info": "Integer"
+        "type_info": "Null"
       },
       {
         "name": "edited: _",
@@ -82,6 +82,16 @@
         "name": "deleted: _",
         "ordinal": 15,
         "type_info": "Bool"
+      },
+      {
+        "name": "expire_timer: _",
+        "ordinal": 16,
+        "type_info": "Integer"
+      },
+      {
+        "name": "expires_at: _",
+        "ordinal": 17,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
@@ -96,15 +106,17 @@
       true,
       true,
       false,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true,
       false,
-      false
+      true,
+      true,
+      true,
+      true,
+      null,
+      false,
+      false,
+      true,
+      true
     ]
   },
-  "hash": "4678c5df07cbc752bca35e8a80c9f2f7b78bbcbb95da108ed8d112487ef3a297"
+  "hash": "957a0c7bc6b44cec4d492bb356ce49d32f752cd6f443f1cbb2416bfd09393985"
 }

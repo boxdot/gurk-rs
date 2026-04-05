@@ -153,6 +153,7 @@ impl SignalManager for PresageManager {
         let mut data_message = DataMessage {
             body: Some(message.clone()),
             quote,
+            expire_timer: channel.expire_timer,
             ..Default::default()
         };
 
@@ -271,6 +272,11 @@ impl SignalManager for PresageManager {
             edit: edit_message_timestamp,
             edited: edit_message_timestamp.is_some(),
             deleted: Default::default(),
+            expire_timer: channel.expire_timer,
+            expires_at: channel
+                .expire_timer
+                .filter(|&t| t > 0)
+                .map(|t| timestamp + u64::from(t) * 1000),
         };
         (message, response)
     }
