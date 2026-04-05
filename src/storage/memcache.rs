@@ -136,6 +136,22 @@ impl<S: Storage> Storage for MemCache<S> {
         self.storage.store_message(channel_id, message)
     }
 
+    fn remove_message(&mut self, message_id: MessageId) {
+        if let Some(&idx) = self.messages_index.get(&message_id)
+            && let Some(messages) = self.messages.get_mut(&message_id.channel_id)
+        {
+            messages.remove(idx);
+            // Rebuild index for this channel
+            self.messages_index
+                .retain(|id, _| id.channel_id != message_id.channel_id);
+            for (i, msg) in messages.iter().enumerate() {
+                self.messages_index
+                    .insert(MessageId::new(message_id.channel_id, msg.arrived_at), i);
+            }
+        }
+        self.storage.remove_message(message_id);
+    }
+
     fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<'_, str>)> + '_> {
         Box::new(
             self.names

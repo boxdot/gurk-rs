@@ -10,7 +10,7 @@ use presage::proto::sync_message::{Read, Sent};
 use presage::proto::{
     AttachmentPointer, DataMessage, EditMessage, ReceiptMessage, SyncMessage, TypingMessage,
 };
-use presage::proto::{GroupContextV2, data_message::Reaction};
+use presage::proto::{GroupContextV2, data_message::Delete, data_message::Reaction};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
@@ -41,6 +41,65 @@ impl App {
         }
 
         let (channel_idx, message) = match (content.metadata, content.body) {
+            // Sync delete: we deleted a message from another device (any channel type)
+            (
+                _,
+                ContentBody::SynchronizeMessage(SyncMessage {
+                    sent:
+                        Some(Sent {
+                            message:
+                                Some(DataMessage {
+                                    delete:
+                                        Some(Delete {
+                                            target_sent_timestamp: Some(target_sent_timestamp),
+                                        }),
+                                    ..
+                                }),
+                            ..
+                        }),
+                    ..
+                }),
+            ) => {
+                if let Some(channel_id) = self.storage.message_channel(target_sent_timestamp) {
+                    let message_id = MessageId::new(channel_id, target_sent_timestamp);
+                    self.storage.delete_message(message_id);
+                    info!(target_sent_timestamp, "message deleted via sync");
+                } else {
+                    warn!(
+                        target_sent_timestamp,
+                        "received sync delete for unknown message"
+                    );
+                }
+                return Ok(());
+            }
+            // Delete for me: message removed from our own devices only
+            (
+                _,
+                ContentBody::SynchronizeMessage(SyncMessage {
+                    delete_for_me: Some(delete_for_me),
+                    ..
+                }),
+            ) => {
+                for msg_delete in &delete_for_me.message_deletes {
+                    let channel_id = msg_delete
+                        .conversation
+                        .as_ref()
+                        .and_then(conversation_to_channel_id);
+                    let Some(channel_id) = channel_id else {
+                        debug!("skipping delete-for-me with unresolvable conversation");
+                        continue;
+                    };
+                    for msg in &msg_delete.messages {
+                        if let Some(ts) = msg.sent_timestamp {
+                            let message_id = MessageId::new(channel_id, ts);
+                            self.storage.remove_message(message_id);
+                            self.remove_message_from_view(channel_id, ts);
+                            info!(sent_timestamp = ts, "message removed via delete-for-me");
+                        }
+                    }
+                }
+                return Ok(());
+            }
             // Private note message
             (
                 _,
@@ -57,6 +116,7 @@ impl App {
                                     sticker,
                                     body_ranges,
                                     reaction: None,
+                                    expire_timer,
                                     ..
                                 }),
                             ..
@@ -65,12 +125,18 @@ impl App {
                 }),
             ) if parse_uuid(dest_str.as_deref(), dest_binary.as_deref()) == Some(user_id) => {
                 let channel_idx = self.ensure_own_channel_exists();
+                let channel_id = self.channels.items[channel_idx];
+                self.update_channel_expire_timer(channel_id, expire_timer);
+
                 let attachments = self.save_attachments(attachment_pointers).await;
                 add_emoji_from_sticker(&mut body, sticker);
 
                 let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
 
-                let message = Message::new(user_id, body, body_ranges, timestamp, attachments);
+                let message = Message {
+                    expire_timer,
+                    ..Message::new(user_id, body, body_ranges, timestamp, attachments)
+                };
                 (channel_idx, message)
             }
             // reactions
@@ -217,6 +283,7 @@ impl App {
                                     sticker,
                                     body_ranges,
                                     reaction: None,
+                                    expire_timer,
                                     ..
                                 }),
                             ..
@@ -255,12 +322,18 @@ impl App {
                 };
 
                 add_emoji_from_sticker(&mut body, sticker);
+
+                // Update channel's expire timer if it changed
+                let channel_id = self.channels.items[channel_idx];
+                self.update_channel_expire_timer(channel_id, expire_timer);
+
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let attachments = self.save_attachments(attachment_pointers).await;
                 let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
 
                 let message = Message {
                     quote,
+                    expire_timer,
                     ..Message::new(user_id, body, body_ranges, timestamp, attachments)
                 };
 
@@ -270,6 +343,51 @@ impl App {
                 }
 
                 (channel_idx, message)
+            }
+            // Incoming remote delete (delete for everyone)
+            (
+                Metadata { sender, .. },
+                ContentBody::DataMessage(DataMessage {
+                    delete:
+                        Some(Delete {
+                            target_sent_timestamp: Some(target_sent_timestamp),
+                        }),
+                    group_v2,
+                    ..
+                }),
+            ) => {
+                let channel_id = if let Some(GroupContextV2 {
+                    master_key: Some(master_key),
+                    revision: Some(revision),
+                    ..
+                }) = group_v2
+                {
+                    let master_key = master_key
+                        .try_into()
+                        .map_err(|_| anyhow!("invalid group master key"))?;
+                    let channel_idx = self
+                        .ensure_group_channel_exists(master_key, revision)
+                        .await
+                        .context("failed to create group channel")?;
+                    self.channels.items[channel_idx]
+                } else {
+                    let name = self.name_by_id(sender.raw_uuid()).await;
+                    let channel_idx = self
+                        .ensure_contact_channel_exists(sender.raw_uuid(), &name)
+                        .await;
+                    self.channels.items[channel_idx]
+                };
+
+                let message_id = MessageId::new(channel_id, target_sent_timestamp);
+                if self.storage.delete_message(message_id).is_some() {
+                    info!(target_sent_timestamp, "message deleted remotely");
+                } else {
+                    warn!(
+                        target_sent_timestamp,
+                        "received remote delete for unknown message"
+                    );
+                }
+                return Ok(());
             }
             // Incoming direct/group message
             (
@@ -283,6 +401,7 @@ impl App {
                     attachments: attachment_pointers,
                     sticker,
                     body_ranges,
+                    expire_timer,
                     ..
                 }),
             ) => {
@@ -348,6 +467,10 @@ impl App {
 
                 add_emoji_from_sticker(&mut body, sticker);
 
+                // Update channel's expire timer if it changed
+                let channel_id = self.channels.items[channel_idx];
+                self.update_channel_expire_timer(channel_id, expire_timer);
+
                 let attachments = self.save_attachments(attachment_pointers).await;
                 if !channel_muted {
                     self.notify_about_message(&from, body.as_deref(), &attachments);
@@ -364,6 +487,7 @@ impl App {
                 let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
                 let message = Message {
                     quote,
+                    expire_timer,
                     ..Message::new(sender.raw_uuid(), body, body_ranges, timestamp, attachments)
                 };
 
@@ -417,6 +541,81 @@ impl App {
                 return Ok(());
             }
 
+            // Incoming edit from another user
+            (
+                Metadata { sender, .. },
+                ContentBody::EditMessage(EditMessage {
+                    target_sent_timestamp: Some(target_sent_timestamp),
+                    data_message:
+                        Some(DataMessage {
+                            mut body,
+                            group_v2,
+                            timestamp: Some(timestamp),
+                            profile_key,
+                            body_ranges,
+                            sticker,
+                            ..
+                        }),
+                }),
+            ) => {
+                let channel_id = if let Some(GroupContextV2 {
+                    master_key: Some(master_key),
+                    revision: Some(revision),
+                    ..
+                }) = group_v2
+                {
+                    let profile_key = match profile_key {
+                        Some(pk) => {
+                            Some(pk.try_into().map_err(|_| anyhow!("invalid profile key"))?)
+                        }
+                        None => None,
+                    };
+                    let master_key = master_key
+                        .try_into()
+                        .map_err(|_| anyhow!("invalid group master key"))?;
+                    let channel_idx = self
+                        .ensure_group_channel_exists(master_key, revision)
+                        .await
+                        .context("failed to create group channel")?;
+                    self.ensure_user_is_known(sender.raw_uuid(), profile_key)
+                        .await;
+                    self.channels.items[channel_idx]
+                } else {
+                    let profile_key = profile_key.and_then(|pk| pk.try_into().ok());
+                    self.ensure_user_is_known(sender.raw_uuid(), profile_key)
+                        .await;
+                    let name = self.name_by_id(sender.raw_uuid()).await;
+                    let channel_idx = self
+                        .ensure_contact_channel_exists(sender.raw_uuid(), &name)
+                        .await;
+                    self.channels.items[channel_idx]
+                };
+
+                add_emoji_from_sticker(&mut body, sticker);
+                let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
+                let message = Message::new(sender.raw_uuid(), body, body_ranges, timestamp, vec![]);
+
+                if self
+                    .storage
+                    .store_edited_message(channel_id, target_sent_timestamp, message)
+                    .is_some()
+                {
+                    let channel_idx = self
+                        .channels
+                        .items
+                        .iter()
+                        .position(|id| id == &channel_id)
+                        .context("editing message in non-existent channel")?;
+                    self.touch_channel(channel_idx, sender.raw_uuid() == self.user_id);
+                } else {
+                    warn!(
+                        target_sent_timestamp,
+                        "could not find original message to apply edit"
+                    );
+                }
+                return Ok(());
+            }
+
             unhandled => {
                 info!(?unhandled, "skipping unhandled message");
                 return Ok(());
@@ -438,6 +637,16 @@ impl App {
             self.notify(from, &notification);
         }
         self.bell();
+    }
+
+    fn update_channel_expire_timer(&mut self, channel_id: ChannelId, expire_timer: Option<u32>) {
+        let new_timer = expire_timer.filter(|&t| t > 0);
+        if let Some(mut channel) = self.storage.channel(channel_id).map(|c| c.into_owned())
+            && channel.expire_timer != new_timer
+        {
+            channel.expire_timer = new_timer;
+            self.storage.store_channel(channel);
+        }
     }
 
     pub fn step_receipts(&mut self) {
@@ -828,6 +1037,25 @@ impl SyncSentExt for Sent {
             self.destination_service_id.as_deref(),
             self.destination_service_id_binary.as_deref(),
         )
+    }
+}
+
+fn conversation_to_channel_id(conv: &presage::proto::ConversationIdentifier) -> Option<ChannelId> {
+    use presage::proto::conversation_identifier::Identifier;
+    match conv.identifier.as_ref()? {
+        Identifier::ThreadServiceId(s) => {
+            let uuid: Uuid = s.parse().ok()?;
+            Some(ChannelId::User(uuid))
+        }
+        Identifier::ThreadServiceIdBinary(b) => {
+            let sid = ServiceId::parse_from_service_id_binary(b)?;
+            Some(ChannelId::User(sid.raw_uuid()))
+        }
+        Identifier::ThreadGroupId(b) => {
+            let bytes: [u8; 32] = b.as_slice().try_into().ok()?;
+            Some(ChannelId::Group(bytes))
+        }
+        Identifier::ThreadE164(_) => None,
     }
 }
 

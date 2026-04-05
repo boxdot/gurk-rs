@@ -108,6 +108,9 @@ impl SignalManager for SignalManagerMock {
             send_failed: Default::default(),
             edit: Default::default(),
             edited: Default::default(),
+            deleted: Default::default(),
+            expire_timer: None,
+            expires_at: None,
         };
         self.sent_messages.borrow_mut().push(message.clone());
         let (tx, rx) = oneshot::channel();
@@ -117,6 +120,10 @@ impl SignalManager for SignalManagerMock {
 
     fn send_reaction(&self, _channel: &Channel, _message: &Message, _emoji: String, _remove: bool) {
     }
+
+    fn send_delete(&self, _channel: &Channel, _target_sent_timestamp: u64) {}
+
+    fn send_delete_for_me(&self, _channel: &Channel, _message: &Message) {}
 
     async fn resolve_profile_name(
         &mut self,

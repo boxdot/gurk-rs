@@ -85,6 +85,7 @@ struct SqlChannel {
     group_revision: Option<i64>,
     group_members: Option<BlobData<Vec<Uuid>>>,
     muted: bool,
+    expire_timer: Option<i64>,
 }
 
 impl SqlChannel {
@@ -96,6 +97,7 @@ impl SqlChannel {
             group_revision,
             group_members,
             muted,
+            expire_timer,
         } = self;
         use ChannelConvertError::*;
         let group_data = match (group_master_key, group_revision, group_members) {
@@ -114,6 +116,7 @@ impl SqlChannel {
             unread_messages: Default::default(),
             muted,
             typing: TypingSet::new(is_group),
+            expire_timer: expire_timer.and_then(|t| u32::try_from(t).ok()),
         })
     }
 }
@@ -134,6 +137,9 @@ struct SqlMessage {
     quote_receipt: Option<BlobData<Receipt>>,
     edit: Option<i64>,
     edited: bool,
+    deleted: bool,
+    expire_timer: Option<i64>,
+    expires_at: Option<i64>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -160,6 +166,9 @@ impl SqlMessage {
             quote_receipt,
             edit,
             edited,
+            deleted,
+            expire_timer,
+            expires_at,
         } = self;
 
         let quote = quote_arrived_at
@@ -201,6 +210,9 @@ impl SqlMessage {
                     .ok_logged()
             }),
             edited,
+            deleted,
+            expire_timer: expire_timer.and_then(|t| u32::try_from(t).ok()),
+            expires_at: expires_at.and_then(|t| u64::try_from(t).ok()),
         })
     }
 }
@@ -230,7 +242,8 @@ impl Storage for SqliteStorage {
                          group_master_key,
                          group_revision,
                          group_members AS "group_members: _",
-                         muted AS "muted: _"
+                         muted AS "muted: _",
+                         expire_timer
                     FROM channels
                 "#
             )
@@ -257,7 +270,8 @@ impl Storage for SqliteStorage {
                             group_master_key,
                             group_revision,
                             group_members AS "group_members: _",
-                            muted AS "muted: _"
+                            muted AS "muted: _",
+                            expire_timer
                         FROM channels
                         WHERE id = ?
                     "#,
@@ -284,18 +298,20 @@ impl Storage for SqliteStorage {
             })
             .unwrap_or_default();
         let muted = channel.muted;
+        let expire_timer: Option<i64> = channel.expire_timer.map(|t| t as i64);
         block_async_in_place(
             query!(
                 r#"
-                    REPLACE INTO channels(id, name, group_master_key, group_revision, group_members, muted)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    REPLACE INTO channels(id, name, group_master_key, group_revision, group_members, muted, expire_timer)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                 "#,
                 id,
                 name,
                 group_master_key,
                 group_revision,
                 group_members,
-                muted
+                muted,
+                expire_timer
             )
             .execute(&self.pool),
         )
@@ -327,7 +343,10 @@ impl Storage for SqliteStorage {
                         q.body_ranges AS "quote_body_ranges: _",
                         q.receipt AS "quote_receipt: _",
                         NULL AS "edit: _",
-                        m.edited AS "edited: _"
+                        m.edited AS "edited: _",
+                        m.deleted AS "deleted: _",
+                        m.expire_timer AS "expire_timer: _",
+                        m.expires_at AS "expires_at: _"
                     FROM messages AS m
                     LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1
                     WHERE m.channel_id = ?1 AND m.edit IS NULL
@@ -378,7 +397,10 @@ impl Storage for SqliteStorage {
                         q.body_ranges AS "quote_body_ranges: _",
                         q.receipt AS "quote_receipt: _",
                         NULL AS "edit: _",
-                        m.edited AS "edited: _"
+                        m.edited AS "edited: _",
+                        m.deleted AS "deleted: _",
+                        m.expire_timer AS "expire_timer: _",
+                        m.expires_at AS "expires_at: _"
                     FROM messages AS m
                     LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1
                     WHERE m.channel_id = ?1 AND m.edit == ?2
@@ -424,7 +446,10 @@ impl Storage for SqliteStorage {
                         q.body_ranges AS "quote_body_ranges: _",
                         q.receipt AS "quote_receipt: _",
                         m.edit,
-                        m.edited as "edited: _"
+                        m.edited as "edited: _",
+                        m.deleted as "deleted: _",
+                        m.expire_timer as "expire_timer: _",
+                        m.expires_at as "expires_at: _"
                     FROM messages AS m
                     LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1
                     WHERE m.channel_id = ?1 AND m.arrived_at = ?2
@@ -467,6 +492,9 @@ impl Storage for SqliteStorage {
                 .ok_logged()
         });
         let edited: bool = message.edited;
+        let deleted: bool = message.deleted;
+        let expire_timer: Option<i64> = message.expire_timer.map(|t| t as i64);
+        let expires_at: Option<i64> = message.expires_at.and_then(|t| i64::try_from(t).ok());
         let inserted = block_async_in_place(
             query!(
                 "
@@ -481,9 +509,12 @@ impl Storage for SqliteStorage {
                         attachments,
                         reactions,
                         edit,
-                        edited
+                        edited,
+                        deleted,
+                        expire_timer,
+                        expires_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ",
                 arrived_at,
                 channel_id,
@@ -495,12 +526,36 @@ impl Storage for SqliteStorage {
                 attachments,
                 reactions,
                 edit,
-                edited
+                edited,
+                deleted,
+                expire_timer,
+                expires_at
             )
             .execute(&self.pool),
         );
         inserted.ok_logged();
         Cow::Owned(message)
+    }
+
+    fn remove_message(&mut self, message_id: MessageId) {
+        let channel_id = &message_id.channel_id;
+        let arrived_at: Option<i64> = message_id
+            .arrived_at
+            .try_into()
+            .map_err(|_| MessageConvertError::InvalidTimestamp)
+            .ok_logged();
+        let Some(arrived_at) = arrived_at else {
+            return;
+        };
+        let result = block_async_in_place(
+            query!(
+                "DELETE FROM messages WHERE channel_id = ? AND arrived_at = ?",
+                channel_id,
+                arrived_at
+            )
+            .execute(&self.pool),
+        );
+        result.ok_logged();
     }
 
     fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<'_, str>)> + '_> {
@@ -625,6 +680,7 @@ mod tests {
             unread_messages: 1,
             muted: false,
             typing: TypingSet::new(false),
+            expire_timer: None,
         });
         storage.store_message(
             user_channel,
@@ -640,6 +696,9 @@ mod tests {
                 send_failed: Default::default(),
                 edit: Default::default(),
                 edited: Default::default(),
+                deleted: Default::default(),
+                expire_timer: None,
+                expires_at: None,
             },
         );
 
@@ -654,6 +713,7 @@ mod tests {
             unread_messages: 2,
             muted: false,
             typing: TypingSet::new(true),
+            expire_timer: None,
         });
         storage.store_message(
             group_channel,
@@ -669,6 +729,9 @@ mod tests {
                 send_failed: Default::default(),
                 edit: Default::default(),
                 edited: Default::default(),
+                deleted: Default::default(),
+                expire_timer: None,
+                expires_at: None,
             },
         );
 
@@ -779,6 +842,9 @@ mod tests {
                 send_failed: Default::default(),
                 edit: Default::default(),
                 edited: Default::default(),
+                deleted: Default::default(),
+                expire_timer: None,
+                expires_at: None,
             },
         );
 

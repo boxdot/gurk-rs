@@ -32,6 +32,7 @@ pub async fn sync_from_signal(manager: &dyn SignalManager, storage: &mut dyn Sto
                 unread_messages: 0,
                 muted: false,
                 typing: TypingSet::new(false),
+                expire_timer: None,
             });
         }
     }
@@ -97,6 +98,7 @@ pub async fn sync_from_signal(manager: &dyn SignalManager, storage: &mut dyn Sto
                     unread_messages: 0,
                     muted: false,
                     typing: TypingSet::new(true),
+                    expire_timer: None,
                 });
             }
         }

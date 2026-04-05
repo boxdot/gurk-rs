@@ -21,6 +21,8 @@ pub struct Channel {
     pub unread_messages: u32,
     pub muted: bool,
     pub typing: TypingSet,
+    /// Disappearing messages timer in seconds (None = disabled)
+    pub expire_timer: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -178,6 +180,15 @@ pub struct Message {
     /// Whether the message was edited
     #[serde(default)]
     pub(crate) edited: bool,
+    /// Whether the message was deleted (remote delete / delete for everyone)
+    #[serde(default)]
+    pub(crate) deleted: bool,
+    /// Disappearing message timer in seconds (set when message was sent with a timer)
+    #[serde(default)]
+    pub(crate) expire_timer: Option<u32>,
+    /// UTC millisecond timestamp when this message expires (set when first viewed)
+    #[serde(default)]
+    pub(crate) expires_at: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -291,6 +302,9 @@ impl Message {
             send_failed: Default::default(),
             edit: Default::default(),
             edited: Default::default(),
+            deleted: Default::default(),
+            expire_timer: None,
+            expires_at: None,
         }
     }
 
@@ -307,6 +321,9 @@ impl Message {
             send_failed: Default::default(),
             edit: Default::default(),
             edited: Default::default(),
+            deleted: Default::default(),
+            expire_timer: None,
+            expires_at: None,
         }
     }
 
@@ -327,6 +344,9 @@ impl Message {
             send_failed: Default::default(),
             edit: Default::default(),
             edited: Default::default(),
+            deleted: Default::default(),
+            expire_timer: None,
+            expires_at: None,
         })
     }
 

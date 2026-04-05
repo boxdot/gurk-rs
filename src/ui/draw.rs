@@ -124,7 +124,8 @@ fn draw_channels(f: &mut Frame, app: &mut App, area: Rect) {
                 String::new()
             };
             let mute_label = if channel.muted { " [M]" } else { "" };
-            let suffix = format!("{unread_messages_label}{mute_label}");
+            let typing_label = if channel.is_writing() { " [T]" } else { "" };
+            let suffix = format!("{unread_messages_label}{mute_label}{typing_label}");
             let channel_name = app.channel_name(&channel);
             let label = format!("{channel_name}{suffix}");
             let label_width = label.width();
@@ -426,10 +427,14 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
 
     let title = {
         let channel_name = app.channel_name(&channel);
+        let timer_label = channel
+            .expire_timer
+            .map(|t| format!(" [{}]", format_duration_short(u64::from(t))));
+        let timer_label = timer_label.as_deref().unwrap_or("");
         if let Some(writing_people) = writing_people {
-            format!("{channel_name} - Messages {writing_people}")
+            format!("{channel_name} - Messages{timer_label} {writing_people}")
         } else {
-            format!("{channel_name} - Messages")
+            format!("{channel_name} - Messages{timer_label}")
         }
     };
 
@@ -531,14 +536,20 @@ fn display_message(
     let delimiter = Span::from(": ");
 
     // collect message text
-    let text = strip_ansi_escapes::strip_str(msg.message.as_deref().unwrap_or_default());
-    let mut text = replace_mentions(msg, names, text);
-    add_attachments(msg, &mut text);
-    if text.is_empty() {
-        return None; // no text => nothing to render
-    }
-    add_reactions(msg, &mut text);
-    add_edited(msg, &mut text);
+    let mut text = if msg.deleted {
+        String::from("[message deleted]")
+    } else {
+        let text = strip_ansi_escapes::strip_str(msg.message.as_deref().unwrap_or_default());
+        let mut text = replace_mentions(msg, names, text);
+        add_attachments(msg, &mut text);
+        if text.is_empty() {
+            return None; // no text => nothing to render
+        }
+        add_reactions(msg, &mut text);
+        add_edited(msg, &mut text);
+        text
+    };
+    add_expire_countdown(msg, &mut text);
 
     let mut spans: Vec<Line> = vec![];
     if let Some(date_division) = date_division {
@@ -584,7 +595,11 @@ fn display_message(
     }
 
     let add_time = quote_text.is_none();
-    let message_style = if colored_messages {
+    let message_style = if msg.deleted {
+        Style::default()
+            .fg(Color::DarkGray)
+            .add_modifier(Modifier::ITALIC)
+    } else if colored_messages {
         Style::default().fg(from_color)
     } else {
         Style::default()
@@ -717,6 +732,37 @@ fn add_reactions(msg: &Message, out: &mut dyn fmt::Write) {
 fn add_edited(msg: &Message, out: &mut dyn fmt::Write) {
     if msg.edited {
         write!(out, " [edited]").expect("formatting edited failed")
+    }
+}
+
+fn format_duration_short(seconds: u64) -> String {
+    if seconds >= 604800 {
+        format!("{}w", seconds / 604800)
+    } else if seconds >= 86400 {
+        format!("{}d", seconds / 86400)
+    } else if seconds >= 3600 {
+        format!("{}h", seconds / 3600)
+    } else if seconds >= 60 {
+        format!("{}m", seconds / 60)
+    } else {
+        format!("{seconds}s")
+    }
+}
+
+fn add_expire_countdown(msg: &Message, out: &mut dyn fmt::Write) {
+    if msg.expire_timer.is_some_and(|t| t > 0) {
+        if let Some(expires_at) = msg.expires_at {
+            let now_ms = crate::util::utc_now_timestamp_msec();
+            if now_ms < expires_at {
+                let remaining_secs = (expires_at - now_ms) / 1000;
+                write!(out, " [{}]", format_duration_short(remaining_secs))
+            } else {
+                write!(out, " [expired]")
+            }
+            .expect("formatting countdown failed");
+        } else {
+            write!(out, " [pending]").expect("formatting countdown failed");
+        }
     }
 }
 
@@ -900,6 +946,9 @@ mod tests {
             send_failed: Default::default(),
             edit: Default::default(),
             edited: Default::default(),
+            deleted: Default::default(),
+            expire_timer: None,
+            expires_at: None,
         }
     }
 
