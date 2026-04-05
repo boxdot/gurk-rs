@@ -234,6 +234,8 @@ pub enum Command {
     OpenEditor,
     #[strum(props(desc = "Delete selected message for everyone"))]
     DeleteMessage,
+    #[strum(props(desc = "Force full screen redraw"))]
+    Redraw,
 }
 
 #[derive(Clone, Debug)]
@@ -460,6 +462,7 @@ const DEFAULT_KEYBINDINGS: &str = r#"
 [anywhere]
 F1 = "help"
 ctrl-c = "quit"
+ctrl-l = "redraw"
 
 [normal]
 ctrl-p = "toggle_channel_modal"
