@@ -215,8 +215,12 @@ impl Config {
     ///
     /// Also makes sure that the `config.data_path` exists.
     pub fn save_new(&self) -> anyhow::Result<PathBuf> {
-        let config_dir =
-            dirs::config_dir().ok_or_else(|| anyhow!("could not find default config directory"))?;
+        // Prefer XDG_CONFIG_HOME if set, otherwise use platform default
+        let config_dir = if let Ok(xdg_config) = std::env::var("XDG_CONFIG_HOME") {
+            PathBuf::from(xdg_config)
+        } else {
+            dirs::config_dir().ok_or_else(|| anyhow!("could not find default config directory"))?
+        };
         let config_file = config_dir.join("gurk/gurk.toml");
         self.save_new_at(&config_file)
             .with_context(|| format!("failed to save config at {}", config_file.display()))?;
@@ -239,7 +243,8 @@ impl Config {
         self.save(path)
     }
 
-    fn load(path: impl AsRef<Path>) -> anyhow::Result<LoadedConfig> {
+    /// Load config from a specific path.
+    pub fn load(path: impl AsRef<Path>) -> anyhow::Result<LoadedConfig> {
         let path = path.as_ref();
         let content = std::fs::read_to_string(path)?;
         let config = toml::de::from_str(&content)?;
@@ -334,25 +339,38 @@ impl SqliteConfig {
 /// Get the location of the first found default config file paths
 /// according to the following order:
 ///
-/// 1. $XDG_CONFIG_HOME/gurk/gurk.toml
-/// 2. $XDG_CONFIG_HOME/gurk.yml
-/// 3. $HOME/.config/gurk/gurk.toml
-/// 4. $HOME/.gurk.toml
+/// 1. $XDG_CONFIG_HOME/gurk/gurk.toml (if XDG_CONFIG_HOME is set)
+/// 2. $XDG_CONFIG_HOME/gurk.toml (if XDG_CONFIG_HOME is set)
+/// 3. Platform config dir (e.g. ~/Library/Application Support on macOS)/gurk/gurk.toml
+/// 4. Platform config dir/gurk.toml
+/// 5. $HOME/.gurk.toml
 fn installed_config() -> Option<PathBuf> {
-    // case 1, and 3 as fallback (note: case 2 is not possible if 1 is not possible)
+    // Check XDG_CONFIG_HOME first (works on all platforms if set)
+    if let Ok(xdg_config) = std::env::var("XDG_CONFIG_HOME") {
+        let xdg_dir = PathBuf::from(xdg_config);
+        let config_file = xdg_dir.join("gurk/gurk.toml");
+        if config_file.exists() {
+            return Some(config_file);
+        }
+        let config_file = xdg_dir.join("gurk.toml");
+        if config_file.exists() {
+            return Some(config_file);
+        }
+    }
+
+    // Fall back to platform-specific config dir
     let config_dir = dirs::config_dir()?;
     let config_file = config_dir.join("gurk/gurk.toml");
     if config_file.exists() {
         return Some(config_file);
     }
 
-    // case 2
     let config_file = config_dir.join("gurk.toml");
     if config_file.exists() {
         return Some(config_file);
     }
 
-    // case 4
+    // Legacy: ~/.gurk.toml
     let home_dir = dirs::home_dir()?;
     let config_file = home_dir.join(".gurk.toml");
     if config_file.exists() {
@@ -377,6 +395,11 @@ pub fn fallback_data_path() -> Option<PathBuf> {
 }
 
 fn default_data_dir() -> PathBuf {
+    // Check XDG_DATA_HOME first (works on all platforms if set)
+    if let Ok(xdg_data) = std::env::var("XDG_DATA_HOME") {
+        return PathBuf::from(xdg_data).join("gurk");
+    }
+    // Fall back to platform-specific data dir
     let data_dir =
         dirs::data_dir().expect("data directory not found, $XDG_DATA_HOME and $HOME are unset?");
     data_dir.join("gurk")

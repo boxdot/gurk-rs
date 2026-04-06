@@ -1,5 +1,6 @@
 //! Signal Messenger client for terminal
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -55,6 +56,16 @@ struct Args {
     /// When omitted, passphrase_command is read from the env "GURK_PASSPHRASE_COMMAND".
     #[arg(long, conflicts_with = "passphrase")]
     passphrase_command: Option<String>,
+    /// Path to config file (overrides default config search paths)
+    ///
+    /// Can also be set via GURK_CONFIG environment variable.
+    #[arg(long, short, env = "GURK_CONFIG")]
+    config: Option<PathBuf>,
+    /// Path to data directory (overrides config file's data_dir)
+    ///
+    /// Can also be set via GURK_DATA_DIR environment variable.
+    #[arg(long, env = "GURK_DATA_DIR")]
+    data_dir: Option<PathBuf>,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -75,7 +86,13 @@ fn main() -> anyhow::Result<()> {
 
     log_panics::init();
 
-    let (config, passphrase) = match Config::load_installed().context("failed to load config")? {
+    let (mut config, passphrase) = match args
+        .config
+        .take()
+        .map(|p| Config::load(&p).with_context(|| format!("failed to load config from {}", p.display())))
+        .transpose()?
+        .or(Config::load_installed().context("failed to load config")?)
+    {
         Some(config) => {
             let mut config = config.report_deprecated_keys();
             let passphrase = Passphrase::get(
@@ -87,6 +104,13 @@ fn main() -> anyhow::Result<()> {
         }
         None => onboarding::run()?,
     };
+
+    // CLI --data-dir overrides config file and clears any hardcoded paths
+    if let Some(data_dir) = args.data_dir.take() {
+        config.data_dir = data_dir;
+        // Clear sqlite config so db path is derived from data_dir
+        config.sqlite = None;
+    }
 
     let runtime = runtime::Builder::new_multi_thread()
         .thread_stack_size(8 * 1024 * 1024)
