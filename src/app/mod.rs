@@ -42,6 +42,7 @@ pub struct App {
     show_channel_list: bool,
     receipt_handler: ReceiptHandler,
     pub input: Input,
+    drafts: BTreeMap<ChannelId, Input>,
     pub is_multiline_input: bool,
     editing: Option<MessageId>,
     pub(crate) select_channel: SelectChannel,
@@ -105,6 +106,7 @@ impl App {
             show_channel_list: true,
             receipt_handler: ReceiptHandler::new(),
             input: Default::default(),
+            drafts: BTreeMap::new(),
             is_multiline_input: false,
             editing: None,
             select_channel: Default::default(),
@@ -138,6 +140,28 @@ impl App {
             &mut self.select_channel.input
         } else {
             &mut self.input
+        }
+    }
+
+    /// Save current input to the old channel's draft and load the new channel's draft.
+    pub fn swap_channel_draft(&mut self, old_channel: Option<ChannelId>, new_channel: Option<ChannelId>) {
+        if old_channel == new_channel {
+            return;
+        }
+        // Save current input as old channel's draft
+        if let Some(old_id) = old_channel {
+            let old_input = std::mem::take(&mut self.input);
+            if !old_input.is_empty() {
+                self.drafts.insert(old_id, old_input);
+            } else {
+                self.drafts.remove(&old_id);
+            }
+        }
+        // Restore new channel's draft
+        if let Some(new_id) = new_channel {
+            self.input = self.drafts.remove(&new_id).unwrap_or_default();
+        } else {
+            self.input = Input::default();
         }
     }
 
