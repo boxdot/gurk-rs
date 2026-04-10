@@ -137,7 +137,7 @@ impl App {
                 .await;
                 read.into_iter().for_each(|r| {
                     self.handle_receipt(
-                        r.parse_sender_aci().unwrap_or_default(),
+                        r.parse_sender_aci().map(Into::into).unwrap_or_default(),
                         Receipt::Read,
                         vec![r.timestamp.unwrap()],
                     );
@@ -806,20 +806,6 @@ impl MessageExt for SyncMessage {
                         .as_ref()
                 })?;
             ChannelId::from_master_key_bytes(group_v2.master_key.as_deref()?).ok()
-        }
-    }
-}
-
-trait SyncReadExt {
-    fn parse_sender_aci(&self) -> Option<Uuid>;
-}
-
-impl SyncReadExt for Read {
-    fn parse_sender_aci(&self) -> Option<Uuid> {
-        if let Some(bytes) = self.sender_aci_binary.as_deref() {
-            ServiceId::parse_from_service_id_binary(bytes).map(|sid| sid.raw_uuid())
-        } else {
-            self.sender_aci.as_deref().and_then(|s| s.parse().ok())
         }
     }
 }

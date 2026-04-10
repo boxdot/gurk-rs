@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.1] - 2026-03-15
+
+### 🚀 Features
+
+- Channel list toggle (#490)
+- Add editor mode with configurable ctrl-o keybind (#488)
+
+### 🐛 Bug Fixes
+
+- Fix device linking (#510)
+- Fix path traversal in attachment name (#505)
+- Parse binary fields in messages (#504)
+- Replace `Color::Gray` with `Color::Reset` in name resolver (#492)
+
+
+* @Koleok made their first contribution in #488
+* @John-Toohey made their first contribution in #492
+
 ## [0.9.0] - 2026-03-03
 
 This is a major release due to fundamental changes in the underlying Signal

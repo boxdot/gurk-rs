@@ -147,23 +147,29 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
     app.populate_names_cache().await;
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Event>(100);
-    tokio::spawn({
+    // Stored reader so it can be aborted before launching an external editor
+    // (otherwise both processes compete for stdin and the editor ends up missing keystrokes).
+    let spawn_event_reader = {
         let tx = tx.clone();
-        async move {
-            let mut reader = EventStream::new().fuse();
-            while let Some(event) = reader.next().await {
-                match event {
-                    Ok(CEvent::Key(key)) => tx.send(Event::Input(key)).await.unwrap(),
-                    Ok(CEvent::Resize(cols, rows)) => {
-                        tx.send(Event::Resize { cols, rows }).await.unwrap()
+        move || {
+            let tx = tx.clone();
+            tokio::spawn(async move {
+                let mut reader = EventStream::new().fuse();
+                while let Some(event) = reader.next().await {
+                    match event {
+                        Ok(CEvent::Key(key)) => tx.send(Event::Input(key)).await.unwrap(),
+                        Ok(CEvent::Resize(cols, rows)) => {
+                            tx.send(Event::Resize { cols, rows }).await.unwrap()
+                        }
+                        Ok(CEvent::Mouse(button)) => tx.send(Event::Click(button)).await.unwrap(),
+                        Ok(CEvent::Paste(content)) => tx.send(Event::Paste(content)).await.unwrap(),
+                        _ => (),
                     }
-                    Ok(CEvent::Mouse(button)) => tx.send(Event::Click(button)).await.unwrap(),
-                    Ok(CEvent::Paste(content)) => tx.send(Event::Paste(content)).await.unwrap(),
-                    _ => (),
                 }
-            }
+            })
         }
-    });
+    };
+    let mut event_reader_handle = spawn_event_reader();
 
     let inner_tx = tx.clone();
 
@@ -343,6 +349,43 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
             }
             None => {
                 break;
+            }
+        }
+
+        if app.open_editor_requested {
+            app.open_editor_requested = false;
+            let initial_content = app.input.data.clone();
+
+            // Abort event reader BEFORE releasing the terminal so editor gets
+            // exclusive access to stdin (no stolen keystrokes).
+            event_reader_handle.abort();
+            let _ = event_reader_handle.await;
+
+            execute!(
+                terminal.backend_mut(),
+                LeaveAlternateScreen,
+                DisableMouseCapture
+            )?;
+            terminal.show_cursor()?;
+            disable_raw_mode()?;
+
+            // editor on blocking thread (edit::edit spawns subprocess + waits)
+            let edit_result =
+                tokio::task::spawn_blocking(move || edit::edit(initial_content)).await?;
+
+            enable_raw_mode()?;
+            execute!(
+                terminal.backend_mut(),
+                EnterAlternateScreen,
+                EnableMouseCapture
+            )?;
+            terminal.clear()?;
+
+            event_reader_handle = spawn_event_reader();
+            if let Ok(text) = edit_result {
+                let text = text.trim_end_matches('\n').to_string();
+                app.input.data = text;
+                app.input.on_end();
             }
         }
 

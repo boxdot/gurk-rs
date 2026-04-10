@@ -103,6 +103,9 @@ impl App {
             }
             Command::ToggleMuteChannel => self.toggle_mute_channel(),
             Command::ToggleChannelList => self.toggle_channel_list(),
+            Command::OpenEditor => {
+                self.open_editor_requested = true;
+            }
             Command::NoOp => {}
         }
         Ok(())
