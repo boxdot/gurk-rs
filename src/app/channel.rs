@@ -82,14 +82,8 @@ impl App {
 
                 let mut channel = channel.into_owned();
 
-                self.ensure_users_are_known(
-                    group_data
-                        .members
-                        .iter()
-                        .copied()
-                        .zip(profile_keys.into_iter()),
-                )
-                .await;
+                self.ensure_users_are_known(group_data.members.iter().copied().zip(profile_keys))
+                    .await;
 
                 channel.name = name;
                 channel.group_data = Some(group_data);
@@ -104,14 +98,8 @@ impl App {
                 profile_keys,
             } = self.signal_manager.resolve_group(master_key).await?;
 
-            self.ensure_users_are_known(
-                group_data
-                    .members
-                    .iter()
-                    .copied()
-                    .zip(profile_keys.into_iter()),
-            )
-            .await;
+            self.ensure_users_are_known(group_data.members.iter().copied().zip(profile_keys))
+                .await;
 
             let channel = Channel {
                 id: channel_id,

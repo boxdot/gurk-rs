@@ -145,10 +145,8 @@ impl App {
                         self.channels.state.select(Some(idx));
                     }
                 }
-                KeyCode::Esc => {
-                    if !self.reset_editing() {
-                        self.reset_message_selection();
-                    }
+                KeyCode::Esc if !self.reset_editing() => {
+                    self.reset_message_selection();
                 }
                 KeyCode::Char(c) => self.get_input().put_char(c),
                 _ => {}
