@@ -232,7 +232,8 @@ pub enum Command {
     // ReplyMessage,
     #[strum(props(desc = "Open external editor to compose a message"))]
     OpenEditor,
-    // DeleteMessage,
+    #[strum(props(desc = "Delete selected message for everyone"))]
+    DeleteMessage,
 }
 
 #[derive(Clone, Debug)]
@@ -500,6 +501,7 @@ ctrl-o = "open_editor"
 [message_selected]
 alt-y = "copy_message selected"
 ctrl-e = "edit_message"
+ctrl-d = "delete_message"
 ctrl-t = "react :thumbsup:"
 ctrl-h = "react ❤️"
 

@@ -169,6 +169,7 @@ beginning_of_line
 end_of_line
 delete_character previous|next
 edit_message
+delete_message
 open_url
 open_file
 toggle_mute_channel

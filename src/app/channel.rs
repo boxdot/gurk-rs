@@ -88,14 +88,8 @@ impl App {
 
                 let mut channel = channel.into_owned();
 
-                self.ensure_users_are_known(
-                    group_data
-                        .members
-                        .iter()
-                        .copied()
-                        .zip(profile_keys.into_iter()),
-                )
-                .await;
+                self.ensure_users_are_known(group_data.members.iter().copied().zip(profile_keys))
+                    .await;
 
                 channel.name = name;
                 channel.group_data = Some(group_data);
@@ -110,14 +104,8 @@ impl App {
                 profile_keys,
             } = self.signal_manager.resolve_group(master_key).await?;
 
-            self.ensure_users_are_known(
-                group_data
-                    .members
-                    .iter()
-                    .copied()
-                    .zip(profile_keys.into_iter()),
-            )
-            .await;
+            self.ensure_users_are_known(group_data.members.iter().copied().zip(profile_keys))
+                .await;
 
             let channel = Channel {
                 id: channel_id,
@@ -264,6 +252,21 @@ impl App {
         }
 
         self.touch_channel(channel_idx, from_current_user);
+    }
+
+    pub(super) fn remove_message_from_view(&mut self, channel_id: ChannelId, arrived_at: u64) {
+        if let Some(messages) = self.messages.get_mut(&channel_id)
+            && let Some(pos) = messages.items.iter().position(|&ts| ts == arrived_at)
+        {
+            messages.items.remove(pos);
+            if let Some(selected) = messages.state.selected() {
+                if messages.items.is_empty() {
+                    messages.state.select(None);
+                } else if selected > 0 && selected >= messages.items.len() {
+                    messages.state.select(Some(selected - 1));
+                }
+            }
+        }
     }
 
     pub(crate) fn touch_channel(&mut self, channel_idx: usize, from_current_user: bool) {

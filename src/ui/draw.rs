@@ -124,7 +124,8 @@ fn draw_channels(f: &mut Frame, app: &mut App, area: Rect) {
                 String::new()
             };
             let mute_label = if channel.muted { " [M]" } else { "" };
-            let suffix = format!("{unread_messages_label}{mute_label}");
+            let typing_label = if channel.is_writing() { " [T]" } else { "" };
+            let suffix = format!("{unread_messages_label}{mute_label}{typing_label}");
             let channel_name = app.channel_name(&channel);
             let label = format!("{channel_name}{suffix}");
             let label_width = label.width();
@@ -531,14 +532,19 @@ fn display_message(
     let delimiter = Span::from(": ");
 
     // collect message text
-    let text = strip_ansi_escapes::strip_str(msg.message.as_deref().unwrap_or_default());
-    let mut text = replace_mentions(msg, names, text);
-    add_attachments(msg, &mut text);
-    if text.is_empty() {
-        return None; // no text => nothing to render
-    }
-    add_reactions(msg, &mut text);
-    add_edited(msg, &mut text);
+    let text = if msg.deleted {
+        String::from("[message deleted]")
+    } else {
+        let text = strip_ansi_escapes::strip_str(msg.message.as_deref().unwrap_or_default());
+        let mut text = replace_mentions(msg, names, text);
+        add_attachments(msg, &mut text);
+        if text.is_empty() {
+            return None; // no text => nothing to render
+        }
+        add_reactions(msg, &mut text);
+        add_edited(msg, &mut text);
+        text
+    };
 
     let mut spans: Vec<Line> = vec![];
     if let Some(date_division) = date_division {
@@ -584,7 +590,11 @@ fn display_message(
     }
 
     let add_time = quote_text.is_none();
-    let message_style = if colored_messages {
+    let message_style = if msg.deleted {
+        Style::default()
+            .fg(Color::DarkGray)
+            .add_modifier(Modifier::ITALIC)
+    } else if colored_messages {
         Style::default().fg(from_color)
     } else {
         Style::default()
@@ -900,6 +910,7 @@ mod tests {
             send_failed: Default::default(),
             edit: Default::default(),
             edited: Default::default(),
+            deleted: Default::default(),
         }
     }
 
