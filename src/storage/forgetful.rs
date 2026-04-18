@@ -44,6 +44,8 @@ impl Storage for ForgetfulStorage {
         Cow::Owned(message)
     }
 
+    fn remove_message(&mut self, _message_id: MessageId) {}
+
     fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<'_, str>)> + '_> {
         Box::new(std::iter::empty())
     }

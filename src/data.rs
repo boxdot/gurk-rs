@@ -178,6 +178,9 @@ pub struct Message {
     /// Whether the message was edited
     #[serde(default)]
     pub(crate) edited: bool,
+    /// Whether the message was deleted (remote delete / delete for everyone)
+    #[serde(default)]
+    pub(crate) deleted: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -291,6 +294,7 @@ impl Message {
             send_failed: Default::default(),
             edit: Default::default(),
             edited: Default::default(),
+            deleted: Default::default(),
         }
     }
 
@@ -307,6 +311,7 @@ impl Message {
             send_failed: Default::default(),
             edit: Default::default(),
             edited: Default::default(),
+            deleted: Default::default(),
         }
     }
 
@@ -327,6 +332,7 @@ impl Message {
             send_failed: Default::default(),
             edit: Default::default(),
             edited: Default::default(),
+            deleted: Default::default(),
         })
     }
 

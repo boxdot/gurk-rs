@@ -10,8 +10,10 @@ use presage::libsignal_service::sender::AttachmentSpec;
 use presage::manager::Registered;
 use presage::model::contacts::Contact;
 use presage::model::groups::Group;
-use presage::proto::data_message::{Quote, Reaction};
-use presage::proto::{AttachmentPointer, DataMessage, EditMessage, GroupContextV2, ReceiptMessage};
+use presage::proto::data_message::{Delete, Quote, Reaction};
+use presage::proto::{
+    AttachmentPointer, DataMessage, EditMessage, GroupContextV2, ReceiptMessage, SyncMessage,
+};
 use presage::store::ContentsStore;
 use presage::{
     libsignal_service::content::{Content, ContentBody},
@@ -268,6 +270,7 @@ impl SignalManager for PresageManager {
             send_failed: Default::default(),
             edit: edit_message_timestamp,
             edited: edit_message_timestamp.is_some(),
+            deleted: Default::default(),
         };
         (message, response)
     }
@@ -326,6 +329,92 @@ impl SignalManager for PresageManager {
                 error!("cannot send to broken channel without group data");
             }
         }
+    }
+
+    fn send_delete(&self, channel: &Channel, target_sent_timestamp: u64) {
+        let timestamp = utc_now_timestamp_msec();
+
+        let mut data_message = DataMessage {
+            delete: Some(Delete {
+                target_sent_timestamp: Some(target_sent_timestamp),
+            }),
+            ..Default::default()
+        };
+
+        match (channel.id, channel.group_data.as_ref()) {
+            (ChannelId::User(uuid), _) => {
+                let mut manager = self.manager.clone();
+                let body = ContentBody::DataMessage(data_message);
+                self.local_pool.spawn(move || async move {
+                    if let Err(e) = manager
+                        .send_message(ServiceId::Aci(uuid.into()), body, timestamp)
+                        .await
+                    {
+                        error!(%e, "failed to send delete to {uuid}");
+                    }
+                });
+            }
+            (ChannelId::Group(_), Some(group_data)) => {
+                let mut manager = self.manager.clone();
+
+                let master_key_bytes = group_data.master_key_bytes.to_vec();
+                data_message.group_v2 = Some(GroupContextV2 {
+                    master_key: Some(master_key_bytes.clone()),
+                    revision: Some(group_data.revision),
+                    ..Default::default()
+                });
+
+                self.local_pool.spawn(move || async move {
+                    if let Err(e) = manager
+                        .send_message_to_group(&master_key_bytes, data_message, timestamp)
+                        .await
+                    {
+                        error!(%e, "failed to send group delete");
+                    }
+                });
+            }
+            _ => {
+                error!("cannot send to broken channel without group data");
+            }
+        }
+    }
+
+    fn send_delete_for_me(&self, channel: &Channel, message: &Message) {
+        let timestamp = utc_now_timestamp_msec();
+        let user_id = self.user_id();
+
+        let conversation = Some(channel_to_conversation_id(channel));
+        let addressable = presage::proto::AddressableMessage {
+            sent_timestamp: Some(message.arrived_at),
+            author: Some(
+                presage::proto::addressable_message::Author::AuthorServiceIdBinary(
+                    ServiceId::Aci(message.from_id.into()).service_id_binary(),
+                ),
+            ),
+        };
+        let delete_for_me = presage::proto::sync_message::DeleteForMe {
+            message_deletes: vec![
+                presage::proto::sync_message::delete_for_me::MessageDeletes {
+                    conversation,
+                    messages: vec![addressable],
+                },
+            ],
+            ..Default::default()
+        };
+        let sync_message = ContentBody::SynchronizeMessage(SyncMessage {
+            delete_for_me: Some(delete_for_me),
+            ..Default::default()
+        });
+
+        let mut manager = self.manager.clone();
+        self.local_pool.spawn(move || async move {
+            if let Err(e) = manager
+                .send_message(ServiceId::Aci(user_id.into()), sync_message, timestamp)
+                .await
+            {
+                error!(%e, "failed to send delete-for-me");
+            }
+        });
     }
 
     async fn resolve_profile_name(
@@ -401,6 +490,19 @@ impl SignalManager for PresageManager {
                 .flatten()
                 .flatten(),
         )
+    }
+}
+
+fn channel_to_conversation_id(channel: &Channel) -> presage::proto::ConversationIdentifier {
+    use presage::proto::conversation_identifier::Identifier;
+    let identifier = match channel.id {
+        ChannelId::User(uuid) => {
+            Identifier::ThreadServiceIdBinary(ServiceId::Aci(uuid.into()).service_id_binary())
+        }
+        ChannelId::Group(group_id) => Identifier::ThreadGroupId(group_id.to_vec()),
+    };
+    presage::proto::ConversationIdentifier {
+        identifier: Some(identifier),
     }
 }
 
