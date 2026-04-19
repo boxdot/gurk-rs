@@ -29,8 +29,8 @@ debug = true
 dev = ["prost", "base64", "serde_json"]
 
 [dependencies]
-presage = { git = "https://github.com/whisperfish/presage", rev = "fe3ed54c4844ae51c3a9fa49cf80a7816a31a425", default-features = false }
-presage-store-sqlite = { git = "https://github.com/whisperfish/presage", rev = "fe3ed54c4844ae51c3a9fa49cf80a7816a31a425", default-features = false }
+presage = { git = "https://github.com/whisperfish/presage", rev = "06ae307789bee25dd7643aa7be7eb915b37e4c46", default-features = false }
+presage-store-sqlite = { git = "https://github.com/whisperfish/presage", rev = "06ae307789bee25dd7643aa7be7eb915b37e4c46", default-features = false }
 
 # dev feature dependenciestoml
 prost = { version = "0.13.4", optional = true }
