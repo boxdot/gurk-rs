@@ -94,6 +94,9 @@ impl App {
             Command::Quit => {
                 self.should_quit = true;
             }
+            Command::Redraw => {
+                self.should_clear = true;
+            }
             Command::Scroll(Widget::Help, DirectionVertical::Up, MoveAmountVisual::Entry) => {
                 if self.help_scroll.0 >= 1 {
                     self.help_scroll.0 -= 1
