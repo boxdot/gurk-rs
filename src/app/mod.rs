@@ -152,7 +152,11 @@ impl App {
     }
 
     /// Save current input to the old channel's draft and load the new channel's draft.
-    pub fn swap_channel_draft(&mut self, old_channel: Option<ChannelId>, new_channel: Option<ChannelId>) {
+    pub fn swap_channel_draft(
+        &mut self,
+        old_channel: Option<ChannelId>,
+        new_channel: Option<ChannelId>,
+    ) {
         if old_channel == new_channel {
             return;
         }

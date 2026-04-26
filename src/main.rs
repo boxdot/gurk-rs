@@ -299,12 +299,9 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
                     {
                         let old = app.channels.state.selected().map(|i| app.channels.items[i]);
                         app.channels.state.select(Some(channel_idx));
-<<<<<<< HEAD
                         let new = Some(app.channels.items[channel_idx]);
                         app.swap_channel_draft(old, new);
-=======
                         app.on_channel_changed();
->>>>>>> origin/main
                         app.reset_unread_messages();
                     }
                 }
