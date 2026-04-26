@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.2] - 2026-04-26
+
+### 🚀 Features
+
+- Message deletion support (delete for everyone + delete for me) (#519)
+- Show typing indicator in channel list (#520)
+- Add ctrl+l to force full screen redraw (#521)
+- Disappearing messages support (#522)
+- Separate draft input per channel (#524)
+
+### 🐛 Bug Fixes
+
+- Handle incoming edit messages from other users (#518)
+- The order of the options in the onboarding on macOS (#507)
+
+### 💼 Other
+
+- Out of date nix flake (#515)
+
+### ⚙️ Miscellaneous Tasks
+
+- Upgrade presage and libsignal 0.87.4 -> 0.91.0 (#529)
+
+
+* @KiaraGrouwstra made their first contribution in #524
+* @cwedgwood made their first contribution in #522
+* @valyntyler made their first contribution in #515
+
 ## [0.9.1] - 2026-03-15
 
 ### 🚀 Features

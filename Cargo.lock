@@ -1733,7 +1733,7 @@ dependencies = [
 
 [[package]]
 name = "gurk"
-version = "0.9.1"
+version = "0.9.2"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -3613,7 +3613,7 @@ dependencies = [
 [[package]]
 name = "presage"
 version = "0.8.0-dev"
-source = "git+https://github.com/whisperfish/presage?rev=06ae307789bee25dd7643aa7be7eb915b37e4c46#06ae307789bee25dd7643aa7be7eb915b37e4c46"
+source = "git+https://github.com/whisperfish/presage?rev=600c4ede51865f7de6ca21507e738a7bd70cc7ae#600c4ede51865f7de6ca21507e738a7bd70cc7ae"
 dependencies = [
  "base64",
  "bytes",
@@ -3634,7 +3634,7 @@ dependencies = [
 [[package]]
 name = "presage-store-sqlite"
 version = "0.8.0-dev"
-source = "git+https://github.com/whisperfish/presage?rev=06ae307789bee25dd7643aa7be7eb915b37e4c46#06ae307789bee25dd7643aa7be7eb915b37e4c46"
+source = "git+https://github.com/whisperfish/presage?rev=600c4ede51865f7de6ca21507e738a7bd70cc7ae#600c4ede51865f7de6ca21507e738a7bd70cc7ae"
 dependencies = [
  "async-trait",
  "bytes",
