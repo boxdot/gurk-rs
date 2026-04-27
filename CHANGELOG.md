@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.3] - 2026-04-27
+
+### 🐛 Bug Fixes
+
+- Remove stray previous() in select_next_channel (#533)
+
 ## [0.9.2] - 2026-04-26
 
 ### 🚀 Features
