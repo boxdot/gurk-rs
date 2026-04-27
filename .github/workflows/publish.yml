@@ -124,7 +124,7 @@ jobs:
     needs:
       - dist-changelog
       - dist-gnu
-      # - dist-musl
+      - dist-musl
       - dist-apple
     steps:
       - uses: actions/download-artifact@v4
