@@ -31,7 +31,6 @@ impl App {
         self.channels.next();
         let new = self.channels.selected_item().copied();
         self.swap_channel_draft(old, new);
-        self.channels.previous();
         self.on_channel_changed();
     }
 
