@@ -1,6 +1,7 @@
 //! Part of the app which is serialized
 
-use std::collections::HashSet;
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 use anyhow::anyhow;
 use presage::libsignal_service::zkgroup::groups::{GroupMasterKey, GroupSecretParams};
@@ -25,18 +26,40 @@ pub struct Channel {
     pub expire_timer: Option<u32>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Timeout for typing indicators (10 seconds per Signal protocol)
+pub const TYPING_TIMEOUT_SECS: u64 = 10;
+
+#[derive(Debug, Clone)]
 pub enum TypingSet {
-    SingleTyping(bool),
-    GroupTyping(HashSet<Uuid>),
+    /// For direct messages: None = not typing, Some(when) = typing since
+    SingleTyping(Option<Instant>),
+    /// For groups: maps user UUID to when they started typing
+    GroupTyping(HashMap<Uuid, Instant>),
 }
+
+impl PartialEq for TypingSet {
+    fn eq(&self, other: &Self) -> bool {
+        // Compare presence only, not timestamps
+        match (self, other) {
+            (TypingSet::SingleTyping(a), TypingSet::SingleTyping(b)) => {
+                a.is_some() == b.is_some()
+            }
+            (TypingSet::GroupTyping(a), TypingSet::GroupTyping(b)) => {
+                a.len() == b.len() && a.keys().all(|k| b.contains_key(k))
+            }
+            _ => false,
+        }
+    }
+}
+
+impl Eq for TypingSet {}
 
 impl TypingSet {
     pub fn new(is_group: bool) -> Self {
         if is_group {
-            Self::GroupTyping(Default::default())
+            Self::GroupTyping(HashMap::new())
         } else {
-            Self::SingleTyping(false)
+            Self::SingleTyping(None)
         }
     }
 }
@@ -52,19 +75,42 @@ pub struct GroupData {
 impl Channel {
     pub fn reset_writing(&mut self, user: Uuid) -> bool {
         match &mut self.typing {
-            TypingSet::GroupTyping(hash_set) => hash_set.remove(&user),
-            TypingSet::SingleTyping(true) => {
-                self.typing = TypingSet::SingleTyping(false);
+            TypingSet::GroupTyping(map) => map.remove(&user).is_some(),
+            TypingSet::SingleTyping(Some(_)) => {
+                self.typing = TypingSet::SingleTyping(None);
                 true
             }
-            TypingSet::SingleTyping(false) => false,
+            TypingSet::SingleTyping(None) => false,
         }
     }
 
     pub fn is_writing(&self) -> bool {
         match &self.typing {
-            TypingSet::GroupTyping(a) => !a.is_empty(),
-            TypingSet::SingleTyping(a) => *a,
+            TypingSet::GroupTyping(map) => !map.is_empty(),
+            TypingSet::SingleTyping(opt) => opt.is_some(),
+        }
+    }
+
+    /// Remove typing indicators older than the timeout. Returns true if any were removed.
+    pub fn expire_typing(&mut self) -> bool {
+        let timeout = Duration::from_secs(TYPING_TIMEOUT_SECS);
+        let now = Instant::now();
+
+        match &mut self.typing {
+            TypingSet::GroupTyping(map) => {
+                let before = map.len();
+                map.retain(|_, started| now.duration_since(*started) < timeout);
+                map.len() != before
+            }
+            TypingSet::SingleTyping(Some(started)) => {
+                if now.duration_since(*started) >= timeout {
+                    self.typing = TypingSet::SingleTyping(None);
+                    true
+                } else {
+                    false
+                }
+            }
+            TypingSet::SingleTyping(None) => false,
         }
     }
 

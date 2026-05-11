@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
+use std::time::Instant;
 
 use anyhow::{Context as _, anyhow};
 use itertools::Itertools;
@@ -653,6 +654,20 @@ impl App {
         self.receipt_handler.step(self.signal_manager.as_ref());
     }
 
+    /// Expire typing indicators older than TYPING_TIMEOUT_SECS
+    pub fn expire_typing_indicators(&mut self) {
+        for channel_id in &self.channels.items {
+            if let Some(channel) = self.storage.channel(*channel_id) {
+                if channel.is_writing() {
+                    let mut channel = channel.into_owned();
+                    if channel.expire_typing() {
+                        self.storage.store_channel(channel);
+                    }
+                }
+            }
+        }
+    }
+
     fn handle_typing(
         &mut self,
         sender_uuid: Uuid,
@@ -666,13 +681,13 @@ impl App {
                 .channel(ChannelId::Group(gid))
                 .ok_or(())?
                 .into_owned();
-            if let TypingSet::GroupTyping(ref mut hash_set) = channel.typing {
+            if let TypingSet::GroupTyping(ref mut map) = channel.typing {
                 match action {
                     TypingAction::Started => {
-                        hash_set.insert(sender_uuid);
+                        map.insert(sender_uuid, Instant::now());
                     }
                     TypingAction::Stopped => {
-                        hash_set.remove(&sender_uuid);
+                        map.remove(&sender_uuid);
                     }
                 }
                 self.storage.store_channel(channel);
@@ -688,10 +703,10 @@ impl App {
             if let TypingSet::SingleTyping(_) = channel.typing {
                 match action {
                     TypingAction::Started => {
-                        channel.typing = TypingSet::SingleTyping(true);
+                        channel.typing = TypingSet::SingleTyping(Some(Instant::now()));
                     }
                     TypingAction::Stopped => {
-                        channel.typing = TypingSet::SingleTyping(false);
+                        channel.typing = TypingSet::SingleTyping(None);
                     }
                 }
                 self.storage.store_channel(channel);

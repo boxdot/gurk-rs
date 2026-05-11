@@ -284,6 +284,7 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
         match event {
             Some(Event::Tick) => {
                 app.step_receipts();
+                app.expire_typing_indicators();
                 expire_tick_counter += 1;
                 if expire_tick_counter >= 5 {
                     expire_tick_counter = 0;
