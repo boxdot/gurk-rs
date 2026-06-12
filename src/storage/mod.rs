@@ -1,6 +1,5 @@
 mod copy;
 mod forgetful;
-mod memcache;
 mod sql;
 
 use std::borrow::Cow;
@@ -12,7 +11,6 @@ use crate::data::{Channel, ChannelId, Message};
 
 pub use copy::sync_from_signal;
 pub use forgetful::ForgetfulStorage;
-pub use memcache::MemCache;
 pub use sql::SqliteStorage;
 
 /// Storage of channels, messages, names and metadata.

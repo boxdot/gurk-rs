@@ -77,7 +77,7 @@ mod tests {
         let path = tempdir.path().join("data.sqlite");
         let url: Url = format!("sqlite://{}", path.display()).parse().unwrap();
 
-        let _ = SqliteStorage::open_unenrypted(&url).await.unwrap();
+        let _ = SqliteStorage::open_unencrypted(&url).await.unwrap();
         assert!(path.exists());
         assert_eq!(is_sqlite_encrypted_heuristics(&url), Some(false));
 

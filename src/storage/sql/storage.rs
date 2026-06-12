@@ -63,8 +63,8 @@ impl SqliteStorage {
         Ok(Self { pool })
     }
 
-    #[cfg(test)]
-    pub(crate) async fn open_unenrypted(url: &Url) -> sqlx::Result<Self> {
+    #[cfg(any(test, feature = "dev"))]
+    pub async fn open_unencrypted(url: &Url) -> sqlx::Result<Self> {
         let opts: SqliteConnectOptions = url.as_str().parse()?;
         let opts = opts
             .create_if_missing(true)

@@ -1076,10 +1076,9 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    #[ignore = "forgetful storage does not support lookup by arrived_at"]
-    fn test_handle_read() {
-        let (mut app, _events, _sent_messages) = test_app();
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_handle_read() {
+        let (mut app, _events, _sent_messages) = test_app().await;
 
         let channel_id = *app.channels.items.first().unwrap();
 

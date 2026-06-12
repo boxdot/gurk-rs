@@ -22,7 +22,7 @@ use gurk::{app::App, config::Config};
 use gurk::{backoff::Backoff, passphrase::Passphrase};
 use gurk::{
     onboarding,
-    storage::{MemCache, SqliteStorage, Storage, sync_from_signal},
+    storage::{SqliteStorage, Storage, sync_from_signal},
 };
 use gurk::{signal, ui};
 use presage::libsignal_service::content::Content;
@@ -141,7 +141,7 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
         let sqlite_storage = SqliteStorage::maybe_encrypt_and_open(&url, &passphrase, false)
             .await
             .with_context(|| format!("failed to open sqlite data storage at: {url}"))?;
-        Box::new(MemCache::new(sqlite_storage))
+        Box::new(sqlite_storage)
     };
 
     sync_from_signal(&*signal_manager, &mut *storage).await;

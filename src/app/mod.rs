@@ -407,23 +407,23 @@ pub(crate) mod tests {
 
     use arboard::ImageData;
 
-    use crate::config::User;
     use crate::data::GroupData;
     use crate::signal::GroupMasterKeyBytes;
     use crate::signal::test::SignalManagerMock;
-    use crate::storage::{ForgetfulStorage, MemCache};
+    use crate::{config::User, storage::SqliteStorage};
 
     use super::*;
 
-    pub(crate) fn test_app() -> (
+    pub(crate) async fn test_app() -> (
         App,
         mpsc::UnboundedReceiver<Event>,
         Rc<RefCell<Vec<Message>>>,
     ) {
+        let url = "sqlite::memory:".parse().unwrap();
+        let mut storage = SqliteStorage::open_unencrypted(&url).await.unwrap();
+
         let signal_manager = SignalManagerMock::new();
         let sent_messages = signal_manager.sent_messages.clone();
-
-        let mut storage = MemCache::new(ForgetfulStorage);
 
         let channel_id = ChannelId::User(Uuid::new_v4());
         let channel = Channel {
@@ -474,9 +474,9 @@ pub(crate) mod tests {
         (app, events, sent_messages)
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_send_input() {
-        let (mut app, mut events, sent_messages) = test_app();
+        let (mut app, mut events, sent_messages) = test_app().await;
         let input = "Hello, World!";
         for c in input.chars() {
             app.get_input().put_char(c);
@@ -501,9 +501,9 @@ pub(crate) mod tests {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_send_input_with_emoji() {
-        let (mut app, mut events, sent_messages) = test_app();
+        let (mut app, mut events, sent_messages) = test_app().await;
         let input = "\u{1F47B}";
         for c in input.chars() {
             app.get_input().put_char(c);
@@ -525,9 +525,9 @@ pub(crate) mod tests {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_send_input_with_emoji_codepoint() {
-        let (mut app, mut events, sent_messages) = test_app();
+        let (mut app, mut events, sent_messages) = test_app().await;
         let input = ":thumbsup:";
         for c in input.chars() {
             app.get_input().put_char(c);
@@ -547,9 +547,9 @@ pub(crate) mod tests {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_add_reaction_with_emoji() {
-        let (mut app, _events, _sent_messages) = test_app();
+        let (mut app, _events, _sent_messages) = test_app().await;
 
         let channel_id = app.channels.items[0];
         app.messages
@@ -571,9 +571,9 @@ pub(crate) mod tests {
         assert_eq!(reactions[0], (app.user_id, "\u{1F44D}".to_string()));
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_add_reaction_with_emoji_codepoint() {
-        let (mut app, _events, _sent_messages) = test_app();
+        let (mut app, _events, _sent_messages) = test_app().await;
 
         let channel_id = app.channels.items[0];
         app.messages
@@ -597,9 +597,9 @@ pub(crate) mod tests {
         assert_eq!(reactions[0], (app.user_id, "\u{1F44D}".to_string()));
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_remove_reaction() {
-        let (mut app, _events, _sent_messages) = test_app();
+        let (mut app, _events, _sent_messages) = test_app().await;
 
         let channel_id = app.channels.items[0];
         app.messages
@@ -628,9 +628,9 @@ pub(crate) mod tests {
         assert!(reactions.is_empty());
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_add_invalid_reaction() {
-        let (mut app, _events, _sent_messages) = test_app();
+        let (mut app, _events, _sent_messages) = test_app().await;
         let channel_id = app.channels.items[0];
         app.messages
             .get_mut(&channel_id)
