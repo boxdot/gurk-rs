@@ -25,8 +25,15 @@ pub use sql::SqliteStorage;
 pub trait Storage {
     /// Channels in no particular order
     fn channels(&self) -> Box<dyn Iterator<Item = Cow<'_, Channel>> + '_>;
+
     /// Gets the channel by id
     fn channel(&self, channel_id: ChannelId) -> Option<Cow<'_, Channel>>;
+
+    /// Returns the list of channels incl. their last message arrived_at.
+    ///
+    /// The order is from most recent to least recent, that is, descending by arrived_at.
+    fn channels_by_recency(&self) -> Vec<(ChannelId, Option<u64>)>;
+
     /// Stores the given `channel` and returns it back
     fn store_channel(&mut self, channel: Channel) -> Cow<'_, Channel>;
 
@@ -38,6 +45,8 @@ pub trait Storage {
 
     /// Up to `limit` messages strictly newer than `anchor`, ascending by arrived_at.
     fn messages_after(&self, channel_id: ChannelId, anchor: u64, limit: usize) -> Vec<Message>;
+
+    // Messages window functions
 
     /// Messages sorted by arrived_at in ascending order
     ///
@@ -53,6 +62,16 @@ pub trait Storage {
         &self,
         message_id: MessageId,
     ) -> Box<dyn DoubleEndedIterator<Item = Cow<'_, Message>> + '_>;
+
+    fn last_message(&self, channel_id: ChannelId) -> Option<Message> {
+        self.messages_tail(channel_id, 1).pop()
+    }
+
+    fn messages_count_after(&self, channel_id: ChannelId, arrived_at: u64) -> usize;
+
+    fn remove_expired(&self, now_ms: u64) -> Vec<MessageId>;
+
+    fn next_expiring_at(&self) -> Option<u64>;
 
     /// Stores the message for the given `channel_id` and returns it back.
     ///

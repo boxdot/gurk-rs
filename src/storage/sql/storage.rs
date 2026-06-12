@@ -283,6 +283,38 @@ impl Storage for SqliteStorage {
         channel?.convert().ok_logged().map(Cow::Owned)
     }
 
+    fn channels_by_recency(&self) -> Vec<(ChannelId, Option<u64>)> {
+        struct Row {
+            id: ChannelId,
+            last_arrived_at: Option<i64>,
+        }
+        block_async_in_place(
+            query_as!(
+                Row,
+                r#"
+                    SELECT
+                        c.id AS "id!: _",
+                        MAX(m.arrived_at) AS last_arrived_at
+                    FROM channels c
+                    LEFT JOIN messages m ON m.channel_id = c.id AND m.edit IS NULL
+                    GROUP BY c.id
+                    ORDER BY last_arrived_at DESC
+                "#,
+            )
+            .fetch_all(&self.pool),
+        )
+        .ok_logged()
+        .unwrap_or_default()
+        .into_iter()
+        .map(
+            |Row {
+                 id,
+                 last_arrived_at,
+             }| (id, last_arrived_at.and_then(|t| t.try_into().ok())),
+        )
+        .collect()
+    }
+
     fn store_channel(&mut self, channel: Channel) -> Cow<'_, Channel> {
         let id = &channel.id;
         let name = &channel.name;
@@ -512,6 +544,51 @@ impl Storage for SqliteStorage {
         )
     }
 
+    fn message(&self, message_id: MessageId) -> Option<Cow<'_, Message>> {
+        let channel_id = &message_id.channel_id;
+        let arrived_at: i64 = message_id
+            .arrived_at
+            .try_into()
+            .map_err(|_| MessageConvertError::InvalidTimestamp)
+            .ok_logged()?;
+        let message = block_async_in_place(
+            query_as!(
+                SqlMessage,
+                r#"
+                    SELECT
+                        m.arrived_at,
+                        m.from_id AS "from_id: _",
+                        m.message,
+                        m.receipt AS "receipt: _",
+                        m.body_ranges AS "body_ranges: _",
+                        m.attachments AS "attachments: _",
+                        m.reactions AS "reactions: _",
+                        q.arrived_at AS "quote_arrived_at: _",
+                        q.from_id AS "quote_from_id: _",
+                        q.message AS quote_message,
+                        q.attachments AS "quote_attachments: _",
+                        q.body_ranges AS "quote_body_ranges: _",
+                        q.receipt AS "quote_receipt: _",
+                        m.edit,
+                        m.edited as "edited: _",
+                        m.deleted as "deleted: _",
+                        m.expire_timer as "expire_timer: _",
+                        m.expires_at as "expires_at: _"
+                    FROM messages AS m
+                    LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1
+                    WHERE m.channel_id = ?1 AND m.arrived_at = ?2
+                    GROUP BY m.arrived_at
+                    LIMIT 1
+                "#,
+                channel_id,
+                arrived_at
+            )
+            .fetch_optional(&self.pool),
+        );
+        let message = message.ok_logged()??.convert().ok_logged()?;
+        Some(Cow::Owned(message))
+    }
+
     fn edits(
         &self,
         message_id: MessageId,
@@ -567,49 +644,57 @@ impl Storage for SqliteStorage {
         )
     }
 
-    fn message(&self, message_id: MessageId) -> Option<Cow<'_, Message>> {
-        let channel_id = &message_id.channel_id;
-        let arrived_at: i64 = message_id
-            .arrived_at
-            .try_into()
-            .map_err(|_| MessageConvertError::InvalidTimestamp)
-            .ok_logged()?;
-        let message = block_async_in_place(
-            query_as!(
-                SqlMessage,
-                r#"
-                    SELECT
-                        m.arrived_at,
-                        m.from_id AS "from_id: _",
-                        m.message,
-                        m.receipt AS "receipt: _",
-                        m.body_ranges AS "body_ranges: _",
-                        m.attachments AS "attachments: _",
-                        m.reactions AS "reactions: _",
-                        q.arrived_at AS "quote_arrived_at: _",
-                        q.from_id AS "quote_from_id: _",
-                        q.message AS quote_message,
-                        q.attachments AS "quote_attachments: _",
-                        q.body_ranges AS "quote_body_ranges: _",
-                        q.receipt AS "quote_receipt: _",
-                        m.edit,
-                        m.edited as "edited: _",
-                        m.deleted as "deleted: _",
-                        m.expire_timer as "expire_timer: _",
-                        m.expires_at as "expires_at: _"
-                    FROM messages AS m
-                    LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1
-                    WHERE m.channel_id = ?1 AND m.arrived_at = ?2
-                    GROUP BY m.arrived_at
-                    LIMIT 1
-                "#,
+    fn messages_count_after(&self, channel_id: ChannelId, arrived_at: u64) -> usize {
+        let channel_id = &channel_id;
+        let arrived_at = i64::try_from(arrived_at).expect("u64 overflow");
+        block_async_in_place(
+            query_scalar!(
+                "
+                    SELECT COUNT(*) FROM messages
+                    WHERE channel_id = ?1 AND arrived_at > ?2 AND edit IS NULL
+                ",
                 channel_id,
                 arrived_at
             )
+            .fetch_one(&self.pool),
+        )
+        .ok_logged()
+        .and_then(|c| usize::try_from(c).ok())
+        .unwrap_or_default()
+    }
+
+    fn remove_expired(&self, now_ms: u64) -> Vec<MessageId> {
+        let now_ms = i64::try_from(now_ms).expect("u64 overflow");
+        block_async_in_place(
+            query_as!(
+                MessageId,
+                r#"
+                    DELETE FROM messages
+                    WHERE expires_at IS NOT NULL AND expires_at <= ?1
+                    RETURNING
+                        channel_id AS "channel_id: _",
+                        arrived_at AS "arrived_at: _"
+                "#,
+                now_ms,
+            )
+            .fetch_all(&self.pool),
+        )
+        .ok_logged()
+        .unwrap_or_default()
+    }
+
+    fn next_expiring_at(&self) -> Option<u64> {
+        block_async_in_place(
+            query_scalar!(
+                r#"
+                    SELECT MIN(expires_at) AS "next_expiring_at: u64"
+                    FROM messages
+                    WHERE expires_at IS NOT NULL
+                "#,
+            )
             .fetch_optional(&self.pool),
-        );
-        let message = message.ok_logged()??.convert().ok_logged()?;
-        Some(Cow::Owned(message))
+        )
+        .ok_logged()??
     }
 
     fn store_message(&mut self, channel_id: ChannelId, message: Message) -> Cow<'_, Message> {
@@ -1035,6 +1120,136 @@ mod tests {
         let quote = messages[0].quote.as_ref().unwrap();
         assert_eq!(quote.arrived_at, 20);
         assert_eq!(quote.message.as_deref(), Some("message 20"));
+    }
+
+    fn test_channel(id: ChannelId, name: &str) -> Channel {
+        Channel {
+            id,
+            name: name.to_owned(),
+            group_data: None,
+            unread_messages: 0,
+            muted: false,
+            typing: TypingSet::new(false),
+            expire_timer: None,
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sqlite_storage_messages_count_after() {
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+        let (mut storage, channel_id) = windowed_fixtures().await;
+        let from_id = uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a");
+
+        assert_eq!(storage.messages_count_after(channel_id, 50), 4);
+        assert_eq!(storage.messages_count_after(channel_id, 90), 0);
+        assert_eq!(storage.messages_count_after(channel_id, 0), 9);
+
+        // edit rows (preserved original at 51, edit at 95) must not be counted
+        storage.store_edited_message(
+            channel_id,
+            50,
+            Message::text(from_id, 95, "message 50 edited".to_owned()),
+        );
+        assert_eq!(storage.messages_count_after(channel_id, 50), 4);
+        assert_eq!(storage.messages_count_after(channel_id, 90), 0);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sqlite_storage_last_message() {
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+        let (storage, channel_id) = windowed_fixtures().await;
+
+        let last = storage.last_message(channel_id).unwrap();
+        assert_eq!(last.arrived_at, 90);
+        assert_eq!(last.message.as_deref(), Some("message 90"));
+
+        let unknown_channel = ChannelId::User(uuid!("00000000-0000-0000-0000-000000000000"));
+        assert_eq!(storage.last_message(unknown_channel), None);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sqlite_storage_channels_by_recency() {
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+        let (mut storage, channel1) = windowed_fixtures().await;
+        let from_id = uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a");
+
+        // channel with a newer message than channel1's newest (90)
+        let channel2 = ChannelId::User(uuid!("11111111-1111-1111-1111-111111111111"));
+        storage.store_channel(test_channel(channel2, "newer"));
+        storage.store_message(channel2, Message::text(from_id, 200, "newer".to_owned()));
+
+        // channel without messages
+        let channel3 = ChannelId::User(uuid!("22222222-2222-2222-2222-222222222222"));
+        storage.store_channel(test_channel(channel3, "empty"));
+
+        assert_eq!(
+            storage.channels_by_recency(),
+            [
+                (channel2, Some(200)),
+                (channel1, Some(90)),
+                (channel3, None)
+            ]
+        );
+
+        // editing an old message creates edit rows with newer timestamps;
+        // they must not change the recency of the channel
+        storage.store_edited_message(
+            channel1,
+            90,
+            Message::text(from_id, 300, "message 90 edited".to_owned()),
+        );
+        assert_eq!(
+            storage.channels_by_recency(),
+            [
+                (channel2, Some(200)),
+                (channel1, Some(90)),
+                (channel3, None)
+            ]
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sqlite_storage_remove_expired() {
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+        let (mut storage, channel_id) = windowed_fixtures().await;
+        let from_id = uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a");
+
+        for (arrived_at, expires_at) in [(101, 100), (102, 200), (103, 300)] {
+            let mut message = Message::text(from_id, arrived_at, format!("expiring {arrived_at}"));
+            message.expires_at = Some(expires_at);
+            storage.store_message(channel_id, message);
+        }
+
+        assert_eq!(storage.next_expiring_at(), Some(100));
+
+        // nothing expired yet
+        assert!(storage.remove_expired(99).is_empty());
+        assert_eq!(storage.next_expiring_at(), Some(100));
+
+        // expiry at the boundary is inclusive
+        let mut removed = storage.remove_expired(200);
+        removed.sort_unstable();
+        assert_eq!(
+            removed,
+            [
+                MessageId::new(channel_id, 101),
+                MessageId::new(channel_id, 102)
+            ]
+        );
+        assert_eq!(storage.message(MessageId::new(channel_id, 101)), None);
+        assert_eq!(storage.message(MessageId::new(channel_id, 102)), None);
+        assert!(storage.message(MessageId::new(channel_id, 103)).is_some());
+        assert_eq!(storage.next_expiring_at(), Some(300));
+
+        let removed = storage.remove_expired(10_000);
+        assert_eq!(removed, [MessageId::new(channel_id, 103)]);
+        assert_eq!(storage.next_expiring_at(), None);
+
+        // messages without expires_at are untouched
+        assert_eq!(
+            arrived_ats(&storage.messages_tail(channel_id, 100)),
+            [10, 20, 30, 40, 50, 60, 70, 80, 90]
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]

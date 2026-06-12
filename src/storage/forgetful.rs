@@ -18,6 +18,10 @@ impl Storage for ForgetfulStorage {
         None
     }
 
+    fn channels_by_recency(&self) -> Vec<(ChannelId, Option<u64>)> {
+        Vec::new()
+    }
+
     fn store_channel(&mut self, channel: Channel) -> Cow<'_, Channel> {
         Cow::Owned(channel)
     }
@@ -41,6 +45,10 @@ impl Storage for ForgetfulStorage {
         Box::new(std::iter::empty())
     }
 
+    fn message(&self, _message_id: MessageId) -> Option<Cow<'_, Message>> {
+        None
+    }
+
     fn edits(
         &self,
         _message_id: MessageId,
@@ -48,7 +56,15 @@ impl Storage for ForgetfulStorage {
         Box::new(std::iter::empty())
     }
 
-    fn message(&self, _message_id: MessageId) -> Option<Cow<'_, Message>> {
+    fn messages_count_after(&self, _channel_id: ChannelId, _arrived_at: u64) -> usize {
+        0
+    }
+
+    fn remove_expired(&self, _now_ms: u64) -> Vec<MessageId> {
+        Vec::new()
+    }
+
+    fn next_expiring_at(&self) -> Option<u64> {
         None
     }
 
