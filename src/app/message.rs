@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::cmp::Reverse;
-use std::collections::BTreeMap;
 
 use anyhow::{Context as _, anyhow};
 use itertools::Itertools;
@@ -44,30 +43,32 @@ impl App {
             // Sync delete: we deleted a message from another device (any channel type)
             (
                 _,
-                ContentBody::SynchronizeMessage(SyncMessage {
-                    sent:
-                        Some(Sent {
-                            message:
-                                Some(DataMessage {
-                                    delete:
-                                        Some(Delete {
-                                            target_sent_timestamp: Some(target_sent_timestamp),
-                                        }),
-                                    ..
-                                }),
-                            ..
-                        }),
-                    ..
-                }),
+                ContentBody::SynchronizeMessage(
+                    sync_message @ SyncMessage {
+                        sent:
+                            Some(Sent {
+                                message:
+                                    Some(DataMessage {
+                                        delete:
+                                            Some(Delete {
+                                                target_sent_timestamp: Some(target_sent_timestamp),
+                                            }),
+                                        ..
+                                    }),
+                                ..
+                            }),
+                        ..
+                    },
+                ),
             ) => {
-                if let Some(channel_id) = self.storage.message_channel(target_sent_timestamp) {
+                if let Some(channel_id) = sync_message.channel_id() {
                     let message_id = MessageId::new(channel_id, target_sent_timestamp);
                     self.storage.delete_message(message_id);
                     info!(target_sent_timestamp, "message deleted via sync");
                 } else {
                     warn!(
                         target_sent_timestamp,
-                        "received sync delete for unknown message"
+                        "received sync delete for unknown channel"
                     );
                 }
                 return Ok(());
@@ -961,31 +962,41 @@ impl App {
 
     /// Handles read notifications
     pub(crate) fn handle_read(&mut self, read: &[Read]) {
-        // First collect all the read counters to avoid hitting the storage for the same channel
-        let read_counters: BTreeMap<ChannelId, u32> = read
-            .iter()
-            .filter_map(|read| {
-                let arrived_at = read.timestamp?;
-                let channel_id = self.storage.message_channel(arrived_at)?;
-                let num_unread = self
-                    .storage
-                    .messages(channel_id)
-                    .rev()
-                    .take_while(|msg| arrived_at < msg.arrived_at)
-                    .count();
-                let num_unread: u32 = num_unread.try_into().ok()?;
-                Some((channel_id, num_unread))
-            })
-            .collect();
-        // Update the unread counters
-        for (channel_id, num_unread) in read_counters {
-            if let Some(channel) = self.storage.channel(channel_id)
-                && channel.unread_messages > 0
-            {
-                let mut channel = channel.into_owned();
-                channel.unread_messages = num_unread;
-                self.storage.store_channel(channel);
-            }
+        if read.is_empty() {
+            return;
+        }
+
+        let mut read_at: Vec<_> = read.iter().filter_map(|read| read.timestamp).collect();
+        read_at.sort_unstable();
+
+        for channel_id in &self.channels.items {
+            // skip channels without unread messages
+            let Some(channel) = self
+                .storage
+                .channel(*channel_id)
+                .filter(|c| c.unread_messages > 0)
+            else {
+                continue;
+            };
+
+            // find the last read message in this channel
+            let Some(last_read_at) = read_at.iter().rev().copied().find(|&timestamp| {
+                self.storage
+                    .message(MessageId::new(*channel_id, timestamp))
+                    .is_some()
+            }) else {
+                continue;
+            };
+
+            let num_unread = self
+                .storage
+                .messages(channel.id)
+                .rev()
+                .take_while(|msg| last_read_at < msg.arrived_at)
+                .count();
+            let mut channel = channel.into_owned();
+            channel.unread_messages = (num_unread as u32).min(channel.unread_messages);
+            self.storage.store_channel(channel);
         }
     }
 }

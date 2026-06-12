@@ -67,8 +67,4 @@ impl Storage for ForgetfulStorage {
     }
 
     fn save(&mut self) {}
-
-    fn message_channel(&self, _arrived_at: u64) -> Option<ChannelId> {
-        None
-    }
 }

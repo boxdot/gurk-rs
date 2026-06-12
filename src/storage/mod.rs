@@ -42,17 +42,14 @@ pub trait Storage {
     /// Gets the message by id
     fn message(&self, message_id: MessageId) -> Option<Cow<'_, Message>>;
 
-    fn message_channel(&self, arrived_at: u64) -> Option<ChannelId>;
-
     fn edits(
         &self,
         message_id: MessageId,
     ) -> Box<dyn DoubleEndedIterator<Item = Cow<'_, Message>> + '_>;
 
-    /// Stores the message for the given `channel_id` and returns it back
+    /// Stores the message for the given `channel_id` and returns it back.
     ///
-    /// If a channel with this `channel_id` already exists in the storage, it is overridden.
-    /// Otherwise, the channel is added to the storage.
+    /// The channel with the given `channel_id` must already exist.
     fn store_message(&mut self, channel_id: ChannelId, message: Message) -> Cow<'_, Message>;
 
     fn store_edited_message(

@@ -188,9 +188,4 @@ impl<S: Storage> Storage for MemCache<S> {
     fn save(&mut self) {
         self.storage.save();
     }
-
-    fn message_channel(&self, arrived_at: u64) -> Option<ChannelId> {
-        // message arrived_at to channel_id conversion is not cached
-        self.storage.message_channel(arrived_at)
-    }
 }
