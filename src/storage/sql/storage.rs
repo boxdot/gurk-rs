@@ -319,6 +319,153 @@ impl Storage for SqliteStorage {
         Cow::Owned(channel)
     }
 
+    fn messages_tail(&self, channel_id: ChannelId, limit: usize) -> Vec<Message> {
+        let channel_id = &channel_id;
+        let limit = i64::try_from(limit).expect("usize overflow");
+        let sql_messages = block_async_in_place(
+            query_as!(
+                SqlMessage,
+                r#"
+                    SELECT
+                        m.arrived_at AS "arrived_at!",
+                        m.from_id AS "from_id: _",
+                        m.message,
+                        m.receipt AS "receipt: _",
+                        m.body_ranges AS "body_ranges: _",
+                        m.attachments AS "attachments: _",
+                        m.reactions AS "reactions: _",
+                        q.arrived_at AS "quote_arrived_at: _",
+                        q.from_id AS "quote_from_id: _",
+                        q.message AS quote_message,
+                        q.attachments AS "quote_attachments: _",
+                        q.body_ranges AS "quote_body_ranges: _",
+                        q.receipt AS "quote_receipt: _",
+                        NULL AS "edit: _",
+                        m.edited AS "edited: _",
+                        m.deleted AS "deleted: _",
+                        m.expire_timer AS "expire_timer: _",
+                        m.expires_at AS "expires_at: _"
+                    FROM messages AS m
+                    LEFT JOIN messages AS q ON q.channel_id = ?1 AND q.arrived_at = m.quote
+                    WHERE m.channel_id = ?1 AND m.edit IS NULL
+                    ORDER BY m.arrived_at DESC
+                    LIMIT ?2
+                "#,
+                channel_id,
+                limit,
+            )
+            .fetch_all(&self.pool),
+        )
+        .ok_logged()
+        .unwrap_or_default();
+
+        sql_messages
+            .into_iter()
+            .rev()
+            .map(SqlMessage::convert)
+            .filter_map(|message| message.ok_logged())
+            .collect()
+    }
+
+    fn messages_before(&self, channel_id: ChannelId, anchor: u64, limit: usize) -> Vec<Message> {
+        let channel_id = &channel_id;
+        let anchor = i64::try_from(anchor).expect("u64 overflow");
+        let limit = i64::try_from(limit).expect("usize overflow");
+        let sql_messages = block_async_in_place(
+            query_as!(
+                SqlMessage,
+                r#"
+                    SELECT
+                        m.arrived_at AS "arrived_at!",
+                        m.from_id AS "from_id: _",
+                        m.message,
+                        m.receipt AS "receipt: _",
+                        m.body_ranges AS "body_ranges: _",
+                        m.attachments AS "attachments: _",
+                        m.reactions AS "reactions: _",
+                        q.arrived_at AS "quote_arrived_at: _",
+                        q.from_id AS "quote_from_id: _",
+                        q.message AS quote_message,
+                        q.attachments AS "quote_attachments: _",
+                        q.body_ranges AS "quote_body_ranges: _",
+                        q.receipt AS "quote_receipt: _",
+                        NULL AS "edit: _",
+                        m.edited AS "edited: _",
+                        m.deleted AS "deleted: _",
+                        m.expire_timer AS "expire_timer: _",
+                        m.expires_at AS "expires_at: _"
+                    FROM messages AS m
+                    LEFT JOIN messages AS q ON q.channel_id = ?1 AND q.arrived_at = m.quote
+                    WHERE m.channel_id = ?1 AND m.arrived_at < ?2 AND m.edit IS NULL
+                    ORDER BY m.arrived_at DESC
+                    LIMIT ?3
+                "#,
+                channel_id,
+                anchor,
+                limit,
+            )
+            .fetch_all(&self.pool),
+        )
+        .ok_logged()
+        .unwrap_or_default();
+
+        sql_messages
+            .into_iter()
+            .rev()
+            .map(SqlMessage::convert)
+            .filter_map(|message| message.ok_logged())
+            .collect()
+    }
+
+    fn messages_after(&self, channel_id: ChannelId, anchor: u64, limit: usize) -> Vec<Message> {
+        let channel_id = &channel_id;
+        let anchor = i64::try_from(anchor).expect("u64 overflow");
+        let limit = i64::try_from(limit).expect("usize overflow");
+        let sql_messages = block_async_in_place(
+            query_as!(
+                SqlMessage,
+                r#"
+                    SELECT
+                        m.arrived_at AS "arrived_at!",
+                        m.from_id AS "from_id: _",
+                        m.message,
+                        m.receipt AS "receipt: _",
+                        m.body_ranges AS "body_ranges: _",
+                        m.attachments AS "attachments: _",
+                        m.reactions AS "reactions: _",
+                        q.arrived_at AS "quote_arrived_at: _",
+                        q.from_id AS "quote_from_id: _",
+                        q.message AS quote_message,
+                        q.attachments AS "quote_attachments: _",
+                        q.body_ranges AS "quote_body_ranges: _",
+                        q.receipt AS "quote_receipt: _",
+                        NULL AS "edit: _",
+                        m.edited AS "edited: _",
+                        m.deleted AS "deleted: _",
+                        m.expire_timer AS "expire_timer: _",
+                        m.expires_at AS "expires_at: _"
+                    FROM messages AS m
+                    LEFT JOIN messages AS q ON q.channel_id = ?1 AND q.arrived_at = m.quote
+                    WHERE m.channel_id = ?1 AND m.arrived_at > ?2 AND m.edit IS NULL
+                    ORDER BY m.arrived_at ASC
+                    LIMIT ?3
+                "#,
+                channel_id,
+                anchor,
+                limit,
+            )
+            .fetch_all(&self.pool),
+        )
+        .ok_logged()
+        .unwrap_or_default();
+
+        sql_messages
+            .into_iter()
+            .map(SqlMessage::convert)
+            .filter_map(|message| message.ok_logged())
+            .collect()
+    }
+
     fn messages(
         &self,
         channel_id: ChannelId,
@@ -723,6 +870,171 @@ mod tests {
         );
 
         storage
+    }
+
+    /// Storage with a single channel containing messages at arrived_at 10, 20, ..., 90
+    async fn windowed_fixtures() -> (SqliteStorage, ChannelId) {
+        let url: Url = "sqlite::memory:".parse().unwrap();
+        let mut storage = SqliteStorage::open(&url, &Passphrase::new("secret").unwrap())
+            .await
+            .unwrap();
+
+        let channel_id = ChannelId::User(uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd"));
+        storage.store_channel(Channel {
+            id: channel_id,
+            name: "direct-channel".to_owned(),
+            group_data: None,
+            unread_messages: 0,
+            muted: false,
+            typing: TypingSet::new(false),
+            expire_timer: None,
+        });
+
+        let from_id = uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a");
+        for arrived_at in (10..=90).step_by(10) {
+            storage.store_message(
+                channel_id,
+                Message::text(from_id, arrived_at, format!("message {arrived_at}")),
+            );
+        }
+
+        (storage, channel_id)
+    }
+
+    fn arrived_ats(messages: &[Message]) -> Vec<u64> {
+        messages.iter().map(|message| message.arrived_at).collect()
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sqlite_storage_messages_tail() {
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+        let (storage, channel_id) = windowed_fixtures().await;
+
+        // newest `limit` messages, ascending
+        assert_eq!(
+            arrived_ats(&storage.messages_tail(channel_id, 3)),
+            [70, 80, 90]
+        );
+
+        // short result when limit exceeds the number of messages
+        assert_eq!(
+            arrived_ats(&storage.messages_tail(channel_id, 100)),
+            [10, 20, 30, 40, 50, 60, 70, 80, 90]
+        );
+
+        assert!(storage.messages_tail(channel_id, 0).is_empty());
+
+        let unknown_channel = ChannelId::User(uuid!("00000000-0000-0000-0000-000000000000"));
+        assert!(storage.messages_tail(unknown_channel, 3).is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sqlite_storage_messages_before() {
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+        let (storage, channel_id) = windowed_fixtures().await;
+
+        // messages closest to the anchor, ascending; the anchor itself is excluded
+        assert_eq!(
+            arrived_ats(&storage.messages_before(channel_id, 50, 2)),
+            [30, 40]
+        );
+
+        // anchor between two messages
+        assert_eq!(
+            arrived_ats(&storage.messages_before(channel_id, 55, 2)),
+            [40, 50]
+        );
+
+        // short result at the oldest message
+        assert_eq!(
+            arrived_ats(&storage.messages_before(channel_id, 50, 100)),
+            [10, 20, 30, 40]
+        );
+
+        // nothing before the oldest message
+        assert!(storage.messages_before(channel_id, 10, 3).is_empty());
+
+        assert!(storage.messages_before(channel_id, 50, 0).is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sqlite_storage_messages_after() {
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+        let (storage, channel_id) = windowed_fixtures().await;
+
+        // messages closest to the anchor, ascending; the anchor itself is excluded
+        assert_eq!(
+            arrived_ats(&storage.messages_after(channel_id, 50, 2)),
+            [60, 70]
+        );
+
+        // anchor between two messages
+        assert_eq!(
+            arrived_ats(&storage.messages_after(channel_id, 45, 2)),
+            [50, 60]
+        );
+
+        // short result at the newest message
+        assert_eq!(
+            arrived_ats(&storage.messages_after(channel_id, 50, 100)),
+            [60, 70, 80, 90]
+        );
+
+        // nothing after the newest message
+        assert!(storage.messages_after(channel_id, 90, 3).is_empty());
+
+        assert!(storage.messages_after(channel_id, 50, 0).is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sqlite_storage_windowed_messages_skip_edits() {
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+        let (mut storage, channel_id) = windowed_fixtures().await;
+        let from_id = uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a");
+
+        // editing message 50 preserves the original body in an edit row at 51 and stores the edit
+        // itself at 95; both must be skipped
+        storage.store_edited_message(
+            channel_id,
+            50,
+            Message::text(from_id, 95, "message 50 edited".to_owned()),
+        );
+
+        let messages = storage.messages_tail(channel_id, 100);
+        assert_eq!(arrived_ats(&messages), [10, 20, 30, 40, 50, 60, 70, 80, 90]);
+        let edited = &messages[4];
+        assert_eq!(edited.arrived_at, 50);
+        assert_eq!(edited.message.as_deref(), Some("message 50 edited"));
+        assert!(edited.edited);
+
+        // the edit row at 51 is skipped
+        assert_eq!(
+            arrived_ats(&storage.messages_before(channel_id, 52, 1)),
+            [50]
+        );
+        // the edit row at 95 is skipped
+        assert!(storage.messages_after(channel_id, 90, 10).is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sqlite_storage_windowed_messages_resolve_quotes() {
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+        let (mut storage, channel_id) = windowed_fixtures().await;
+        let from_id = uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a");
+
+        let quoted = storage
+            .message(MessageId::new(channel_id, 20))
+            .unwrap()
+            .into_owned();
+        let mut reply = Message::text(from_id, 100, "reply".to_owned());
+        reply.quote = Some(Box::new(quoted));
+        storage.store_message(channel_id, reply);
+
+        let messages = storage.messages_tail(channel_id, 1);
+        assert_eq!(arrived_ats(&messages), [100]);
+        let quote = messages[0].quote.as_ref().unwrap();
+        assert_eq!(quote.arrived_at, 20);
+        assert_eq!(quote.message.as_deref(), Some("message 20"));
     }
 
     #[tokio::test(flavor = "multi_thread")]

@@ -22,6 +22,18 @@ impl Storage for ForgetfulStorage {
         Cow::Owned(channel)
     }
 
+    fn messages_tail(&self, _channel_id: ChannelId, _limit: usize) -> Vec<Message> {
+        Vec::new()
+    }
+
+    fn messages_before(&self, _channel_id: ChannelId, _anchor: u64, _limit: usize) -> Vec<Message> {
+        Vec::new()
+    }
+
+    fn messages_after(&self, _channel_id: ChannelId, _anchor: u64, _limit: usize) -> Vec<Message> {
+        Vec::new()
+    }
+
     fn messages(
         &self,
         _channel_id: ChannelId,

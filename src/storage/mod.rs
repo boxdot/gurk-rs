@@ -32,6 +32,15 @@ pub trait Storage {
     /// Stores the given `channel` and returns it back
     fn store_channel(&mut self, channel: Channel) -> Cow<'_, Channel>;
 
+    /// The newest `limit` messages, ascending by arrived_at.
+    fn messages_tail(&self, channel_id: ChannelId, limit: usize) -> Vec<Message>;
+
+    /// Up to `limit` messages strictly older than `anchor`, ascending by arrived_at.
+    fn messages_before(&self, channel_id: ChannelId, anchor: u64, limit: usize) -> Vec<Message>;
+
+    /// Up to `limit` messages strictly newer than `anchor`, ascending by arrived_at.
+    fn messages_after(&self, channel_id: ChannelId, anchor: u64, limit: usize) -> Vec<Message>;
+
     /// Messages sorted by arrived_at in ascending order
     ///
     /// No edited messages must be included.

@@ -86,6 +86,18 @@ impl<S: Storage> Storage for MemCache<S> {
         self.storage.store_channel(channel)
     }
 
+    fn messages_tail(&self, channel_id: ChannelId, limit: usize) -> Vec<Message> {
+        self.storage.messages_tail(channel_id, limit)
+    }
+
+    fn messages_before(&self, channel_id: ChannelId, anchor: u64, limit: usize) -> Vec<Message> {
+        self.storage.messages_before(channel_id, anchor, limit)
+    }
+
+    fn messages_after(&self, channel_id: ChannelId, anchor: u64, limit: usize) -> Vec<Message> {
+        self.storage.messages_after(channel_id, anchor, limit)
+    }
+
     fn messages(
         &self,
         channel_id: ChannelId,
