@@ -1,3 +1,5 @@
+REINDEX;
+
 -- Migrate messages to a composite primary key
 CREATE TABLE messages_new (
   channel_id BLOB NOT NULL, -- uuid or group id
