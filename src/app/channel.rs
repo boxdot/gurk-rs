@@ -253,6 +253,7 @@ impl App {
             let timer = message.expire_timer.unwrap();
             let now_ms = crate::util::utc_now_timestamp_msec();
             message.expires_at = Some(now_ms + u64::from(timer) * 1000);
+            self.schedule_expiry(message.expires_at);
         }
 
         let message = self.storage.store_message(channel_id, message);
@@ -377,6 +378,7 @@ impl App {
             let message_id = crate::storage::MessageId::new(channel_id, arrived_at);
             if let Some(mut msg) = self.storage.message(message_id).map(|m| m.into_owned()) {
                 msg.expires_at = Some(now_ms + u64::from(timer) * 1000);
+                self.schedule_expiry(msg.expires_at);
                 self.storage.store_message(channel_id, msg);
             }
         }
@@ -384,35 +386,25 @@ impl App {
         self.timers_activated_for = Some(channel_id);
     }
 
+    fn schedule_expiry(&mut self, at: Option<u64>) {
+        self.next_expiring_at = [self.next_expiring_at, at].into_iter().flatten().min();
+    }
+
     /// Remove messages that have expired.
-    /// All timestamps are UTC milliseconds — no locale dependency.
+    ///
+    /// This function is called per-frame, therefore it should not hit the storage all the time.
     pub fn expire_messages(&mut self) {
         let now_ms = crate::util::utc_now_timestamp_msec();
-        let channel_ids: Vec<ChannelId> = self
-            .channels
-            .items
-            .iter()
-            .copied()
-            .filter(|&id| {
-                self.storage
-                    .channel(id)
-                    .is_some_and(|c| c.expire_timer.is_some_and(|t| t > 0))
-            })
-            .collect();
 
-        for channel_id in channel_ids {
-            let expired: Vec<u64> = self
-                .storage
-                .messages(channel_id)
-                .filter(|msg| msg.expires_at.is_some_and(|ea| now_ms > ea))
-                .map(|msg| msg.arrived_at)
-                .collect();
-
-            for arrived_at in expired {
-                let message_id = crate::storage::MessageId::new(channel_id, arrived_at);
-                self.storage.remove_message(message_id);
-                self.remove_message_from_view(channel_id, arrived_at);
-            }
+        if self.next_expiring_at.is_none_or(|t| now_ms < t) {
+            return; // nothing to expire yet
         }
+
+        let removed = self.storage.remove_expired(now_ms);
+        for message_id in removed {
+            self.remove_message_from_view(message_id.channel_id, message_id.arrived_at);
+        }
+
+        self.next_expiring_at = self.storage.next_expiring_at();
     }
 }

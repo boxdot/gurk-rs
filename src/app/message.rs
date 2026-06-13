@@ -988,12 +988,8 @@ impl App {
                 continue;
             };
 
-            let num_unread = self
-                .storage
-                .messages(channel.id)
-                .rev()
-                .take_while(|msg| last_read_at < msg.arrived_at)
-                .count();
+            let num_unread = self.storage.messages_count_after(*channel_id, last_read_at);
+
             let mut channel = channel.into_owned();
             channel.unread_messages = (num_unread as u32).min(channel.unread_messages);
             self.storage.store_channel(channel);

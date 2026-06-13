@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::cell::Cell;
-use std::cmp::Reverse;
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -56,6 +55,8 @@ pub struct App {
     channel_selected_at: std::time::Instant,
     /// Channel whose message timers have been activated (avoids repeated scanning)
     timers_activated_for: Option<ChannelId>,
+    /// Points to the next message that will expire
+    next_expiring_at: Option<u64>,
 }
 
 impl App {
@@ -69,23 +70,13 @@ impl App {
         // build index of channels and messages for using them as lists content
         let mut channels: StatefulList<ChannelId> = Default::default();
         let mut messages: BTreeMap<_, StatefulList<_>> = BTreeMap::new();
-        for channel in storage.channels() {
-            channels.items.push(channel.id);
-            let channel_messages = &mut messages.entry(channel.id).or_default().items;
-            for message in storage.messages(channel.id) {
+        for (channel_id, _last_message_at) in storage.channels_by_recency() {
+            channels.items.push(channel_id);
+            let channel_messages = &mut messages.entry(channel_id).or_default().items;
+            for message in storage.messages(channel_id) {
                 channel_messages.push(message.arrived_at);
             }
         }
-        channels.items.sort_unstable_by_key(|channel_id| {
-            let last_message_arrived_at = storage
-                .messages(*channel_id)
-                .next_back()
-                .map(|msg| msg.arrived_at);
-            let channel_name = storage
-                .channel(*channel_id)
-                .map(|channel| channel.name.clone());
-            (Reverse(last_message_arrived_at), channel_name)
-        });
         channels.next();
 
         let clipboard = arboard::Clipboard::new()
@@ -96,6 +87,8 @@ impl App {
 
         let mode_keybindings = get_keybindings(&config.keybindings, config.default_keybindings)
             .expect("keybinding configuration failed");
+
+        let next_expiring_at = storage.next_expiring_at();
 
         let app = Self {
             config,
@@ -122,6 +115,7 @@ impl App {
             mode_keybindings,
             channel_selected_at: std::time::Instant::now(),
             timers_activated_for: None,
+            next_expiring_at,
         };
         Ok((app, event_rx))
     }
