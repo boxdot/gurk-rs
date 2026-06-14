@@ -25,7 +25,7 @@ impl SelectChannel {
         self.input.take();
         self.state = Default::default();
 
-        let items = storage.channels().map(|channel| ItemData {
+        let items = storage.channels().into_iter().map(|channel| ItemData {
             channel_id: channel.id,
             name: channel.name.clone(),
         });

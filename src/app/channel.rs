@@ -1,64 +1,130 @@
 use uuid::Uuid;
 
-use crate::data::{Channel, ChannelId, Message, TypingSet};
-use crate::signal::{GroupMasterKeyBytes, ProfileKeyBytes, ResolvedGroup};
 use crate::util;
+use crate::{
+    app::window::MessageWindow,
+    data::{Channel, ChannelId, Message, TypingSet},
+};
+use crate::{
+    app::window::PAGE,
+    signal::{GroupMasterKeyBytes, ProfileKeyBytes, ResolvedGroup},
+};
 
 use super::App;
 
+/// Tracks selection of a message in a channel.
+#[derive(Default)]
+pub(crate) struct ChannelPosition {
+    /// Selected message
+    ///
+    /// None = tail-follow
+    pub(crate) selected: Option<u64>,
+    /// Scroll position
+    ///
+    /// None = newest
+    pub(crate) viewport_bottom: Option<u64>,
+}
+
 impl App {
+    // Channel API: access from memory + write to storage
+
+    pub(crate) fn channels(&self) -> &[Channel] {
+        &self.channels.items
+    }
+
+    pub(crate) fn channel(&self, channel_id: ChannelId) -> Option<&Channel> {
+        self.channels.items.iter().find(|c| c.id == channel_id)
+    }
+
+    pub(crate) fn selected_channel(&self) -> Option<&Channel> {
+        self.channels.selected_item()
+    }
+
+    pub fn selected_channel_id(&self) -> Option<ChannelId> {
+        self.channels.selected_item().map(|c| c.id)
+    }
+
+    pub(crate) fn store_channel(&mut self, channel: Channel) {
+        let channel = self.storage.store_channel(channel).into_owned();
+        if let Some(old_channel) = self.channels.items.iter_mut().find(|c| c.id == channel.id) {
+            *old_channel = channel;
+        } else {
+            self.channels.items.push(channel);
+        }
+    }
+
     pub(super) fn reset_message_selection(&mut self) {
-        if let Some(channel_id) = self.channels.selected_item()
-            && let Some(messages) = self.messages.get_mut(channel_id)
+        if let Some(channel_id) = self.selected_channel_id()
+            && let Some(pos) = self.positions.get_mut(&channel_id)
         {
-            messages.state.select(None);
-            messages.rendered = Default::default();
+            pos.selected = None;
+            pos.viewport_bottom = None;
         }
     }
 
     pub fn select_previous_channel(&mut self) {
         self.reset_unread_messages();
-        let old = self.channels.selected_item().copied();
+        let old = self.selected_channel_id();
         self.channels.previous();
-        let new = self.channels.selected_item().copied();
+        let new = self.selected_channel_id();
         self.swap_channel_draft(old, new);
         self.on_channel_changed();
     }
 
     pub fn select_next_channel(&mut self) {
         self.reset_unread_messages();
-        let old = self.channels.selected_item().copied();
+        let old = self.selected_channel_id();
         self.channels.next();
-        let new = self.channels.selected_item().copied();
+        let new = self.selected_channel_id();
         self.swap_channel_draft(old, new);
         self.on_channel_changed();
     }
 
     pub fn on_pgup(&mut self) {
-        if let Some(channel_id) = self.channels.selected_item() {
-            self.messages
-                .get_mut(channel_id)
-                .expect("non-existent channel")
-                .next();
-            self.selected_message();
+        let Some(window) = self.window.as_mut() else {
+            return;
+        };
+        let pos = self.positions.entry(window.channel_id()).or_default();
+        let Some(cur) = pos.selected.or(pos.viewport_bottom).or(window.newest()) else {
+            return;
+        };
+        match window.older(cur) {
+            Some(prev) => pos.selected = Some(prev),
+            None if !window.at_oldest() => {
+                window.extend_older(&*self.storage, PAGE);
+                if let Some(older) = window.older(cur) {
+                    pos.selected = Some(older);
+                }
+            }
+            None => {} // at the oldest message
         }
     }
 
     pub fn on_pgdn(&mut self) {
-        if let Some(channel_id) = self.channels.selected_item() {
-            self.messages
-                .get_mut(channel_id)
-                .expect("non-existent channel")
-                .previous()
+        let Some(window) = self.window.as_mut() else {
+            return;
+        };
+        let pos = self.positions.entry(window.channel_id()).or_default();
+        let Some(cur) = pos.selected.or(pos.viewport_bottom).or(window.newest()) else {
+            return;
+        };
+        match window.newer(cur) {
+            Some(next) => pos.selected = Some(next),
+            None if !window.at_newest() => {
+                window.extend_newer(&*self.storage, PAGE);
+                if let Some(newer) = window.newer(cur) {
+                    pos.selected = Some(newer);
+                }
+            }
+            None => {} // at the newest message
         }
     }
 
     pub fn reset_unread_messages(&mut self) {
-        if let Some(channel_id) = self.channels.selected_item()
-            && let Some(channel) = self.storage.channel(*channel_id)
+        if let Some(channel) = self.selected_channel()
             && channel.unread_messages > 0
         {
-            let mut channel = channel.into_owned();
+            let mut channel = channel.clone();
             channel.unread_messages = 0;
             self.storage.store_channel(channel);
         }
@@ -68,36 +134,30 @@ impl App {
         &mut self,
         master_key: GroupMasterKeyBytes,
         revision: u32,
-    ) -> anyhow::Result<usize> {
+    ) -> anyhow::Result<ChannelId> {
         let channel_id = ChannelId::from_master_key_bytes(master_key)?;
-        if let Some(channel_idx) = self.channels.items.iter().position(|id| id == &channel_id) {
-            // existing channel
-            let channel = self
-                .storage
-                .channel(channel_id)
-                .expect("non-existent channel");
-
+        if let Some(channel) = self.channel(channel_id) {
             let is_stale = match channel.group_data.as_ref() {
                 Some(group_data) => group_data.revision != revision,
                 None => true,
             };
             if is_stale {
+                let mut channel = channel.clone();
+
                 let ResolvedGroup {
                     name,
                     group_data,
                     profile_keys,
                 } = self.signal_manager.resolve_group(master_key).await?;
 
-                let mut channel = channel.into_owned();
-
                 self.ensure_users_are_known(group_data.members.iter().copied().zip(profile_keys))
                     .await;
 
                 channel.name = name;
                 channel.group_data = Some(group_data);
-                self.storage.store_channel(channel);
+                self.store_channel(channel);
             }
-            Ok(channel_idx)
+            Ok(channel_id)
         } else {
             // new channel
             let ResolvedGroup {
@@ -118,12 +178,9 @@ impl App {
                 typing: TypingSet::GroupTyping(Default::default()),
                 expire_timer: None,
             };
-            self.storage.store_channel(channel);
+            self.store_channel(channel);
 
-            let channel_idx = self.channels.items.len();
-            self.channels.items.push(channel_id);
-
-            Ok(channel_idx)
+            Ok(channel_id)
         }
     }
 
@@ -178,16 +235,10 @@ impl App {
         }
     }
 
-    pub(super) fn ensure_own_channel_exists(&mut self) -> usize {
+    pub(super) fn ensure_own_channel_exists(&mut self) -> ChannelId {
         let user_id = self.user_id;
-        if let Some(channel_idx) = self
-            .channels
-            .items
-            .iter()
-            .position(|channel_id| channel_id == &user_id)
-        {
-            channel_idx
-        } else {
+        let channel_id = ChannelId::User(user_id);
+        if self.channel(channel_id).is_none() {
             let channel = Channel {
                 id: user_id.into(),
                 name: self.config.user.display_name.clone(),
@@ -197,32 +248,23 @@ impl App {
                 typing: TypingSet::SingleTyping(false),
                 expire_timer: None,
             };
-            let channel = self.storage.store_channel(channel);
-
-            let channel_idx = self.channels.items.len();
-            self.channels.items.push(channel.id);
-
-            channel_idx
+            self.store_channel(channel);
         }
+        channel_id
     }
 
-    pub(crate) async fn ensure_contact_channel_exists(&mut self, uuid: Uuid, name: &str) -> usize {
-        if let Some(channel_idx) = self
-            .channels
-            .items
-            .iter()
-            .position(|channel_id| channel_id == &uuid)
-        {
-            let channel = self
-                .storage
-                .channel(uuid.into())
-                .expect("non-existent channel");
+    pub(crate) async fn ensure_contact_channel_exists(
+        &mut self,
+        uuid: Uuid,
+        name: &str,
+    ) -> ChannelId {
+        let channel_id = ChannelId::User(uuid);
+        if let Some(channel) = self.channel(channel_id) {
             if channel.name != name {
-                let mut channel = channel.into_owned();
+                let mut channel = channel.clone();
                 channel.name = name.to_string();
-                self.storage.store_channel(channel);
+                self.store_channel(channel);
             }
-            channel_idx
         } else {
             let channel = Channel {
                 id: uuid.into(),
@@ -233,22 +275,20 @@ impl App {
                 typing: TypingSet::SingleTyping(false),
                 expire_timer: None,
             };
-            let channel = self.storage.store_channel(channel);
-
-            let channel_idx = self.channels.items.len();
-            self.channels.items.push(channel.id);
-
-            channel_idx
+            self.store_channel(channel);
         }
+        channel_id
     }
 
-    pub(super) fn add_message_to_channel(&mut self, channel_idx: usize, mut message: Message) {
-        let channel_id = self.channels.items[channel_idx];
+    pub(super) fn add_message_to_channel(&mut self, channel_id: ChannelId, mut message: Message) {
+        let Some(channel) = self.channel(channel_id) else {
+            return;
+        };
 
         // Eagerly activate timer for messages arriving in the currently viewed channel
         if message.expire_timer.is_some_and(|t| t > 0)
             && message.expires_at.is_none()
-            && self.timers_activated_for == Some(channel_id)
+            && self.timers_activated_for == Some(channel.id)
         {
             let timer = message.expire_timer.unwrap();
             let now_ms = crate::util::utc_now_timestamp_msec();
@@ -256,55 +296,60 @@ impl App {
             self.schedule_expiry(message.expires_at);
         }
 
-        let message = self.storage.store_message(channel_id, message);
         let from_current_user = self.user_id == message.from_id;
-
-        let messages = self.messages.entry(channel_id).or_default();
-        messages.items.push(message.arrived_at);
-
-        if let Some(idx) = messages.state.selected() {
-            // keep selection on the old message
-            messages.state.select(Some(idx + 1));
-        }
-
-        self.touch_channel(channel_idx, from_current_user);
+        self.store_message(channel_id, message);
+        self.touch_channel(channel_id, from_current_user);
     }
 
     pub(super) fn remove_message_from_view(&mut self, channel_id: ChannelId, arrived_at: u64) {
-        if let Some(messages) = self.messages.get_mut(&channel_id)
-            && let Some(pos) = messages.items.iter().position(|&ts| ts == arrived_at)
-        {
-            messages.items.remove(pos);
-            if let Some(selected) = messages.state.selected() {
-                if messages.items.is_empty() {
-                    messages.state.select(None);
-                } else if selected > 0 && selected >= messages.items.len() {
-                    messages.state.select(Some(selected - 1));
-                }
-            }
+        let Some(window) = self.window.as_mut() else {
+            return;
+        };
+        if window.channel_id() != channel_id {
+            return;
         }
+
+        let pos = self.positions.entry(channel_id).or_default();
+        if pos.selected == Some(arrived_at) {
+            pos.selected = window
+                .older(arrived_at)
+                .or_else(|| window.newer(arrived_at));
+        }
+        if pos.viewport_bottom == Some(arrived_at) {
+            pos.viewport_bottom = window.older(arrived_at);
+        }
+        window.remove(arrived_at);
     }
 
-    pub(crate) fn touch_channel(&mut self, channel_idx: usize, from_current_user: bool) {
-        if !from_current_user && self.channels.state.selected() != Some(channel_idx) {
-            let channel_id = self.channels.items[channel_idx];
-            let mut channel = self
-                .storage
-                .channel(channel_id)
-                .expect("non-existent channel")
-                .into_owned();
+    pub(crate) fn touch_channel(&mut self, channel_id: ChannelId, from_current_user: bool) {
+        if self.selected_channel_id() == Some(channel_id) {
+            return;
+        }
+
+        if !from_current_user
+            && let Some(channel) = self.channel(channel_id)
+            && channel.id != channel_id
+        {
+            let mut channel = channel.clone();
             channel.unread_messages += 1;
             self.storage.store_channel(channel);
         } else {
             self.reset_unread_messages();
         }
 
-        self.bubble_up_channel(channel_idx);
+        self.bubble_up_channel(channel_id);
     }
 
-    pub(super) fn bubble_up_channel(&mut self, channel_idx: usize) {
+    pub(super) fn bubble_up_channel(&mut self, channel_id: ChannelId) {
         // bubble up channel to the beginning of the list
         let channels = &mut self.channels;
+        let Some(channel_idx) = channels
+            .items
+            .iter()
+            .position(|channel| channel.id == channel_id)
+        else {
+            return;
+        };
         for (prev, next) in (0..channel_idx).zip(1..channel_idx + 1).rev() {
             channels.items.swap(prev, next);
         }
@@ -327,15 +372,24 @@ impl App {
 
     /// Reset dwell tracking when channel selection changes
     pub fn on_channel_changed(&mut self) {
+        let Some(channel) = self.channels.selected_item() else {
+            return;
+        };
+        let pos = self.positions.entry(channel.id).or_default();
+        let mut window = MessageWindow::new(channel.id);
+        match pos.viewport_bottom {
+            Some(anchor) => window.load_around(&*self.storage, anchor, PAGE),
+            None => window.load_tail(&*self.storage, PAGE),
+        }
+        self.window = Some(window);
+
         self.channel_selected_at = std::time::Instant::now();
         self.timers_activated_for = None;
     }
 
     pub fn toggle_mute_channel(&mut self) {
-        if let Some(&channel_id) = self.channels.selected_item()
-            && let Some(channel) = self.storage.channel(channel_id)
-        {
-            let mut channel = channel.into_owned();
+        if let Some(channel) = self.channels.selected_item() {
+            let mut channel = channel.clone();
             channel.muted = !channel.muted;
             self.storage.store_channel(channel);
         }
@@ -347,16 +401,14 @@ impl App {
         if self.channel_selected_at.elapsed() < std::time::Duration::from_secs(10) {
             return;
         }
-        let Some(&channel_id) = self.channels.selected_item() else {
+        let Some(channel) = self.selected_channel() else {
             return;
         };
+        let channel_id = channel.id;
         if self.timers_activated_for == Some(channel_id) {
             return;
         }
-        let has_timer = self
-            .storage
-            .channel(channel_id)
-            .is_some_and(|c| c.expire_timer.is_some_and(|t| t > 0));
+        let has_timer = channel.expire_timer.is_some_and(|t| t > 0);
         if !has_timer {
             return;
         }

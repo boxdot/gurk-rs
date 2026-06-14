@@ -231,31 +231,35 @@ struct SqlName {
 }
 
 impl Storage for SqliteStorage {
-    fn channels(&self) -> Box<dyn Iterator<Item = Cow<'_, Channel>> + '_> {
+    fn channels(&self) -> Vec<Channel> {
         let channels = block_async_in_place(
             query_as!(
                 SqlChannel,
                 r#"
                     SELECT
-                         id AS "id: _",
-                         name,
-                         group_master_key,
-                         group_revision,
-                         group_members AS "group_members: _",
-                         muted AS "muted: _",
-                         expire_timer
-                    FROM channels
+                         c.id AS "id: _",
+                         c.name,
+                         c.group_master_key,
+                         c.group_revision,
+                         c.group_members AS "group_members: _",
+                         c.muted AS "muted: _",
+                         c.expire_timer
+                    FROM channels c
+                    ORDER BY (
+                        SELECT MAX(m.arrived_at)
+                        FROM messages m
+                        WHERE m.channel_id = c.id AND m.edit IS NULL
+                    )
                 "#
             )
             .fetch_all(&self.pool),
         );
-        Box::new(
-            channels
-                .ok_logged()
-                .into_iter()
-                .flatten()
-                .filter_map(|channel| channel.convert().ok_logged().map(Cow::Owned)),
-        )
+        channels
+            .ok_logged()
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|channel| channel.convert().ok_logged())
+            .collect()
     }
 
     fn channel(&self, channel_id: ChannelId) -> Option<Cow<'_, Channel>> {
@@ -1256,7 +1260,7 @@ mod tests {
     async fn test_sqlite_storage_channels() {
         let _ = tracing_subscriber::fmt().with_test_writer().try_init();
         let storage = fixtures().await;
-        let channels: Vec<_> = storage.channels().collect();
+        let channels = storage.channels();
         assert_eq!(channels.len(), 2);
         assert_eq!(storage.channel(channels[0].id).unwrap().id, channels[0].id);
         assert_eq!(storage.channel(channels[1].id).unwrap().id, channels[1].id);

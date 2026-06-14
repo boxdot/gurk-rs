@@ -23,8 +23,10 @@ pub use sql::SqliteStorage;
 /// borrowed objects from the storage. This depends whether the objects are stored as is, or are
 /// converted and/or serialized.
 pub trait Storage {
-    /// Channels in no particular order
-    fn channels(&self) -> Box<dyn Iterator<Item = Cow<'_, Channel>> + '_>;
+    /// Returns the list of channels
+    ///
+    /// The order is from most recent to least recent, that is, descending by arrived_at.
+    fn channels(&self) -> Vec<Channel>;
 
     /// Gets the channel by id
     fn channel(&self, channel_id: ChannelId) -> Option<Cow<'_, Channel>>;
@@ -160,10 +162,10 @@ pub trait Storage {
     /// This methods must guarantee that the data is persisted in any case.
     fn save(&mut self);
 
-    /// Returns `true` if this storage does not contains any channels and no names
-    fn is_empty(&self) -> bool {
-        self.channels().next().is_none() && self.names().next().is_none()
-    }
+    // /// Returns `true` if this storage does not contains any channels and no names
+    // fn is_empty(&self) -> bool {
+    //     self.channels().next().is_none() && self.names().next().is_none()
+    // }
 }
 
 /// A message is identified by its channel and time of arrived in milliseconds

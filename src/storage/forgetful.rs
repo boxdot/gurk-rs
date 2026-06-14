@@ -10,8 +10,8 @@ use super::{MessageId, Metadata, Storage};
 pub struct ForgetfulStorage;
 
 impl Storage for ForgetfulStorage {
-    fn channels(&self) -> Box<dyn Iterator<Item = Cow<'_, Channel>> + '_> {
-        Box::new(std::iter::empty())
+    fn channels(&self) -> Vec<Channel> {
+        Vec::new()
     }
 
     fn channel(&self, _channel_id: ChannelId) -> Option<Cow<'_, Channel>> {
