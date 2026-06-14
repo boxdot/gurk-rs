@@ -249,7 +249,7 @@ impl Storage for SqliteStorage {
                         SELECT MAX(m.arrived_at)
                         FROM messages m
                         WHERE m.channel_id = c.id AND m.edit IS NULL
-                    )
+                    ) DESC
                 "#
             )
             .fetch_all(&self.pool),
@@ -1136,6 +1136,43 @@ mod tests {
             typing: TypingSet::new(false),
             expire_timer: None,
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sqlite_storage_channels_sorted_by_recency() {
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+        let url: Url = "sqlite::memory:".parse().unwrap();
+        let mut storage = SqliteStorage::open(&url, &Passphrase::new("secret").unwrap())
+            .await
+            .unwrap();
+        let from_id = uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a");
+
+        let recent = ChannelId::User(uuid!("11111111-1111-1111-1111-111111111111"));
+        let middle = ChannelId::User(uuid!("22222222-2222-2222-2222-222222222222"));
+        let old = ChannelId::User(uuid!("33333333-3333-3333-3333-333333333333"));
+        let empty = ChannelId::User(uuid!("44444444-4444-4444-4444-444444444444"));
+
+        // store channels in a deliberately non-recency order
+        for (id, name) in [
+            (old, "old"),
+            (recent, "recent"),
+            (empty, "empty"),
+            (middle, "middle"),
+        ] {
+            storage.store_channel(test_channel(id, name));
+        }
+        storage.store_message(old, Message::text(from_id, 100, "old".to_owned()));
+        storage.store_message(middle, Message::text(from_id, 200, "middle".to_owned()));
+        storage.store_message(recent, Message::text(from_id, 300, "recent".to_owned()));
+
+        // most recent first; the channel without messages sorts last
+        let order: Vec<ChannelId> = storage.channels().into_iter().map(|c| c.id).collect();
+        assert_eq!(order, [recent, middle, old, empty]);
+
+        // an edit (newer arrived_at, edit IS NOT NULL) must not change recency
+        storage.store_edited_message(old, 100, Message::text(from_id, 999, "old edited".to_owned()));
+        let order: Vec<ChannelId> = storage.channels().into_iter().map(|c| c.id).collect();
+        assert_eq!(order, [recent, middle, old, empty]);
     }
 
     #[tokio::test(flavor = "multi_thread")]

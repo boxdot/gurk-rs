@@ -85,14 +85,16 @@ impl App {
             return;
         };
         let pos = self.positions.entry(window.channel_id()).or_default();
-        let Some(cur) = pos.selected.or(pos.viewport_bottom).or(window.newest()) else {
+        let Some(selected) = pos.selected else {
+            // first press: select the bottom-most message, don't move yet
+            pos.selected = pos.viewport_bottom.or_else(|| window.newest());
             return;
         };
-        match window.older(cur) {
+        match window.older(selected) {
             Some(prev) => pos.selected = Some(prev),
             None if !window.at_oldest() => {
                 window.extend_older(&*self.storage, PAGE);
-                if let Some(older) = window.older(cur) {
+                if let Some(older) = window.older(selected) {
                     pos.selected = Some(older);
                 }
             }

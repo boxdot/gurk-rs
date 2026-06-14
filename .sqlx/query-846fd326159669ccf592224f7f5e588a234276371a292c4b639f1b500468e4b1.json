@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                    SELECT\n                         c.id AS \"id: _\",\n                         c.name,\n                         c.group_master_key,\n                         c.group_revision,\n                         c.group_members AS \"group_members: _\",\n                         c.muted AS \"muted: _\",\n                         c.expire_timer\n                    FROM channels c\n                    ORDER BY (\n                        SELECT MAX(m.arrived_at)\n                        FROM messages m\n                        WHERE m.channel_id = c.id AND m.edit IS NULL\n                    )\n                ",
+  "query": "\n                    SELECT\n                         c.id AS \"id: _\",\n                         c.name,\n                         c.group_master_key,\n                         c.group_revision,\n                         c.group_members AS \"group_members: _\",\n                         c.muted AS \"muted: _\",\n                         c.expire_timer\n                    FROM channels c\n                    ORDER BY (\n                        SELECT MAX(m.arrived_at)\n                        FROM messages m\n                        WHERE m.channel_id = c.id AND m.edit IS NULL\n                    ) DESC\n                ",
   "describe": {
     "columns": [
       {
@@ -52,5 +52,5 @@
       true
     ]
   },
-  "hash": "0a9e542a319b3e841d3ff780f331f214c7d0bd08a8a072cc25fa63a50290079b"
+  "hash": "846fd326159669ccf592224f7f5e588a234276371a292c4b639f1b500468e4b1"
 }
