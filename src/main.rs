@@ -371,6 +371,8 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
             }
         }
 
+        app.ensure_message_window_filled();
+
         if app.open_editor_requested {
             app.open_editor_requested = false;
             let initial_content = app.input.data.clone();

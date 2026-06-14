@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 
 use crate::{
+    app::App,
     data::{ChannelId, Message},
     storage::{MessageId, Storage},
 };
@@ -12,6 +13,9 @@ pub(crate) const PAGE: usize = 64;
 ///
 /// Must be >> viewport rows * 2*PAGE
 pub(crate) const MAX_WINDOW: usize = 512;
+
+/// How much to fill the window when ensuring it is filled
+const FILL_MARGIN: usize = PAGE;
 
 /// A window of loaded messages in a channel
 ///
@@ -30,6 +34,25 @@ pub(crate) struct MessageWindow {
     at_oldest: bool,
     /// If true, there is nothing newer than `back` in the storage.
     at_newest: bool,
+}
+
+impl App {
+    /// Ensures the message window is filled with enough messages to fill the viewport
+    pub fn ensure_message_window_filled(&mut self) {
+        let Some(window) = self.window.as_ref() else {
+            return;
+        };
+        let channel_id = window.channel_id();
+        let anchor = self
+            .positions
+            .get(&channel_id)
+            .and_then(|p| p.viewport_bottom);
+        let target = self.message_view_height + FILL_MARGIN;
+        let window = self.window.as_mut().expect("logic error: no window");
+        while !window.at_oldest() && window.loaded_above(anchor) < target {
+            window.extend_older(&*self.storage, PAGE);
+        }
+    }
 }
 
 impl MessageWindow {
@@ -181,6 +204,17 @@ impl MessageWindow {
         self.items.is_empty() && self.at_oldest && self.at_newest
     }
 
+    /// Number of loaded messages at or older than `anchor` (all if `None`)
+    pub(crate) fn loaded_above(&self, anchor: Option<u64>) -> usize {
+        match anchor {
+            Some(anchor) => match self.items.binary_search_by_key(&anchor, |m| m.arrived_at) {
+                Ok(pos) => pos.saturating_add(1),
+                Err(insert_pos) => insert_pos,
+            },
+            None => self.items.len(),
+        }
+    }
+
     pub(crate) fn get(&self, arrived_at: u64) -> Option<&Message> {
         let pos = self
             .items
@@ -326,6 +360,31 @@ mod tests {
         // anchor is inclusive, then older
         let from_30: Vec<u64> = w.iter_rev_from(Some(30)).map(|m| m.arrived_at).collect();
         assert_eq!(from_30, [30, 20, 10]);
+    }
+
+    #[test]
+    fn loaded_above_counts_anchor_and_older() {
+        let w = window(&[10, 20, 30, 40, 50], true, true);
+        assert_eq!(w.loaded_above(None), 5); // tail: everything is above the newest
+        assert_eq!(w.loaded_above(Some(50)), 5); // newest + all older
+        assert_eq!(w.loaded_above(Some(30)), 3); // 30, 20, 10
+        assert_eq!(w.loaded_above(Some(10)), 1); // just the oldest
+    }
+
+    #[test]
+    fn loaded_above_non_member_counts_older() {
+        let w = window(&[10, 20, 30, 40, 50], true, true);
+        // a non-member anchor counts everything strictly older than it
+        assert_eq!(w.loaded_above(Some(35)), 3); // 10, 20, 30
+        assert_eq!(w.loaded_above(Some(5)), 0); // nothing at or older
+        assert_eq!(w.loaded_above(Some(99)), 5); // all older
+    }
+
+    #[test]
+    fn loaded_above_empty() {
+        let w = window(&[], true, true);
+        assert_eq!(w.loaded_above(None), 0);
+        assert_eq!(w.loaded_above(Some(10)), 0);
     }
 
     // upsert (no storage); the four placement branches + replace
