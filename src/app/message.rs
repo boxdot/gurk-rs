@@ -14,7 +14,7 @@ use presage::proto::{GroupContextV2, data_message::Delete, data_message::Reactio
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use crate::data::{BodyRange, ChannelId, Message, TypingAction, TypingSet};
+use crate::data::{BodyRange, ChannelId, Message, TypingAction, TypingSet, parse_uuid};
 use crate::receipt::{Receipt, ReceiptEvent};
 use crate::signal::{Attachment, GroupIdentifierBytes};
 use crate::storage::MessageId;
@@ -1017,14 +1017,6 @@ impl MessageExt for SyncMessage {
             ChannelId::from_master_key_bytes(group_v2.master_key.as_deref()?).ok()
         }
     }
-}
-
-/// First parse the binary field, then fallback to the string field
-fn parse_uuid(str_field: Option<&str>, binary_field: Option<&[u8]>) -> Option<Uuid> {
-    binary_field
-        .and_then(ServiceId::parse_from_service_id_binary)
-        .map(|sid| sid.raw_uuid())
-        .or_else(|| str_field.and_then(|s| s.parse().ok()))
 }
 
 trait SyncSentExt {
