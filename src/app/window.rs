@@ -46,11 +46,14 @@ impl App {
         let anchor = self
             .positions
             .get(&channel_id)
-            .and_then(|p| p.viewport_bottom);
+            .and_then(|p| p.selected.or(p.viewport_bottom));
         let target = self.message_view_height + FILL_MARGIN;
         let window = self.window.as_mut().expect("logic error: no window");
         while !window.at_oldest() && window.loaded_above(anchor) < target {
             window.extend_older(&*self.storage, PAGE);
+        }
+        while !window.at_newest() && window.loaded_below(anchor) < target {
+            window.extend_newer(&*self.storage, PAGE);
         }
     }
 }
@@ -202,6 +205,17 @@ impl MessageWindow {
 
     pub(crate) fn is_empty(&self) -> bool {
         self.items.is_empty() && self.at_oldest && self.at_newest
+    }
+
+    /// Number of loaded messages at or newer than `anchor` (all if `None`)
+    pub(crate) fn loaded_below(&self, anchor: Option<u64>) -> usize {
+        match anchor {
+            Some(anchor) => match self.items.binary_search_by_key(&anchor, |m| m.arrived_at) {
+                Ok(pos) => self.items.len() - pos,
+                Err(insert_pos) => self.items.len() - insert_pos,
+            },
+            None => self.items.len(),
+        }
     }
 
     /// Number of loaded messages at or older than `anchor` (all if `None`)

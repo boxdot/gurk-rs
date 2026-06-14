@@ -13,7 +13,7 @@ use crate::{
 use super::App;
 
 /// Tracks selection of a message in a channel.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct ChannelPosition {
     /// Selected message
     ///
