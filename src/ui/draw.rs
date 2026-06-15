@@ -341,11 +341,11 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     state.select(selected_pos.map(|s| s - start));
     f.render_stateful_widget(list, area, &mut state);
 
-    // update the bottom anchor
-    app.positions
-        .entry(window.channel_id())
-        .or_default()
-        .viewport_bottom = Some(ats[start]);
+    // update the bottom anchor but only when we are not sticking to the bottom
+    let new_bottom = ats[start];
+    let at_tail = window.at_newest() && window.newest() == Some(new_bottom);
+    let channel_id = window.channel_id();
+    app.positions.entry(channel_id).or_default().viewport_bottom = (!at_tail).then_some(new_bottom);
 }
 
 fn build_candidates(
