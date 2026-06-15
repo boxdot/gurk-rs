@@ -1218,6 +1218,42 @@ mod tests {
         assert_eq!(order, [recent, middle, old, empty]);
     }
 
+    /// Storing a channel must not delete its messages.
+    ///
+    /// To guard against using `REPLACE INTO` and deleting messages on cascade.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sqlite_storage_store_channel_keeps_messages() {
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+        let url: Url = "sqlite::memory:".parse().unwrap();
+        let mut storage = SqliteStorage::open(&url, &Passphrase::new("secret").unwrap())
+            .await
+            .unwrap();
+        let from_id = uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a");
+        let channel_id = ChannelId::User(uuid!("11111111-1111-1111-1111-111111111111"));
+
+        storage.store_channel(test_channel(channel_id, "channel"));
+        for arrived_at in [100, 200, 300] {
+            storage.store_message(
+                channel_id,
+                Message::text(from_id, arrived_at, format!("message {arrived_at}")),
+            );
+        }
+        assert_eq!(storage.messages_tail(channel_id, 10).len(), 3);
+
+        // Re-store the same channel
+        let mut channel = test_channel(channel_id, "channel");
+        channel.muted = true;
+        storage.store_channel(channel);
+
+        let messages = storage.messages_tail(channel_id, 10);
+        let arrived_ats: Vec<u64> = messages.iter().map(|m| m.arrived_at).collect();
+        assert_eq!(
+            arrived_ats,
+            [100, 200, 300],
+            "messages were lost when re-storing the channel"
+        );
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn test_sqlite_storage_messages_count_after() {
         let _ = tracing_subscriber::fmt().with_test_writer().try_init();
