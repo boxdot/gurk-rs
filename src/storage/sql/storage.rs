@@ -338,8 +338,23 @@ impl Storage for SqliteStorage {
         block_async_in_place(
             query!(
                 r#"
-                    REPLACE INTO channels(id, name, group_master_key, group_revision, group_members, muted, expire_timer)
+                    INSERT INTO channels(
+                        id,
+                        name,
+                        group_master_key,
+                        group_revision,
+                        group_members,
+                        muted,
+                        expire_timer
+                    )
                     VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        name = excluded.name,
+                        group_master_key = excluded.group_master_key,
+                        group_revision = excluded.group_revision,
+                        group_members = excluded.group_members,
+                        muted = excluded.muted,
+                        expire_timer = excluded.expire_timer
                 "#,
                 id,
                 name,
@@ -734,7 +749,7 @@ impl Storage for SqliteStorage {
         let inserted = block_async_in_place(
             query!(
                 "
-                    REPLACE INTO messages(
+                    INSERT INTO messages(
                         arrived_at,
                         channel_id,
                         from_id,
@@ -751,6 +766,19 @@ impl Storage for SqliteStorage {
                         expires_at
                     )
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(channel_id, arrived_at) DO UPDATE SET
+                        from_id = excluded.from_id,
+                        message = excluded.message,
+                        quote = excluded.quote,
+                        receipt = excluded.receipt,
+                        body_ranges = excluded.body_ranges,
+                        attachments = excluded.attachments,
+                        reactions = excluded.reactions,
+                        edit = excluded.edit,
+                        edited = excluded.edited,
+                        deleted = excluded.deleted,
+                        expire_timer = excluded.expire_timer,
+                        expires_at = excluded.expires_at
                 ",
                 arrived_at,
                 channel_id,
@@ -820,7 +848,18 @@ impl Storage for SqliteStorage {
 
     fn store_name(&mut self, id: Uuid, name: String) -> Cow<'_, str> {
         block_async_in_place(
-            query!("REPLACE INTO names(id, name) VALUES (?, ?)", id, name).execute(&self.pool),
+            query!(
+                "
+                    INSERT INTO names(
+                        id, name
+                    ) VALUES (?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        name = excluded.name
+                ",
+                id,
+                name
+            )
+            .execute(&self.pool),
         )
         .ok_logged();
         Cow::Owned(name)
@@ -1170,7 +1209,11 @@ mod tests {
         assert_eq!(order, [recent, middle, old, empty]);
 
         // an edit (newer arrived_at, edit IS NOT NULL) must not change recency
-        storage.store_edited_message(old, 100, Message::text(from_id, 999, "old edited".to_owned()));
+        storage.store_edited_message(
+            old,
+            100,
+            Message::text(from_id, 999, "old edited".to_owned()),
+        );
         let order: Vec<ChannelId> = storage.channels().into_iter().map(|c| c.id).collect();
         assert_eq!(order, [recent, middle, old, empty]);
     }

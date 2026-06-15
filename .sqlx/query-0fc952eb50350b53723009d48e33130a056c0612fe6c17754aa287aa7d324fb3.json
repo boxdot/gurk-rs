@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                    INSERT INTO channels(\n                        id,\n                        name,\n                        group_master_key,\n                        group_revision,\n                        group_members,\n                        muted,\n                        expire_timer\n                    )\n                    VALUES (?, ?, ?, ?, ?, ?, ?)\n                    ON CONFLICT(id) DO UPDATE SET\n                        name = excluded.name,\n                        group_master_key = excluded.group_master_key,\n                        group_revision = excluded.group_revision,\n                        group_members = excluded.group_members,\n                        muted = excluded.muted,\n                        expire_timer = excluded.expire_timer\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "0fc952eb50350b53723009d48e33130a056c0612fe6c17754aa287aa7d324fb3"
+}
