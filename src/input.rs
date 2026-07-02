@@ -9,6 +9,9 @@ use crate::cursor::Cursor;
 pub struct Input {
     pub data: String,
     pub cursor: Cursor,
+    /// Original partial that started a tab-completion cycle (e.g., "th" for thumbsup).
+    /// Set during cycling, cleared on any other input action.
+    pub completion_partial: Option<String>,
 }
 
 impl Input {
@@ -111,5 +114,73 @@ impl Input {
         self.cursor.col = self.cursor.col.saturating_sub(old_width - emoji_width);
         self.cursor.idx = open_pos + emoji_str.len();
         self.data.replace_range(open_pos..idx, emoji_str);
+    }
+
+    /// If the cursor is inside a potential emoji shortcode (`:part`),
+    /// complete or cycle to the next matching shortcode on each call.
+    /// Returns true if a completion was made.
+    pub fn try_complete_emoji(&mut self) -> bool {
+        let idx = self.cursor.idx;
+        if idx < 1 {
+            self.completion_partial = None;
+            return false;
+        }
+
+        let before = &self.data[..idx];
+        let open_pos = match before.rfind(':') {
+            Some(p) => p,
+            None => {
+                self.completion_partial = None;
+                return false;
+            }
+        };
+
+        let current = &self.data[open_pos + 1..idx];
+        if current.is_empty() {
+            self.completion_partial = None;
+            return false;
+        }
+
+        // Determine the base partial to match against.
+        // If we're cycling (completion_partial is set and current text is
+        // related), reuse the original partial. Otherwise start fresh.
+        let partial = match &self.completion_partial {
+            Some(prev) if current.starts_with(prev.as_str()) || prev.starts_with(current) => {
+                prev.as_str()
+            }
+            _ => {
+                self.completion_partial = Some(current.to_string());
+                current
+            }
+        };
+
+        let matches: Vec<&str> = emojis::iter()
+            .flat_map(|e| e.shortcodes())
+            .filter(|sc| sc.starts_with(partial))
+            .collect();
+
+        if matches.is_empty() {
+            self.completion_partial = None;
+            return false;
+        }
+
+        let cur_idx = matches.iter().position(|&sc| sc == current);
+        let next_idx = match cur_idx {
+            Some(i) => (i + 1) % matches.len(),
+            None => 0,
+        };
+
+        let next = matches[next_idx];
+        let old_width = current.width();
+        let new_width = next.width();
+
+        self.data.replace_range(open_pos + 1..idx, next);
+        if new_width >= old_width {
+            self.cursor.col += new_width - old_width;
+        } else {
+            self.cursor.col = self.cursor.col.saturating_sub(old_width - new_width);
+        }
+        self.cursor.idx = open_pos + 1 + next.len();
+        true
     }
 }
