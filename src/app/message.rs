@@ -33,6 +33,28 @@ impl App {
         }
     }
 
+    /// Applies an edit to a stored message and updates the message window with the edited
+    /// original.
+    ///
+    /// Returns `None` if the message pointed to by `target_sent_timestamp` does not exist.
+    pub(crate) fn store_edited_message(
+        &mut self,
+        channel_id: ChannelId,
+        target_sent_timestamp: u64,
+        message: Message,
+    ) -> Option<()> {
+        let message = self
+            .storage
+            .store_edited_message(channel_id, target_sent_timestamp, message)?
+            .into_owned();
+        if let Some(window) = self.window.as_mut()
+            && window.channel_id() == channel_id
+        {
+            window.upsert(message);
+        }
+        Some(())
+    }
+
     pub async fn on_message(&mut self, content: Box<Content>) -> anyhow::Result<()> {
         // tracing::info!(?content, "incoming");
 
@@ -592,7 +614,6 @@ impl App {
                 let message = Message::new(sender.raw_uuid(), body, body_ranges, timestamp, vec![]);
 
                 if self
-                    .storage
                     .store_edited_message(channel_id, target_sent_timestamp, message)
                     .is_some()
                 {
@@ -746,7 +767,7 @@ impl App {
 
         if let Some(channel_id) = found_channel_id {
             for message in messages_to_store {
-                self.storage.store_message(channel_id, message);
+                self.store_message(channel_id, message);
             }
         }
     }
@@ -785,12 +806,13 @@ impl App {
             message.reactions.push((sender_uuid, emoji.clone()));
             true
         };
-        let message = self.storage.store_message(channel_id, message);
+        let message_text = message.message.clone();
+        self.store_message(channel_id, message);
 
         if is_added && channel_id != ChannelId::User(self.user_id) {
             // Notification
             let mut notification = format!("reacted {emoji}");
-            if let Some(text) = message.message.as_ref() {
+            if let Some(text) = message_text.as_ref() {
                 notification.push_str(" to: ");
                 notification.push_str(text);
             }
@@ -891,45 +913,12 @@ impl App {
         }) = sync_message.sent
         {
             let from_id = metadata.sender.raw_uuid();
-            // Note: target_sent_timestamp points to the previous edit or the original message
-            let edited = self
-                .storage
-                .message(MessageId::new(channel_id, target_sent_timestamp))
-                .context("no message to edit")?;
-
-            // get original message
-            let mut original = if let Some(arrived_at) = edited.edit {
-                // previous edit => get original message
-                self.storage
-                    .message(MessageId::new(channel_id, arrived_at))
-                    .context("no original edited message")?
-                    .into_owned()
-            } else {
-                // original message => first edit
-                let original = edited.into_owned();
-
-                // preserve body of the original message; it is replaced below
-                let mut preserved = original.clone();
-                preserved.arrived_at = original.arrived_at + 1;
-                preserved.edit = Some(original.arrived_at);
-                self.storage.store_message(channel_id, preserved);
-
-                original
-            };
-
-            // store the incoming edit
-            self.storage.store_message(
+            self.store_edited_message(
                 channel_id,
-                Message {
-                    edit: Some(original.arrived_at),
-                    ..Message::text(from_id, arrived_at, body.clone())
-                },
-            );
-
-            // override the body of the original message
-            original.message.replace(body);
-            original.edited = true;
-            self.storage.store_message(channel_id, original);
+                target_sent_timestamp,
+                Message::text(from_id, arrived_at, body),
+            )
+            .context("no message to edit")?;
 
             self.touch_channel(channel_id, from_id == self.user_id);
         }

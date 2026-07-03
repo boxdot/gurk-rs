@@ -32,7 +32,8 @@ impl SelectChannel {
         self.items.clear();
         self.items.extend(items);
 
-        self.items.sort_unstable_by_key(|item| {
+        // sort_by_cached_key: the key hits the storage, evaluate it once per channel
+        self.items.sort_by_cached_key(|item| {
             let last_message_arrived_at = storage
                 .last_message(item.channel_id)
                 .map(|message| message.arrived_at);

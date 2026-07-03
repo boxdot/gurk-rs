@@ -148,6 +148,7 @@ impl App {
                         self.channels.state.select(Some(idx));
                         let new = self.selected_channel_id();
                         self.swap_channel_draft(old, new);
+                        self.on_channel_changed();
                     }
                 }
                 KeyCode::Esc if !self.reset_editing() => {
@@ -287,8 +288,7 @@ impl App {
         });
 
         if let Some(id) = editing {
-            self.storage
-                .store_edited_message(channel_id, id.arrived_at, sent_message);
+            self.store_edited_message(channel_id, id.arrived_at, sent_message);
         } else {
             self.store_message(channel_id, sent_message);
         };

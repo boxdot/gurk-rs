@@ -318,7 +318,7 @@ impl App {
                         .context("no message")?
                         .into_owned();
                     message.send_failed = Some(error.to_string());
-                    self.storage.store_message(message_id.channel_id, message);
+                    self.store_message(message_id.channel_id, message);
                 }
             }
         }

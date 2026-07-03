@@ -433,7 +433,7 @@ impl App {
             if let Some(mut msg) = self.storage.message(message_id).map(|m| m.into_owned()) {
                 msg.expires_at = Some(now_ms + u64::from(timer) * 1000);
                 self.schedule_expiry(msg.expires_at);
-                self.storage.store_message(channel_id, msg);
+                self.store_message(channel_id, msg);
             }
         }
 
