@@ -300,4 +300,90 @@ mod tests {
         // cursor sits right after the emoji, before the trailing `y`
         assert_eq!(input.cursor, Cursor::new("x 🐶".len(), 0, 4));
     }
+
+    /// Type `s` character by character without triggering emoji conversion, so a raw `:partial`
+    /// shortcode can be built up for completion tests.
+    fn put_str(input: &mut Input, s: &str) {
+        for c in s.chars() {
+            input.put_char(c);
+        }
+    }
+
+    #[test]
+    fn test_complete_emoji_unique_match() {
+        // A partial with a single matching shortcode completes it fully.
+        let mut input = Input::default();
+        put_str(&mut input, ":thumbsu");
+        assert!(input.try_complete_emoji());
+        assert_eq!(input.data, ":thumbsup");
+        // idx and col advance by the one extra character ("p").
+        assert_eq!(input.cursor, Cursor::new(":thumbsup".len(), 0, 9));
+        assert_eq!(input.completion_partial.as_deref(), Some("thumbsu"));
+    }
+
+    #[test]
+    fn test_complete_emoji_cycles_matches() {
+        // ":dog" matches ["dog", "dog2"]; current text "dog" is at index 0, so the first completion
+        // moves to the next match.
+        let mut input = Input::default();
+        put_str(&mut input, ":dog");
+        assert!(input.try_complete_emoji());
+        assert_eq!(input.data, ":dog2");
+        // The original partial is remembered across the cycle.
+        assert_eq!(input.completion_partial.as_deref(), Some("dog"));
+
+        // Cycling wraps back around to the first match.
+        assert!(input.try_complete_emoji());
+        assert_eq!(input.data, ":dog");
+        assert_eq!(input.completion_partial.as_deref(), Some("dog"));
+    }
+
+    #[test]
+    fn test_complete_emoji_partial_starts_first_match() {
+        // "smil" is not itself a shortcode, so completion jumps to the first shortcode that starts
+        // with it.
+        let mut input = Input::default();
+        put_str(&mut input, ":smil");
+        assert!(input.try_complete_emoji());
+        assert_eq!(input.data, ":smiley");
+        assert_eq!(input.completion_partial.as_deref(), Some("smil"));
+    }
+
+    #[test]
+    fn test_complete_emoji_no_match() {
+        // No shortcode starts with "zzzz": nothing changes and state is reset.
+        let mut input = Input::default();
+        put_str(&mut input, ":zzzz");
+        assert!(!input.try_complete_emoji());
+        assert_eq!(input.data, ":zzzz");
+        assert_eq!(input.completion_partial, None);
+    }
+
+    #[test]
+    fn test_complete_emoji_no_colon() {
+        // Without an opening colon there is nothing to complete.
+        let mut input = Input::default();
+        put_str(&mut input, "dog");
+        assert!(!input.try_complete_emoji());
+        assert_eq!(input.data, "dog");
+        assert_eq!(input.completion_partial, None);
+    }
+
+    #[test]
+    fn test_complete_emoji_empty_partial() {
+        // A lone colon has an empty partial and does not complete.
+        let mut input = Input::default();
+        put_str(&mut input, ":");
+        assert!(!input.try_complete_emoji());
+        assert_eq!(input.data, ":");
+        assert_eq!(input.completion_partial, None);
+    }
+
+    #[test]
+    fn test_complete_emoji_empty_input() {
+        let mut input = Input::default();
+        assert!(!input.try_complete_emoji());
+        assert_eq!(input.data, "");
+        assert_eq!(input.completion_partial, None);
+    }
 }
