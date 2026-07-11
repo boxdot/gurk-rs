@@ -41,9 +41,7 @@ impl PartialEq for TypingSet {
     fn eq(&self, other: &Self) -> bool {
         // Compare presence only, not timestamps
         match (self, other) {
-            (TypingSet::SingleTyping(a), TypingSet::SingleTyping(b)) => {
-                a.is_some() == b.is_some()
-            }
+            (TypingSet::SingleTyping(a), TypingSet::SingleTyping(b)) => a.is_some() == b.is_some(),
             (TypingSet::GroupTyping(a), TypingSet::GroupTyping(b)) => {
                 a.len() == b.len() && a.keys().all(|k| b.contains_key(k))
             }
