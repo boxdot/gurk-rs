@@ -37,11 +37,13 @@ pub struct App {
     pub help_scroll: (u16, u16),
     pub user_id: Uuid,
     pub should_quit: bool,
+    pub should_clear: bool,
     pub open_editor_requested: bool,
     display_help: bool,
     show_channel_list: bool,
     receipt_handler: ReceiptHandler,
     pub input: Input,
+    drafts: BTreeMap<ChannelId, Input>,
     pub is_multiline_input: bool,
     editing: Option<MessageId>,
     pub(crate) select_channel: SelectChannel,
@@ -50,6 +52,10 @@ pub struct App {
     // It is expensive to hit the signal manager contacts storage, so we cache it
     names_cache: Cell<Option<BTreeMap<Uuid, String>>>,
     pub mode_keybindings: ModeKeybinding,
+    /// When the current channel was selected (for dwell-based timer activation)
+    channel_selected_at: std::time::Instant,
+    /// Channel whose message timers have been activated (avoids repeated scanning)
+    timers_activated_for: Option<ChannelId>,
 }
 
 impl App {
@@ -100,11 +106,13 @@ impl App {
             messages,
             help_scroll: (0, 0),
             should_quit: false,
+            should_clear: false,
             open_editor_requested: false,
             display_help: false,
             show_channel_list: true,
             receipt_handler: ReceiptHandler::new(),
             input: Default::default(),
+            drafts: BTreeMap::new(),
             is_multiline_input: false,
             editing: None,
             select_channel: Default::default(),
@@ -112,6 +120,8 @@ impl App {
             event_tx,
             names_cache: Default::default(),
             mode_keybindings,
+            channel_selected_at: std::time::Instant::now(),
+            timers_activated_for: None,
         };
         Ok((app, event_rx))
     }
@@ -138,6 +148,32 @@ impl App {
             &mut self.select_channel.input
         } else {
             &mut self.input
+        }
+    }
+
+    /// Save current input to the old channel's draft and load the new channel's draft.
+    pub fn swap_channel_draft(
+        &mut self,
+        old_channel: Option<ChannelId>,
+        new_channel: Option<ChannelId>,
+    ) {
+        if old_channel == new_channel {
+            return;
+        }
+        // Save current input as old channel's draft
+        if let Some(old_id) = old_channel {
+            let old_input = std::mem::take(&mut self.input);
+            if !old_input.is_empty() {
+                self.drafts.insert(old_id, old_input);
+            } else {
+                self.drafts.remove(&old_id);
+            }
+        }
+        // Restore new channel's draft
+        if let Some(new_id) = new_channel {
+            self.input = self.drafts.remove(&new_id).unwrap_or_default();
+        } else {
+            self.input = Input::default();
         }
     }
 
@@ -401,6 +437,7 @@ pub(crate) mod tests {
             unread_messages: 1,
             muted: false,
             typing: TypingSet::GroupTyping(Default::default()),
+            expire_timer: None,
         };
         storage.store_channel(channel);
         storage.store_message(
@@ -418,6 +455,8 @@ pub(crate) mod tests {
                 edit: Default::default(),
                 edited: Default::default(),
                 deleted: Default::default(),
+                expire_timer: None,
+                expires_at: None,
             },
         );
 

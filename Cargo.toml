@@ -1,7 +1,7 @@
 [package]
 name = "gurk"
 description = "Signal messenger client for terminal"
-version = "0.9.1"
+version = "0.9.3"
 authors = ["boxdot <d@zerovolt.org>"]
 edition = "2024"
 keywords = ["signal", "tui"]
@@ -18,6 +18,14 @@ members = ["xtask"]
 # This speeds up `cargo xtask dist`.
 opt-level = 3
 
+[profile.dev.package.sqlcipher-crypto-provider]
+# This speeds up database decryption on debug builds
+opt-level = 3
+
+[profile.dev.package.sha2]
+# This speeds up database decryption on debug builds
+opt-level = 3
+
 [profile.release]
 debug = 0
 lto = "thin"
@@ -29,8 +37,8 @@ debug = true
 dev = ["prost", "base64", "serde_json"]
 
 [dependencies]
-presage = { git = "https://github.com/whisperfish/presage", rev = "fe3ed54c4844ae51c3a9fa49cf80a7816a31a425", default-features = false }
-presage-store-sqlite = { git = "https://github.com/whisperfish/presage", rev = "fe3ed54c4844ae51c3a9fa49cf80a7816a31a425", default-features = false }
+presage = { git = "https://github.com/whisperfish/presage", rev = "600c4ede51865f7de6ca21507e738a7bd70cc7ae", default-features = false }
+presage-store-sqlite = { git = "https://github.com/whisperfish/presage", rev = "600c4ede51865f7de6ca21507e738a7bd70cc7ae", default-features = false }
 
 # dev feature dependenciestoml
 prost = { version = "0.13.4", optional = true }

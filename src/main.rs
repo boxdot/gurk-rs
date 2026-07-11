@@ -5,6 +5,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
+use std::fs;
+
 use anyhow::{Context, anyhow};
 use chrono::{DateTime, Utc};
 use clap::Parser;
@@ -142,6 +144,7 @@ pub enum Event {
 }
 
 async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Result<()> {
+    fs::create_dir_all(&config.data_dir).context("could not create data dir")?;
     let local_pool = LocalPool::new();
 
     let mut signal_manager =
@@ -267,6 +270,8 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
         }
     });
 
+    let mut expire_tick_counter: u64 = 0;
+
     loop {
         // render
         let left_frame_budget = FRAME_BUDGET.checked_sub(last_render_at.elapsed());
@@ -287,6 +292,10 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
                 });
             }
         } else {
+            if app.should_clear {
+                terminal.clear()?;
+                app.should_clear = false;
+            }
             terminal.draw(|f| ui::draw(f, &mut app))?;
             last_render_at = Instant::now();
         }
@@ -299,6 +308,12 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
         match event {
             Some(Event::Tick) => {
                 app.step_receipts();
+                expire_tick_counter += 1;
+                if expire_tick_counter >= 5 {
+                    expire_tick_counter = 0;
+                    app.activate_expire_timers();
+                    app.expire_messages();
+                }
             }
             Some(Event::Click(event)) => match event.kind {
                 MouseEventKind::Down(MouseButton::Left) => {
@@ -309,7 +324,11 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
                             .map(|(_, row)| row as usize)
                             .filter(|&idx| idx < app.channels.items.len())
                     {
+                        let old = app.channels.state.selected().map(|i| app.channels.items[i]);
                         app.channels.state.select(Some(channel_idx));
+                        let new = Some(app.channels.items[channel_idx]);
+                        app.swap_channel_draft(old, new);
+                        app.on_channel_changed();
                         app.reset_unread_messages();
                     }
                 }
