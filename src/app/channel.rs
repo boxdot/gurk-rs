@@ -247,7 +247,7 @@ impl App {
                 group_data: None,
                 unread_messages: 0,
                 muted: false,
-                typing: TypingSet::SingleTyping(false),
+                typing: TypingSet::SingleTyping(None),
                 expire_timer: None,
             };
             self.store_channel(channel);
@@ -274,7 +274,7 @@ impl App {
                 group_data: None,
                 unread_messages: 0,
                 muted: false,
-                typing: TypingSet::SingleTyping(false),
+                typing: TypingSet::SingleTyping(None),
                 expire_timer: None,
             };
             self.store_channel(channel);

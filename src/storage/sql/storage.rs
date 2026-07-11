@@ -6,7 +6,7 @@ use sqlx::{
 };
 use sqlx::{query, query_as, query_scalar};
 use tokio::{runtime::Handle, task};
-use tracing::info;
+use tracing::{error, info};
 use url::Url;
 use uuid::Uuid;
 
@@ -797,7 +797,9 @@ impl Storage for SqliteStorage {
             )
             .execute(&self.pool),
         );
-        inserted.ok_logged();
+        if let Err(error) = inserted {
+            error!(%error, ?channel_id, arrived_at, "failed to store message");
+        }
         Cow::Owned(message)
     }
 
@@ -1485,6 +1487,91 @@ mod tests {
         assert_eq!(messages[1].reactions, reactions);
         assert_eq!(messages[1].receipt, receipt);
         assert_eq!(messages[1].body_ranges, body_ranges);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sqlite_storage_same_arrived_at_in_different_channels() {
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+        let mut storage = fixtures().await;
+
+        // channel_a already has "hello" at this timestamp
+        let channel_a = ChannelId::User(uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd"));
+        let arrived_at = 1664832050000;
+
+        let channel_b = ChannelId::User(uuid!("91a6315b-027c-44ce-bacb-4d5cf012ba8c"));
+        storage.store_channel(Channel {
+            id: channel_b,
+            name: "channel-b".to_owned(),
+            group_data: None,
+            unread_messages: 0,
+            muted: false,
+            typing: TypingSet::new(false),
+            expire_timer: None,
+        });
+        storage.store_message(
+            channel_b,
+            Message::text(
+                uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a"),
+                arrived_at,
+                "world".to_owned(),
+            ),
+        );
+
+        // both rows coexist under the composite primary key
+        assert_eq!(
+            storage
+                .message(MessageId::new(channel_a, arrived_at))
+                .unwrap()
+                .message
+                .as_deref(),
+            Some("hello")
+        );
+        assert_eq!(
+            storage
+                .message(MessageId::new(channel_b, arrived_at))
+                .unwrap()
+                .message
+                .as_deref(),
+            Some("world")
+        );
+        assert_eq!(storage.messages(channel_a).count(), 1);
+        assert_eq!(storage.messages(channel_b).count(), 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sqlite_storage_delete_channel_cascades_messages() {
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+        let storage = fixtures().await;
+        let channel_id = ChannelId::User(uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd"));
+        assert_eq!(storage.messages(channel_id).count(), 1);
+
+        sqlx::query("DELETE FROM channels WHERE id = ?")
+            .bind(&channel_id)
+            .execute(&storage.pool)
+            .await
+            .unwrap();
+
+        assert_eq!(storage.messages(channel_id).count(), 0);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sqlite_storage_store_message_for_missing_channel_is_dropped() {
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+        let mut storage = fixtures().await;
+        let missing = ChannelId::User(uuid!("00000000-0000-0000-0000-000000000000"));
+
+        // the foreign key rejects the insert; the message is dropped, not stored
+        storage.store_message(
+            missing,
+            Message::text(
+                uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a"),
+                123,
+                "lost".to_owned(),
+            ),
+        );
+
+        assert_eq!(storage.message(MessageId::new(missing, 123)), None);
+        assert_eq!(storage.messages(missing).count(), 0);
     }
 
     #[tokio::test(flavor = "multi_thread")]

@@ -117,6 +117,15 @@ impl App {
     }
 
     pub async fn on_key(&mut self, key: KeyEvent) -> anyhow::Result<()> {
+        if key.code == KeyCode::Tab
+            && !self.select_channel.is_shown
+            && self.input.try_complete_emoji()
+        {
+            return Ok(());
+        }
+        // Tab not consumed or different key, stop any active completion cycle.
+        self.input.completion_partial = None;
+
         if let Some(cmd) = self.event_to_command(&key) {
             self.on_command(cmd.clone()).await?;
         } else {
@@ -154,7 +163,12 @@ impl App {
                 KeyCode::Esc if !self.reset_editing() => {
                     self.reset_message_selection();
                 }
-                KeyCode::Char(c) => self.get_input().put_char(c),
+                KeyCode::Char(c) => {
+                    self.get_input().put_char(c);
+                    if c == ':' {
+                        self.get_input().convert_emoji_on_colon();
+                    }
+                }
                 _ => {}
             }
         }

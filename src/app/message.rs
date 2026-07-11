@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::cmp::Reverse;
+use std::time::Instant;
 
 use anyhow::{Context as _, anyhow};
 use itertools::Itertools;
@@ -13,7 +14,7 @@ use presage::proto::{GroupContextV2, data_message::Delete, data_message::Reactio
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use crate::data::{BodyRange, ChannelId, Message, TypingAction, TypingSet};
+use crate::data::{BodyRange, ChannelId, Message, TypingAction, TypingSet, parse_uuid};
 use crate::receipt::{Receipt, ReceiptEvent};
 use crate::signal::{Attachment, GroupIdentifierBytes};
 use crate::storage::MessageId;
@@ -664,6 +665,24 @@ impl App {
         self.receipt_handler.step(self.signal_manager.as_ref());
     }
 
+    /// Expire typing indicators older than TYPING_TIMEOUT_SECS
+    pub fn expire_typing_indicators(&mut self) {
+        let mut modified = Vec::new();
+        for channel in self.channels() {
+            if channel.is_writing() {
+                let mut channel = channel.clone();
+                if channel.expire_typing() {
+                    modified.push(channel);
+                }
+            }
+        }
+
+        // Can't iterate through channels and update them at the same time
+        for channel in modified {
+            self.store_channel(channel);
+        }
+    }
+
     fn handle_typing(
         &mut self,
         sender_uuid: Uuid,
@@ -677,13 +696,13 @@ impl App {
                 .channel(ChannelId::Group(gid))
                 .ok_or(())?
                 .into_owned();
-            if let TypingSet::GroupTyping(ref mut hash_set) = channel.typing {
+            if let TypingSet::GroupTyping(ref mut map) = channel.typing {
                 match action {
                     TypingAction::Started => {
-                        hash_set.insert(sender_uuid);
+                        map.insert(sender_uuid, Instant::now());
                     }
                     TypingAction::Stopped => {
-                        hash_set.remove(&sender_uuid);
+                        map.remove(&sender_uuid);
                     }
                 }
                 self.storage.store_channel(channel);
@@ -699,10 +718,10 @@ impl App {
             if let TypingSet::SingleTyping(_) = channel.typing {
                 match action {
                     TypingAction::Started => {
-                        channel.typing = TypingSet::SingleTyping(true);
+                        channel.typing = TypingSet::SingleTyping(Some(Instant::now()));
                     }
                     TypingAction::Stopped => {
-                        channel.typing = TypingSet::SingleTyping(false);
+                        channel.typing = TypingSet::SingleTyping(None);
                     }
                 }
                 self.storage.store_channel(channel);
@@ -994,14 +1013,6 @@ impl MessageExt for SyncMessage {
     }
 }
 
-/// First parse the binary field, then fallback to the string field
-fn parse_uuid(str_field: Option<&str>, binary_field: Option<&[u8]>) -> Option<Uuid> {
-    binary_field
-        .and_then(ServiceId::parse_from_service_id_binary)
-        .map(|sid| sid.raw_uuid())
-        .or_else(|| str_field.and_then(|s| s.parse().ok()))
-}
-
 trait SyncSentExt {
     fn parse_destination_uuid(&self) -> Option<Uuid>;
 }
@@ -1037,33 +1048,72 @@ fn conversation_to_channel_id(conv: &presage::proto::ConversationIdentifier) -> 
 #[cfg(test)]
 mod tests {
     use crate::app::tests::test_app;
+    use crate::data::Channel;
 
     use super::*;
+
+    /// Overwrites the unread counter of the given channel in memory and storage.
+    fn set_unread(app: &mut App, channel_id: ChannelId, unread_messages: u32) {
+        let mut channel = app.channel(channel_id).unwrap().clone();
+        channel.unread_messages = unread_messages;
+        app.store_channel(channel);
+    }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_handle_read() {
         let (mut app, _events, _sent_messages) = test_app().await;
 
-        let channel = app.channels.items.first_mut().unwrap();
+        // fixture channel already has "First message" at arrived_at 0
+        let channel_id = app.channels().first().unwrap().id;
+        app.storage.store_message(
+            channel_id,
+            Message::text(app.user_id, 42, "unread message".to_string()),
+        );
+        set_unread(&mut app, channel_id, 2);
 
-        // new incoming message
-        let message = app
-            .storage
-            .store_message(
-                channel.id,
-                Message::text(app.user_id, 42, "unread message".to_string()),
-            )
-            .into_owned();
-
-        // mark as unread
-        channel.unread_messages = 1;
-        let channel_id = channel.id;
-
+        // reading the older message leaves the newer one unread
         app.handle_read(&[Read {
-            timestamp: Some(message.arrived_at),
+            timestamp: Some(0),
             ..Default::default()
         }]);
+        assert_eq!(app.channel(channel_id).unwrap().unread_messages, 1);
 
+        // reading the newer message clears the counter
+        app.handle_read(&[Read {
+            timestamp: Some(42),
+            ..Default::default()
+        }]);
         assert_eq!(app.channel(channel_id).unwrap().unread_messages, 0);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_handle_read_only_affects_matching_channel() {
+        let (mut app, _events, _sent_messages) = test_app().await;
+
+        let channel_a = app.channels().first().unwrap().id;
+        app.storage
+            .store_message(channel_a, Message::text(app.user_id, 100, "a".to_string()));
+        set_unread(&mut app, channel_a, 1);
+
+        let channel_b = ChannelId::User(Uuid::new_v4());
+        app.store_channel(Channel {
+            id: channel_b,
+            name: "other".to_string(),
+            group_data: None,
+            unread_messages: 1,
+            muted: false,
+            typing: TypingSet::new(false),
+            expire_timer: None,
+        });
+        app.storage
+            .store_message(channel_b, Message::text(app.user_id, 200, "b".to_string()));
+
+        // a read receipt for channel A's message must not touch channel B
+        app.handle_read(&[Read {
+            timestamp: Some(100),
+            ..Default::default()
+        }]);
+        assert_eq!(app.channel(channel_a).unwrap().unread_messages, 0);
+        assert_eq!(app.channel(channel_b).unwrap().unread_messages, 1);
     }
 }
