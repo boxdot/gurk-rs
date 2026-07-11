@@ -131,12 +131,39 @@ libraries that are not available on crates.io.
 
 ## Configuration
 
-Upon startup, `gurk` tries to load configuration from one of the default locations:
+### Command-line options
 
-1. `$XDG_CONFIG_HOME/gurk/gurk.toml`
-2. `$XDG_CONFIG_HOME/gurk.toml`
-3. `$HOME/.config/gurk/gurk.toml`
+```
+-c, --config <PATH>     Path to config file
+    --data-dir <PATH>   Path to data directory
+```
+
+### Environment variables
+
+| Variable | Description |
+|----------|-------------|
+| `GURK_CONFIG` | Path to config file (same as `--config`) |
+| `GURK_DATA_DIR` | Path to data directory (same as `--data-dir`) |
+| `XDG_CONFIG_HOME` | Base directory for config files (works on all platforms) |
+| `XDG_DATA_HOME` | Base directory for data files (works on all platforms) |
+
+### Config file locations
+
+If no config path is specified, `gurk` searches these locations in order:
+
+1. `$XDG_CONFIG_HOME/gurk/gurk.toml` (if `XDG_CONFIG_HOME` is set)
+2. `$XDG_CONFIG_HOME/gurk.toml` (if `XDG_CONFIG_HOME` is set)
+3. Platform config directory (e.g. `~/Library/Application Support` on macOS, `~/.config` on Linux)
 4. `$HOME/.gurk.toml`
+
+### Data directory
+
+The data directory (for messages, Signal database, attachments) is determined by:
+
+1. `--data-dir` CLI option or `GURK_DATA_DIR` env var
+2. `data_dir` setting in config file
+3. `$XDG_DATA_HOME/gurk` (if `XDG_DATA_HOME` is set)
+4. Platform data directory (e.g. `~/Library/Application Support/gurk` on macOS)
 
 ## Custom keybindings
 The default keybindings can be overwritten at startup by configuring

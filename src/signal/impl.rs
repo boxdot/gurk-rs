@@ -143,9 +143,10 @@ impl SignalManager for PresageManager {
 
         let quote = quote_message.map(|message| Quote {
             id: Some(message.arrived_at),
-            author_aci: Some(message.from_id.to_string()),
+            author_aci: None,
             text: message.message.clone(),
             body_ranges: message.body_ranges.iter().map(From::from).collect(),
+            author_aci_binary: Some(message.from_id.as_bytes().to_vec()),
             ..Default::default()
         });
         let quote_message = quote.clone().and_then(Message::from_quote).map(Box::new);
