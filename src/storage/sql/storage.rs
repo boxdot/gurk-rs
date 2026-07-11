@@ -6,7 +6,7 @@ use sqlx::{
 };
 use sqlx::{query, query_as, query_scalar};
 use tokio::{runtime::Handle, task};
-use tracing::info;
+use tracing::{error, info};
 use url::Url;
 use uuid::Uuid;
 
@@ -533,7 +533,9 @@ impl Storage for SqliteStorage {
             )
             .execute(&self.pool),
         );
-        inserted.ok_logged();
+        if let Err(error) = inserted {
+            error!(%error, ?channel_id, arrived_at, "failed to store message");
+        }
         Cow::Owned(message)
     }
 
