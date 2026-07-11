@@ -18,6 +18,14 @@ members = ["xtask"]
 # This speeds up `cargo xtask dist`.
 opt-level = 3
 
+[profile.dev.package.sqlcipher-crypto-provider]
+# This speeds up database decryption on debug builds
+opt-level = 3
+
+[profile.dev.package.sha2]
+# This speeds up database decryption on debug builds
+opt-level = 3
+
 [profile.release]
 debug = 0
 lto = "thin"

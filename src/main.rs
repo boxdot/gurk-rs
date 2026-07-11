@@ -4,6 +4,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
+use std::fs;
+
 use anyhow::{Context, anyhow};
 use chrono::{DateTime, Utc};
 use clap::Parser;
@@ -118,6 +120,7 @@ pub enum Event {
 }
 
 async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Result<()> {
+    fs::create_dir_all(&config.data_dir).context("could not create data dir")?;
     let local_pool = LocalPool::new();
 
     let mut signal_manager =
