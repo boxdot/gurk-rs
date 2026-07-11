@@ -17,7 +17,6 @@ impl App {
     }
 
     pub fn select_previous_channel(&mut self) {
-        self.reset_unread_messages();
         let old = self.channels.selected_item().copied();
         self.channels.previous();
         let new = self.channels.selected_item().copied();
@@ -26,7 +25,6 @@ impl App {
     }
 
     pub fn select_next_channel(&mut self) {
-        self.reset_unread_messages();
         let old = self.channels.selected_item().copied();
         self.channels.next();
         let new = self.channels.selected_item().copied();
@@ -194,7 +192,7 @@ impl App {
                 group_data: None,
                 unread_messages: 0,
                 muted: false,
-                typing: TypingSet::SingleTyping(false),
+                typing: TypingSet::SingleTyping(None),
                 expire_timer: None,
             };
             let channel = self.storage.store_channel(channel);
@@ -230,7 +228,7 @@ impl App {
                 group_data: None,
                 unread_messages: 0,
                 muted: false,
-                typing: TypingSet::SingleTyping(false),
+                typing: TypingSet::SingleTyping(None),
                 expire_timer: None,
             };
             let channel = self.storage.store_channel(channel);
