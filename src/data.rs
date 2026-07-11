@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use anyhow::anyhow;
+use presage::libsignal_service::protocol::ServiceId;
 use presage::libsignal_service::zkgroup::groups::{GroupMasterKey, GroupSecretParams};
 use presage::proto;
 use presage::proto::data_message::Quote;
@@ -373,7 +374,10 @@ impl Message {
 
     pub fn from_quote(quote: Quote) -> Option<Message> {
         Some(Message {
-            from_id: quote.author_aci?.parse().ok()?,
+            from_id: parse_uuid(
+                quote.author_aci.as_deref(),
+                quote.author_aci_binary.as_deref(),
+            )?,
             message: quote.text,
             arrived_at: quote.id?,
             quote: None,
@@ -400,4 +404,12 @@ impl Message {
             && self.reactions.is_empty()
             && self.quote.is_none()
     }
+}
+
+/// First parse the binary field, then fallback to the string field
+pub fn parse_uuid(str_field: Option<&str>, binary_field: Option<&[u8]>) -> Option<Uuid> {
+    binary_field
+        .and_then(ServiceId::parse_from_service_id_binary)
+        .map(|sid| sid.raw_uuid())
+        .or_else(|| str_field.and_then(|s| s.parse().ok()))
 }
