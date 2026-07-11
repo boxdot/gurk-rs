@@ -176,32 +176,7 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
     app.populate_names_cache().await;
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Event>(100);
-    // Stored reader so it can be aborted before launching an external editor
-    // (otherwise both processes compete for stdin and the editor ends up missing keystrokes).
-    let spawn_event_reader = {
-        let tx = tx.clone();
-        move || {
-            let tx = tx.clone();
-            tokio::spawn(async move {
-                let mut reader = EventStream::new().fuse();
-                while let Some(event) = reader.next().await {
-                    match event {
-                        Ok(CEvent::Key(key)) => tx.send(Event::Input(key)).await.unwrap(),
-                        Ok(CEvent::Resize(cols, rows)) => {
-                            tx.send(Event::Resize { cols, rows }).await.unwrap()
-                        }
-                        Ok(CEvent::Mouse(button)) => tx.send(Event::Click(button)).await.unwrap(),
-                        Ok(CEvent::Paste(content)) => tx.send(Event::Paste(content)).await.unwrap(),
-                        _ => (),
-                    }
-                }
-            })
-        }
-    };
-    let mut event_reader_handle = spawn_event_reader();
-
     let inner_tx = tx.clone();
-
     local_pool.spawn(move || async move {
         let mut backoff = Backoff::new();
         loop {
@@ -253,7 +228,34 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
 
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
+    // Clear before spawning the event reader: Terminal::clear queries the cursor position (ESC[6n)
+    // and reads the reply back from stdin. Spawned event reader consumes that reply and the query
+    // times out.
     terminal.clear()?;
+
+    // Stored reader so it can be aborted before launching an external editor (otherwise both
+    // processes compete for stdin and the editor ends up missing keystrokes).
+    let spawn_event_reader = {
+        let tx = tx.clone();
+        move || {
+            let tx = tx.clone();
+            tokio::spawn(async move {
+                let mut reader = EventStream::new().fuse();
+                while let Some(event) = reader.next().await {
+                    match event {
+                        Ok(CEvent::Key(key)) => tx.send(Event::Input(key)).await.unwrap(),
+                        Ok(CEvent::Resize(cols, rows)) => {
+                            tx.send(Event::Resize { cols, rows }).await.unwrap()
+                        }
+                        Ok(CEvent::Mouse(button)) => tx.send(Event::Click(button)).await.unwrap(),
+                        Ok(CEvent::Paste(content)) => tx.send(Event::Paste(content)).await.unwrap(),
+                        _ => (),
+                    }
+                }
+            })
+        }
+    };
+    let mut event_reader_handle = spawn_event_reader();
 
     let mut res = Ok(()); // result on quit
     let mut last_render_at = Instant::now();
