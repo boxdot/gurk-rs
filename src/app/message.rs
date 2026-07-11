@@ -1116,4 +1116,32 @@ mod tests {
         assert_eq!(app.channel(channel_a).unwrap().unread_messages, 0);
         assert_eq!(app.channel(channel_b).unwrap().unread_messages, 1);
     }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_incoming_message_increments_unread_in_channel_list() {
+        let (mut app, _events, _sent_messages) = test_app().await;
+
+        // channel A is the selected one
+        let channel_a = app.channels().first().unwrap().id;
+        assert_eq!(app.selected_channel_id(), Some(channel_a));
+
+        // a second, unselected channel
+        let other = Uuid::new_v4();
+        let channel_b = ChannelId::User(other);
+        app.store_channel(Channel {
+            id: channel_b,
+            name: "other".to_string(),
+            group_data: None,
+            unread_messages: 0,
+            muted: false,
+            typing: TypingSet::new(false),
+            expire_timer: None,
+        });
+
+        app.add_message_to_channel(channel_b, Message::text(other, 1000, "hi".to_string()));
+        assert_eq!(app.channel(channel_b).unwrap().unread_messages, 1);
+
+        app.add_message_to_channel(channel_b, Message::text(other, 1001, "there".to_string()));
+        assert_eq!(app.channel(channel_b).unwrap().unread_messages, 2);
+    }
 }
