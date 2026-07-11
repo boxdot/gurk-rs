@@ -9,9 +9,11 @@ use crate::{
 /// Fetch granularity for load_*/extend_*
 pub(crate) const PAGE: usize = 64;
 
-/// Trim threshold
+/// Trim threshold: the window never holds more than this many messages.
 ///
-/// Must be >> viewport rows * 2*PAGE
+/// Should be comfortably larger than `2 * (viewport rows + FILL_MARGIN)` so that both halves of the
+/// fill target fit without the clamp in [`App::ensure_message_window_filled`] reducing how much the
+/// viewport loads.
 pub(crate) const MAX_WINDOW: usize = 512;
 
 /// How much to fill the window when ensuring it is filled
@@ -47,7 +49,9 @@ impl App {
             .positions
             .get(&channel_id)
             .and_then(|p| p.selected.or(p.viewport_bottom));
-        let target = self.message_view_height + FILL_MARGIN;
+        // Cap per-side fill so both halves fit within `MAX_WINDOW`; otherwise a viewport taller
+        // than the window re-pages the whole channel every frame.
+        let target = (self.message_view_height + FILL_MARGIN).min(MAX_WINDOW / 2);
         let window = self.window.as_mut().expect("logic error: no window");
         while !window.at_oldest() && window.loaded_above(anchor) < target {
             window.extend_older(&*self.storage, PAGE);
@@ -551,6 +555,34 @@ mod tests {
         w.extend_newer(&storage, 5); // only 50 left -> short -> at_newest
         assert_eq!(ats(&w), [10, 20, 30, 40, 50]);
         assert!(w.at_newest());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn ensure_fill_bounded_and_balanced_on_tall_viewport() {
+        use crate::app::tests::test_app;
+
+        let (mut app, _events, _sent) = test_app().await;
+        let channel_id = app.channels().first().unwrap().id;
+        for a in 1..=800u64 {
+            app.storage
+                .store_message(channel_id, Message::text(FROM, a, format!("m{a}")));
+        }
+
+        // viewport far taller than the window can hold, anchored in the middle
+        app.message_view_height = MAX_WINDOW * 4;
+        app.positions.entry(channel_id).or_default().viewport_bottom = Some(400);
+        app.on_channel_changed();
+
+        app.ensure_message_window_filled();
+
+        let window = app.window.as_ref().unwrap();
+        assert!(
+            window.items.len() <= MAX_WINDOW,
+            "window exceeds MAX_WINDOW"
+        );
+        // the anchor stays balanced: both sides are filled, not dragged to one edge
+        assert!(window.loaded_above(Some(400)) >= MAX_WINDOW / 4);
+        assert!(window.loaded_below(Some(400)) >= MAX_WINDOW / 4);
     }
 
     #[tokio::test(flavor = "multi_thread")]
