@@ -1,0 +1,7 @@
+[files]
+ignore-files = true
+ignore-hidden = false
+
+[default]
+extend-ignore-re = ["ACI", "Aci", "aci", "ratatui"]
+check-filename = true
