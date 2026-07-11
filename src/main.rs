@@ -91,7 +91,9 @@ fn main() -> anyhow::Result<()> {
     let (mut config, passphrase) = match args
         .config
         .take()
-        .map(|p| Config::load(&p).with_context(|| format!("failed to load config from {}", p.display())))
+        .map(|p| {
+            Config::load(&p).with_context(|| format!("failed to load config from {}", p.display()))
+        })
         .transpose()?
         .or(Config::load_installed().context("failed to load config")?)
     {
