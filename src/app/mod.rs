@@ -180,14 +180,11 @@ impl App {
     pub fn writing_people(&self, channel: &Channel) -> Option<String> {
         if channel.is_writing() {
             let uuids: Box<dyn Iterator<Item = Uuid>> = match &channel.typing {
-                TypingSet::GroupTyping(uuids) => Box::new(uuids.iter().copied()),
-                TypingSet::SingleTyping(a) => {
-                    if *a {
-                        Box::new(std::iter::once(channel.user_id().unwrap()))
-                    } else {
-                        Box::new(std::iter::empty())
-                    }
+                TypingSet::GroupTyping(map) => Box::new(map.keys().copied()),
+                TypingSet::SingleTyping(Some(_)) => {
+                    Box::new(std::iter::once(channel.user_id().unwrap()))
                 }
+                TypingSet::SingleTyping(None) => Box::new(std::iter::empty()),
             };
             Some(format!(
                 "[{}] writing...",
