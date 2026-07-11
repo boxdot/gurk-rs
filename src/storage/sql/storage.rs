@@ -287,38 +287,6 @@ impl Storage for SqliteStorage {
         channel?.convert().ok_logged().map(Cow::Owned)
     }
 
-    fn channels_by_recency(&self) -> Vec<(ChannelId, Option<u64>)> {
-        struct Row {
-            id: ChannelId,
-            last_arrived_at: Option<i64>,
-        }
-        block_async_in_place(
-            query_as!(
-                Row,
-                r#"
-                    SELECT
-                        c.id AS "id!: _",
-                        MAX(m.arrived_at) AS last_arrived_at
-                    FROM channels c
-                    LEFT JOIN messages m ON m.channel_id = c.id AND m.edit IS NULL
-                    GROUP BY c.id
-                    ORDER BY last_arrived_at DESC
-                "#,
-            )
-            .fetch_all(&self.pool),
-        )
-        .ok_logged()
-        .unwrap_or_default()
-        .into_iter()
-        .map(
-            |Row {
-                 id,
-                 last_arrived_at,
-             }| (id, last_arrived_at.and_then(|t| t.try_into().ok())),
-        )
-        .collect()
-    }
-
     fn store_channel(&mut self, channel: Channel) -> Cow<'_, Channel> {
         let id = &channel.id;
         let name = &channel.name;
@@ -1287,47 +1255,6 @@ mod tests {
 
         let unknown_channel = ChannelId::User(uuid!("00000000-0000-0000-0000-000000000000"));
         assert_eq!(storage.last_message(unknown_channel), None);
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_sqlite_storage_channels_by_recency() {
-        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
-        let (mut storage, channel1) = windowed_fixtures().await;
-        let from_id = uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a");
-
-        // channel with a newer message than channel1's newest (90)
-        let channel2 = ChannelId::User(uuid!("11111111-1111-1111-1111-111111111111"));
-        storage.store_channel(test_channel(channel2, "newer"));
-        storage.store_message(channel2, Message::text(from_id, 200, "newer".to_owned()));
-
-        // channel without messages
-        let channel3 = ChannelId::User(uuid!("22222222-2222-2222-2222-222222222222"));
-        storage.store_channel(test_channel(channel3, "empty"));
-
-        assert_eq!(
-            storage.channels_by_recency(),
-            [
-                (channel2, Some(200)),
-                (channel1, Some(90)),
-                (channel3, None)
-            ]
-        );
-
-        // editing an old message creates edit rows with newer timestamps;
-        // they must not change the recency of the channel
-        storage.store_edited_message(
-            channel1,
-            90,
-            Message::text(from_id, 300, "message 90 edited".to_owned()),
-        );
-        assert_eq!(
-            storage.channels_by_recency(),
-            [
-                (channel2, Some(200)),
-                (channel1, Some(90)),
-                (channel3, None)
-            ]
-        );
     }
 
     #[tokio::test(flavor = "multi_thread")]

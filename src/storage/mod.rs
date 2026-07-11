@@ -31,11 +31,6 @@ pub trait Storage {
     /// Gets the channel by id
     fn channel(&self, channel_id: ChannelId) -> Option<Cow<'_, Channel>>;
 
-    /// Returns the list of channels incl. their last message arrived_at.
-    ///
-    /// The order is from most recent to least recent, that is, descending by arrived_at.
-    fn channels_by_recency(&self) -> Vec<(ChannelId, Option<u64>)>;
-
     /// Stores the given `channel` and returns it back
     fn store_channel(&mut self, channel: Channel) -> Cow<'_, Channel>;
 

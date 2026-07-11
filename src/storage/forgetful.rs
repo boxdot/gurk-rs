@@ -18,10 +18,6 @@ impl Storage for ForgetfulStorage {
         None
     }
 
-    fn channels_by_recency(&self) -> Vec<(ChannelId, Option<u64>)> {
-        Vec::new()
-    }
-
     fn store_channel(&mut self, channel: Channel) -> Cow<'_, Channel> {
         Cow::Owned(channel)
     }
