@@ -154,7 +154,12 @@ impl App {
                 KeyCode::Esc if !self.reset_editing() => {
                     self.reset_message_selection();
                 }
-                KeyCode::Char(c) => self.get_input().put_char(c),
+                KeyCode::Char(c) => {
+                    self.get_input().put_char(c);
+                    if c == ':' {
+                        self.get_input().convert_emoji_on_colon();
+                    }
+                }
                 _ => {}
             }
         }
