@@ -1080,37 +1080,73 @@ fn conversation_to_channel_id(conv: &presage::proto::ConversationIdentifier) -> 
 #[cfg(test)]
 mod tests {
     use crate::app::tests::test_app;
+    use crate::data::Channel;
 
     use super::*;
 
+    /// Overwrites the unread counter of the given channel in storage.
+    fn set_unread(app: &mut App, channel_id: ChannelId, unread_messages: u32) {
+        let mut channel = app.storage.channel(channel_id).unwrap().into_owned();
+        channel.unread_messages = unread_messages;
+        app.storage.store_channel(channel);
+    }
+
     #[test]
-    #[ignore = "forgetful storage does not support lookup by arrived_at"]
     fn test_handle_read() {
         let (mut app, _events, _sent_messages) = test_app();
 
+        // fixture channel already has "First message" at arrived_at 0
         let channel_id = *app.channels.items.first().unwrap();
+        app.storage.store_message(
+            channel_id,
+            Message::text(app.user_id, 42, "unread message".to_string()),
+        );
+        set_unread(&mut app, channel_id, 2);
 
-        // new incoming message
-        let message = app
-            .storage
-            .store_message(
-                channel_id,
-                Message::text(app.user_id, 42, "unread message".to_string()),
-            )
-            .into_owned();
-
-        // mark as unread
-        app.storage
-            .channel(channel_id)
-            .unwrap()
-            .into_owned()
-            .unread_messages = 1;
-
+        // reading the older message leaves the newer one unread
         app.handle_read(&[Read {
-            timestamp: Some(message.arrived_at),
+            timestamp: Some(0),
             ..Default::default()
         }]);
+        assert_eq!(app.storage.channel(channel_id).unwrap().unread_messages, 1);
 
+        // reading the newer message clears the counter
+        app.handle_read(&[Read {
+            timestamp: Some(42),
+            ..Default::default()
+        }]);
         assert_eq!(app.storage.channel(channel_id).unwrap().unread_messages, 0);
+    }
+
+    #[test]
+    fn test_handle_read_only_affects_matching_channel() {
+        let (mut app, _events, _sent_messages) = test_app();
+
+        let channel_a = *app.channels.items.first().unwrap();
+        app.storage
+            .store_message(channel_a, Message::text(app.user_id, 100, "a".to_string()));
+        set_unread(&mut app, channel_a, 1);
+
+        let channel_b = ChannelId::User(Uuid::new_v4());
+        app.storage.store_channel(Channel {
+            id: channel_b,
+            name: "other".to_string(),
+            group_data: None,
+            unread_messages: 1,
+            muted: false,
+            typing: TypingSet::new(false),
+            expire_timer: None,
+        });
+        app.channels.items.push(channel_b);
+        app.storage
+            .store_message(channel_b, Message::text(app.user_id, 200, "b".to_string()));
+
+        // a read receipt for channel A's message must not touch channel B
+        app.handle_read(&[Read {
+            timestamp: Some(100),
+            ..Default::default()
+        }]);
+        assert_eq!(app.storage.channel(channel_a).unwrap().unread_messages, 0);
+        assert_eq!(app.storage.channel(channel_b).unwrap().unread_messages, 1);
     }
 }
