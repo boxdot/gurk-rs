@@ -25,7 +25,7 @@ use crate::cursor::Cursor;
 use crate::data::{AssociatedValue, Message};
 use crate::receipt::{Receipt, ReceiptEvent};
 use crate::storage::MessageId;
-use crate::util::utc_timestamp_msec_to_local;
+use crate::util::{PeekableExt as _, utc_timestamp_msec_to_local};
 
 use super::CHANNEL_VIEW_RATIO;
 use super::name_resolver::NameResolver;
@@ -355,21 +355,15 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     }
     let prefix = " ".repeat(prefix_width);
 
-    // The day of the message at the bottom of the viewport
-    let first_msg_timestamp = messages_to_render.clone().next().unwrap_or_default();
-    let mut previous_msg_timestamp = first_msg_timestamp;
-    let mut previous_msg_day = utc_timestamp_msec_to_local(first_msg_timestamp).num_days_from_ce();
-
     let messages_from_offset = messages_to_render
+        .flat_map(|arrived_at| app.storage.message(MessageId::new(channel_id, arrived_at)))
         .enumerate()
-        .flat_map(|(idx, arrived_at)| {
-            let msg = app
-                .storage
-                .message(MessageId::new(channel_id, arrived_at))?;
+        .peekable()
+        .map_with_peek(|(idx, msg), prev_msg| {
+            // the iterator is reversed, so the peeked item is the older, *previous* message
             let date_division = display_date_line(
                 msg.arrived_at,
-                previous_msg_timestamp,
-                &mut previous_msg_day,
+                prev_msg.map(|(_, msg)| msg.arrived_at),
                 width,
             );
 
@@ -381,7 +375,6 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
                         + &"-".repeat(width.saturating_sub(prefix_width))
                 });
 
-            previous_msg_timestamp = msg.arrived_at;
             let show_receipt = ShowReceipt::from_msg(&msg, app.user_id, app.config.show_receipts);
             display_message(
                 &names,
@@ -394,7 +387,8 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
                 new_messages_division,
                 app.config.colored_messages,
             )
-        });
+        })
+        .flatten();
 
     // counters to accumulate messages as long they fit into the list height,
     // or up to the selected message
@@ -676,18 +670,16 @@ fn replace_mentions(msg: &Message, names: &NameResolver, text: String) -> String
 
 fn display_date_line(
     msg_timestamp: u64,
-    previous_msg_timestamp: u64,
-    previous_msg_day: &mut i32,
+    previous_msg_timestamp: Option<u64>,
     width: usize,
 ) -> Option<String> {
     let local_time = utc_timestamp_msec_to_local(msg_timestamp);
     let current_msg_day = local_time.num_days_from_ce();
+    let previous_msg_day =
+        previous_msg_timestamp.map(|t| utc_timestamp_msec_to_local(t).num_days_from_ce());
 
-    if current_msg_day != *previous_msg_day {
-        // Show the date of the previous section (the day we're leaving)
-        let previous_local_time = utc_timestamp_msec_to_local(previous_msg_timestamp);
-        let date = format!("{:=^width$}", previous_local_time.format(" %A, %x "));
-        *previous_msg_day = current_msg_day;
+    if Some(current_msg_day) != previous_msg_day {
+        let date = format!("{:=^width$}", local_time.format(" %A, %x "));
         Some(date)
     } else {
         None

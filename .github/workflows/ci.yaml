@@ -17,6 +17,13 @@ env:
   RUSTFLAGS: -D warnings
 
 jobs:
+  typos:
+    name: Check for typos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: crate-ci/typos@631208b7aac2daa8b707f55e7331f9112b0e062d # v1.44.0
+
   rustfmt:
     runs-on: ubuntu-latest
     steps:
@@ -106,11 +113,7 @@ jobs:
           - x86_64-apple-darwin
           - aarch64-apple-darwin
     runs-on: macos-latest
-    env:
-      SELECT_XCODE: /Applications/Xcode_16.4.app
     steps:
-      - name: xcode
-        run: sudo xcode-select -s "${SELECT_XCODE}"
       - name: protoc
         uses: arduino/setup-protoc@v3
         with:

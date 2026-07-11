@@ -1,4 +1,4 @@
-use std::sync::LazyLock;
+use std::{iter::Peekable, sync::LazyLock};
 
 use chrono::{DateTime, Local};
 use phonenumber::PhoneNumber;
@@ -110,6 +110,26 @@ pub fn is_phone_number(s: impl AsRef<str>) -> bool {
     // the formatting now is correct.
     let stripped = s.as_ref().replace(&[' ', '-'][..], "");
     stripped.parse::<PhoneNumber>().is_ok()
+}
+
+pub trait PeekableExt: Iterator {
+    fn map_with_peek<O, F: FnMut(Self::Item, Option<&Self::Item>) -> O>(
+        self,
+        f: F,
+    ) -> impl Iterator<Item = O>;
+}
+
+impl<I: Iterator> PeekableExt for Peekable<I> {
+    fn map_with_peek<O, F: FnMut(I::Item, Option<&I::Item>) -> O>(
+        mut self,
+        mut f: F,
+    ) -> impl Iterator<Item = O> {
+        std::iter::from_fn(move || {
+            let item = self.next()?;
+            let peek = self.peek();
+            Some(f(item, peek))
+        })
+    }
 }
 
 // Based on Alacritty, APACHE-2.0 License

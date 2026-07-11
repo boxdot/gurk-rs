@@ -102,6 +102,14 @@ impl Input {
             None => return,
         };
 
+        // Only convert when the opening `:` starts a word, i.e. it is at the beginning of the input
+        // or preceded by whitespace. This avoids mangling code such as `xtask::shell::foobar`.
+        if let Some(prev) = self.data[..open_pos].chars().next_back()
+            && !prev.is_whitespace()
+        {
+            return;
+        }
+
         let shortcode = &self.data[open_pos + 1..idx - 1];
         let Some(emoji) = emojis::get_by_shortcode(shortcode) else {
             return;
@@ -182,5 +190,114 @@ impl Input {
         }
         self.cursor.idx = open_pos + 1 + next.len();
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cursor::Cursor;
+
+    /// Type `s` character by character, mirroring the app's key dispatch: after every `:` we
+    /// attempt an emoji conversion.
+    fn type_str(input: &mut Input, s: &str) {
+        for c in s.chars() {
+            input.put_char(c);
+            if c == ':' {
+                input.convert_emoji_on_colon();
+            }
+        }
+    }
+
+    #[test]
+    fn test_convert_emoji_basic() {
+        let mut input = Input::default();
+        type_str(&mut input, ":dog:");
+        assert_eq!(input.data, "🐶");
+        // idx = byte length of the emoji, col = display width, still on line 0
+        assert_eq!(input.cursor, Cursor::new("🐶".len(), 0, 2));
+    }
+
+    #[test]
+    fn test_convert_emoji_unknown_shortcode() {
+        let mut input = Input::default();
+        type_str(&mut input, ":nope:");
+        assert_eq!(input.data, ":nope:");
+        assert_eq!(input.cursor, Cursor::new(6, 0, 6));
+    }
+
+    #[test]
+    fn test_convert_emoji_double_colon() {
+        let mut input = Input::default();
+        type_str(&mut input, "::");
+        assert_eq!(input.data, "::");
+        assert_eq!(input.cursor, Cursor::new(2, 0, 2));
+    }
+
+    #[test]
+    fn test_convert_emoji_no_opening_colon() {
+        let mut input = Input::default();
+        type_str(&mut input, "dog:");
+        assert_eq!(input.data, "dog:");
+        assert_eq!(input.cursor, Cursor::new(4, 0, 4));
+    }
+
+    #[test]
+    fn test_convert_emoji_with_leading_text() {
+        let mut input = Input::default();
+        type_str(&mut input, "hi :dog:");
+        assert_eq!(input.data, "hi 🐶");
+        assert_eq!(input.cursor, Cursor::new("hi 🐶".len(), 0, 5));
+    }
+
+    #[test]
+    fn test_convert_emoji_requires_word_boundary() {
+        // Opening `:` glued to a preceding word must not trigger conversion,
+        // so paths like `xtask::shell::foobar` stay intact.
+        let mut input = Input::default();
+        type_str(&mut input, "a:dog:");
+        assert_eq!(input.data, "a:dog:");
+        assert_eq!(input.cursor, Cursor::new(6, 0, 6));
+
+        let mut input = Input::default();
+        type_str(&mut input, "xtask::shell::foobar");
+        assert_eq!(input.data, "xtask::shell::foobar");
+    }
+
+    #[test]
+    fn test_convert_emoji_after_newline() {
+        // The start of a line counts as a word boundary.
+        let mut input = Input::default();
+        type_str(&mut input, "foo\n:dog:");
+        assert_eq!(input.data, "foo\n🐶");
+        assert_eq!(input.cursor, Cursor::new("foo\n🐶".len(), 1, 2));
+    }
+
+    #[test]
+    fn test_convert_emoji_consecutive_needs_whitespace() {
+        // Whitespace-separated shortcodes both convert.
+        let mut input = Input::default();
+        type_str(&mut input, ":dog: :cat:");
+        assert_eq!(input.data, "🐶 🐱");
+        assert_eq!(input.cursor, Cursor::new("🐶 🐱".len(), 0, 5));
+
+        // Directly glued to the preceding emoji, the second one is not at a
+        // word boundary and stays as text.
+        let mut input = Input::default();
+        type_str(&mut input, ":dog::cat:");
+        assert_eq!(input.data, "🐶:cat:");
+    }
+
+    #[test]
+    fn test_convert_emoji_in_middle_of_text() {
+        // Cursor is moved back before the closing colon is typed, so text
+        // trails the replacement range.
+        let mut input = Input::default();
+        type_str(&mut input, "x y");
+        input.on_left();
+        type_str(&mut input, ":dog:");
+        assert_eq!(input.data, "x 🐶y");
+        // cursor sits right after the emoji, before the trailing `y`
+        assert_eq!(input.cursor, Cursor::new("x 🐶".len(), 0, 4));
     }
 }
