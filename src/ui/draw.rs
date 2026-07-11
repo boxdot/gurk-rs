@@ -360,6 +360,11 @@ fn build_candidates(
     };
     let channel_id = window.channel_id();
 
+    let unread_messages = app
+        .channel(channel_id)
+        .map(|c| c.unread_messages as usize)
+        .unwrap_or(0);
+
     // collect messages >= height and far enough to include `until`
     let mut candidates: Vec<&Message> = Vec::new();
     let mut seen_until = until.is_none();
@@ -407,8 +412,6 @@ fn build_candidates(
             width,
         );
 
-        // let unread_messages = channel.unread_messages as usize;
-        let unread_messages = 0;
         let new_messages_division =
             (unread_messages > 0 && unread_messages == idx + 1).then(|| {
                 "-".repeat(prefix_width)
