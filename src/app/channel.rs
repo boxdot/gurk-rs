@@ -328,10 +328,7 @@ impl App {
             return;
         }
 
-        if !from_current_user
-            && let Some(channel) = self.channel(channel_id)
-            && channel.id != channel_id
-        {
+        if !from_current_user && let Some(channel) = self.channel(channel_id) {
             let mut channel = channel.clone();
             channel.unread_messages += 1;
             self.storage.store_channel(channel);
