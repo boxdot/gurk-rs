@@ -657,12 +657,12 @@ impl App {
     /// Expire typing indicators older than TYPING_TIMEOUT_SECS
     pub fn expire_typing_indicators(&mut self) {
         for channel_id in &self.channels.items {
-            if let Some(channel) = self.storage.channel(*channel_id) {
-                if channel.is_writing() {
-                    let mut channel = channel.into_owned();
-                    if channel.expire_typing() {
-                        self.storage.store_channel(channel);
-                    }
+            if let Some(channel) = self.storage.channel(*channel_id)
+                && channel.is_writing()
+            {
+                let mut channel = channel.into_owned();
+                if channel.expire_typing() {
+                    self.storage.store_channel(channel);
                 }
             }
         }
