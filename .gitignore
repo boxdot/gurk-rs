@@ -5,3 +5,14 @@ gurk.log
 Session.vim
 messages.raw.json
 test.sqlite
+
+# AI assistant files
+CLAUDE.md
+AGENTS.md
+.claude/
+.ai/
+.beads/
+.cursor/
+.aider*
+.copilot/
+audit.md
