@@ -123,13 +123,15 @@ impl App {
     }
 
     pub fn reset_unread_messages(&mut self) {
-        if let Some(channel) = self.selected_channel()
-            && channel.unread_messages > 0
-        {
-            let mut channel = channel.clone();
-            channel.unread_messages = 0;
-            self.store_channel(channel);
-        }
+        self.channels
+            .modify_selected_channel(&mut *self.storage, |channel| {
+                if channel.unread_messages > 0 {
+                    channel.unread_messages = 0;
+                    true
+                } else {
+                    false
+                }
+            });
     }
 
     pub(super) async fn ensure_group_channel_exists(
@@ -144,8 +146,6 @@ impl App {
                 None => true,
             };
             if is_stale {
-                let mut channel = channel.clone();
-
                 let ResolvedGroup {
                     name,
                     group_data,
@@ -155,9 +155,12 @@ impl App {
                 self.ensure_users_are_known(group_data.members.iter().copied().zip(profile_keys))
                     .await;
 
-                channel.name = name;
-                channel.group_data = Some(group_data);
-                self.store_channel(channel);
+                self.channels
+                    .modify_channel_by_id(&mut *self.storage, channel_id, |channel| {
+                        channel.name = name;
+                        channel.group_data = Some(group_data);
+                        true
+                    });
             }
             Ok(channel_id)
         } else {
@@ -261,13 +264,19 @@ impl App {
         name: &str,
     ) -> ChannelId {
         let channel_id = ChannelId::User(uuid);
-        if let Some(channel) = self.channel(channel_id) {
-            if channel.name != name {
-                let mut channel = channel.clone();
-                channel.name = name.to_string();
-                self.store_channel(channel);
-            }
-        } else {
+        let exists = self
+            .channels
+            .modify_channel_by_id(&mut *self.storage, channel_id, |channel| {
+                if channel.name != name {
+                    channel.name = name.to_string();
+                    true
+                } else {
+                    false
+                }
+            })
+            .is_some();
+
+        if !exists {
             let channel = Channel {
                 id: uuid.into(),
                 name: name.to_string(),
@@ -279,6 +288,7 @@ impl App {
             };
             self.store_channel(channel);
         }
+
         channel_id
     }
 
@@ -328,10 +338,12 @@ impl App {
             return;
         }
 
-        if !from_current_user && let Some(channel) = self.channel(channel_id) {
-            let mut channel = channel.clone();
-            channel.unread_messages += 1;
-            self.store_channel(channel);
+        if !from_current_user {
+            self.channels
+                .modify_channel_by_id(&mut *self.storage, channel_id, |channel| {
+                    channel.unread_messages += 1;
+                    true
+                });
         } else {
             self.reset_unread_messages();
         }
@@ -387,11 +399,11 @@ impl App {
     }
 
     pub fn toggle_mute_channel(&mut self) {
-        if let Some(channel) = self.channels.selected_item() {
-            let mut channel = channel.clone();
-            channel.muted = !channel.muted;
-            self.storage.store_channel(channel);
-        }
+        self.channels
+            .modify_selected_channel(&mut *self.storage, |channel| {
+                channel.muted = !channel.muted;
+                true
+            });
     }
 
     /// Activate expire timers for messages in the currently viewed channel.

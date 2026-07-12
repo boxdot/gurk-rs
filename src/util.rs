@@ -6,6 +6,11 @@ use ratatui::widgets::ListState;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
+use crate::{
+    data::{Channel, ChannelId},
+    storage::Storage,
+};
+
 const MESSAGE_SCROLL_BACK: bool = false;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,6 +93,57 @@ impl<T> StatefulList<T> {
     pub(crate) fn selected_item(&self) -> Option<&T> {
         let idx = self.state.selected()?;
         Some(&self.items[idx])
+    }
+}
+
+impl StatefulList<Channel> {
+    /// Modifies the channel at the given index and writes it to the storage.
+    ///
+    /// If the channel is not found, does nothing. Returns `Some(true)` if the channel was modified.
+    /// Returns `None` if the channel does not exist.
+    pub(crate) fn modify_channel(
+        &mut self,
+        storage: &mut dyn Storage,
+        idx: usize,
+        f: impl FnOnce(&mut Channel) -> bool,
+    ) -> Option<bool> {
+        let channel = self.items.get_mut(idx)?;
+        if f(channel) {
+            storage.store_channel(channel);
+            Some(true)
+        } else {
+            Some(false)
+        }
+    }
+
+    /// Modifies the selected channel and writes it to the storage.
+    ///
+    /// If the channel is not found, does nothing. Returns `Some(true)` if the channel was modified.
+    /// Returns `None` if no channel is selected or the channel does not exist.
+    pub(crate) fn modify_selected_channel(
+        &mut self,
+        storage: &mut dyn Storage,
+        f: impl FnOnce(&mut Channel) -> bool,
+    ) -> Option<bool> {
+        let idx = self.state.selected()?;
+        self.modify_channel(storage, idx, f)
+    }
+
+    /// Modifies the channel with the given id and writes it to the storage.
+    ///
+    /// If the channel is not found, does nothing. Returns `Some(true)` if the channel was modified.
+    /// Returns `None` if the channel does not exist.
+    pub(crate) fn modify_channel_by_id(
+        &mut self,
+        storage: &mut dyn Storage,
+        channel_id: ChannelId,
+        f: impl FnOnce(&mut Channel) -> bool,
+    ) -> Option<bool> {
+        let idx = self
+            .items
+            .iter()
+            .position(|channel| channel.id == channel_id)?;
+        self.modify_channel(storage, idx, f)
     }
 }
 
