@@ -23,7 +23,7 @@ use gurk::{app::App, config::Config};
 use gurk::{backoff::Backoff, passphrase::Passphrase};
 use gurk::{
     onboarding,
-    storage::{MemCache, SqliteStorage, Storage, sync_from_signal},
+    storage::{SqliteStorage, Storage, sync_from_signal},
 };
 use gurk::{signal, ui};
 use presage::libsignal_service::content::Content;
@@ -167,7 +167,7 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
         let sqlite_storage = SqliteStorage::maybe_encrypt_and_open(&url, &passphrase, false)
             .await
             .with_context(|| format!("failed to open sqlite data storage at: {url}"))?;
-        Box::new(MemCache::new(sqlite_storage))
+        Box::new(sqlite_storage)
     };
 
     sync_from_signal(&*signal_manager, &mut *storage).await;
@@ -329,9 +329,9 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
                             .map(|(_, row)| row as usize)
                             .filter(|&idx| idx < app.channels.items.len())
                     {
-                        let old = app.channels.state.selected().map(|i| app.channels.items[i]);
+                        let old = app.selected_channel_id();
                         app.channels.state.select(Some(channel_idx));
-                        let new = Some(app.channels.items[channel_idx]);
+                        let new = app.selected_channel_id();
                         app.swap_channel_draft(old, new);
                         app.on_channel_changed();
                         app.reset_unread_messages();
@@ -399,6 +399,8 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
                 break;
             }
         }
+
+        app.ensure_message_window_filled();
 
         if app.open_editor_requested {
             app.open_editor_requested = false;

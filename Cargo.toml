@@ -122,6 +122,7 @@ quickcheck_macros = "1.0.0"
 [[bench]]
 name = "app"
 harness = false
+required-features = ["dev"]
 
 # [patch."https://github.com/whisperfish/presage.git"]
 # presage = { path = "../presage/presage" }

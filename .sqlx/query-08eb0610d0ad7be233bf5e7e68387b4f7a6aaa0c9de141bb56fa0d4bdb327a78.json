@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                    DELETE FROM messages\n                    WHERE expires_at IS NOT NULL AND expires_at <= ?1\n                    RETURNING\n                        channel_id AS \"channel_id: _\",\n                        arrived_at AS \"arrived_at: _\"\n                ",
+  "describe": {
+    "columns": [
+      {
+        "name": "channel_id: _",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "arrived_at: _",
+        "ordinal": 1,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "08eb0610d0ad7be233bf5e7e68387b4f7a6aaa0c9de141bb56fa0d4bdb327a78"
+}

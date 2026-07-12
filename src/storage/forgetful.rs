@@ -10,8 +10,8 @@ use super::{MessageId, Metadata, Storage};
 pub struct ForgetfulStorage;
 
 impl Storage for ForgetfulStorage {
-    fn channels(&self) -> Box<dyn Iterator<Item = Cow<'_, Channel>> + '_> {
-        Box::new(std::iter::empty())
+    fn channels(&self) -> Vec<Channel> {
+        Vec::new()
     }
 
     fn channel(&self, _channel_id: ChannelId) -> Option<Cow<'_, Channel>> {
@@ -22,11 +22,27 @@ impl Storage for ForgetfulStorage {
         Cow::Owned(channel)
     }
 
+    fn messages_tail(&self, _channel_id: ChannelId, _limit: usize) -> Vec<Message> {
+        Vec::new()
+    }
+
+    fn messages_before(&self, _channel_id: ChannelId, _anchor: u64, _limit: usize) -> Vec<Message> {
+        Vec::new()
+    }
+
+    fn messages_after(&self, _channel_id: ChannelId, _anchor: u64, _limit: usize) -> Vec<Message> {
+        Vec::new()
+    }
+
     fn messages(
         &self,
         _channel_id: ChannelId,
     ) -> Box<dyn DoubleEndedIterator<Item = Cow<'_, Message>> + '_> {
         Box::new(std::iter::empty())
+    }
+
+    fn message(&self, _message_id: MessageId) -> Option<Cow<'_, Message>> {
+        None
     }
 
     fn edits(
@@ -36,7 +52,15 @@ impl Storage for ForgetfulStorage {
         Box::new(std::iter::empty())
     }
 
-    fn message(&self, _message_id: MessageId) -> Option<Cow<'_, Message>> {
+    fn messages_count_after(&self, _channel_id: ChannelId, _arrived_at: u64) -> usize {
+        0
+    }
+
+    fn remove_expired(&self, _now_ms: u64) -> Vec<MessageId> {
+        Vec::new()
+    }
+
+    fn next_expiring_at(&self) -> Option<u64> {
         None
     }
 

@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                    SELECT MIN(expires_at) AS \"next_expiring_at: u64\"\n                    FROM messages\n                    WHERE expires_at IS NOT NULL\n                ",
+  "describe": {
+    "columns": [
+      {
+        "name": "next_expiring_at: u64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "0b5bb9b382cfd279d9525a407dafbcd52d2bb8682fc494b8ca66341731f2f756"
+}

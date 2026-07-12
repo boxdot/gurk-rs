@@ -25,17 +25,17 @@ impl SelectChannel {
         self.input.take();
         self.state = Default::default();
 
-        let items = storage.channels().map(|channel| ItemData {
+        let items = storage.channels().into_iter().map(|channel| ItemData {
             channel_id: channel.id,
             name: channel.name.clone(),
         });
         self.items.clear();
         self.items.extend(items);
 
-        self.items.sort_unstable_by_key(|item| {
+        // sort_by_cached_key: the key hits the storage, evaluate it once per channel
+        self.items.sort_by_cached_key(|item| {
             let last_message_arrived_at = storage
-                .messages(item.channel_id)
-                .last()
+                .last_message(item.channel_id)
                 .map(|message| message.arrived_at);
             (Reverse(last_message_arrived_at), item.name.clone())
         });

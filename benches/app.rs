@@ -1,14 +1,16 @@
 use std::path::Path;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use gurk::app::App;
-use gurk::config::{Config, NotificationConfig, User};
 use gurk::signal::test::SignalManagerMock;
-use gurk::storage::{ForgetfulStorage, MemCache};
+use gurk::{app::App, storage::Storage};
+use gurk::{
+    config::{Config, NotificationConfig, User},
+    storage::SqliteStorage,
+};
 use presage::libsignal_service::content::Content;
 use tracing::info;
 
-fn test_app() -> App {
+fn test_app(storage: impl Storage + 'static) -> App {
     let (app, _) = App::try_new(
         Config {
             notifications: NotificationConfig {
@@ -20,7 +22,7 @@ fn test_app() -> App {
             })
         },
         Box::new(SignalManagerMock::new()),
-        Box::new(MemCache::new(ForgetfulStorage)),
+        Box::new(storage),
     )
     .unwrap();
     app
@@ -28,6 +30,7 @@ fn test_app() -> App {
 
 pub fn bench_on_message(c: &mut Criterion) {
     let _ = tracing_subscriber::fmt::try_init();
+    let rt = tokio::runtime::Runtime::new().unwrap();
     let path =
         std::env::var("RAW_MESSAGES_FILE").unwrap_or_else(|_| "messages.raw.json".to_string());
     let data = read_input_data(&path).expect("failed to read data");
@@ -35,7 +38,13 @@ pub fn bench_on_message(c: &mut Criterion) {
     c.bench_function("on_message", move |b| {
         b.to_async(tokio::runtime::Runtime::new().unwrap())
             .iter_batched(
-                || (test_app(), data.clone()),
+                || {
+                    let storage = rt.block_on(async {
+                        let url = "sqlite::memory:".parse().unwrap();
+                        SqliteStorage::open_unencrypted(&url).await.unwrap()
+                    });
+                    (test_app(storage), data.clone())
+                },
                 |(mut app, data)| async move {
                     for content in data {
                         app.on_message(Box::new(content)).await.unwrap();

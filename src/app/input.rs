@@ -75,8 +75,8 @@ impl App {
                 self.is_multiline_input = !self.is_multiline_input;
             }
             Command::React(reaction) => {
-                if let Some(idx) = self.channels.state.selected() {
-                    self.add_reaction(idx, reaction).await;
+                if let Some(channel_id) = self.selected_channel_id() {
+                    self.add_reaction(channel_id, reaction).await;
                 }
             }
             Command::OpenUrl => {
@@ -136,8 +136,8 @@ impl App {
                         if self.is_multiline_input {
                             self.get_input().new_line();
                         } else if !self.input.data.is_empty() {
-                            if let Some(idx) = self.channels.state.selected() {
-                                self.send_input(idx);
+                            if let Some(channel_id) = self.selected_channel_id() {
+                                self.send_input(channel_id);
                             }
                         } else {
                             // input is empty
@@ -147,17 +147,17 @@ impl App {
                         && let Some(channel_id) = self.select_channel.selected_channel_id().copied()
                     {
                         self.select_channel.is_shown = false;
-                        let old = self.channels.selected_item().copied();
-                        let (idx, _) = self
+                        let old = self.selected_channel_id();
+                        let idx = self
                             .channels
                             .items
                             .iter()
-                            .enumerate()
-                            .find(|(_, id)| **id == channel_id)
+                            .position(|channel| channel.id == channel_id)
                             .context("channel disappeared during channel select popup")?;
                         self.channels.state.select(Some(idx));
-                        let new = self.channels.selected_item().copied();
+                        let new = self.selected_channel_id();
                         self.swap_channel_draft(old, new);
+                        self.on_channel_changed();
                     }
                 }
                 KeyCode::Esc if !self.reset_editing() => {
@@ -200,22 +200,18 @@ impl App {
     }
 
     fn selected_message_id(&self) -> Option<MessageId> {
-        let channel_id = self.channels.selected_item()?;
-        let messages = self.messages.get(channel_id)?;
-        let message_idx = messages.state.selected()?;
-        let arrived_at = messages.items[messages
-            .items
-            .len()
-            .checked_sub(message_idx)?
-            .checked_sub(1)?];
-        Some(MessageId::new(*channel_id, arrived_at))
+        let channel_id = self.selected_channel_id()?;
+        let pos = self.positions.get(&channel_id)?;
+        self.window
+            .as_ref()?
+            .get(pos.selected?)
+            .map(|m| MessageId::new(channel_id, m.arrived_at))
     }
 
     pub(super) fn selected_message(&self) -> Option<Cow<'_, Message>> {
-        let message_id = self.selected_message_id()?;
-        let message = self.storage.message(message_id);
-        info!("selected message: {message:?}");
-        message
+        let channel_id = self.selected_channel_id()?;
+        let pos = self.positions.get(&channel_id)?;
+        self.window.as_ref()?.get(pos.selected?).map(Cow::Borrowed)
     }
 
     /// Returns Some(_) reaction if input is a reaction.
@@ -234,11 +230,11 @@ impl App {
 
     pub async fn add_reaction(
         &mut self,
-        channel_idx: usize,
+        channel_id: ChannelId,
         reaction: Option<String>,
     ) -> Option<()> {
         let reaction = reaction.or_else(|| self.take_reaction()?);
-        let channel = self.storage.channel(self.channels.items[channel_idx])?;
+        let channel = self.channel(channel_id)?;
         let message = self.selected_message()?;
         let remove = reaction.is_none();
         let emoji = reaction.or_else(|| {
@@ -254,7 +250,7 @@ impl App {
         })?;
 
         self.signal_manager
-            .send_reaction(&channel, &message, emoji.clone(), remove);
+            .send_reaction(channel, &message, emoji.clone(), remove);
 
         let channel_id = channel.id;
         let arrived_at = message.arrived_at;
@@ -268,7 +264,7 @@ impl App {
         .await;
 
         self.reset_unread_messages();
-        self.bubble_up_channel(channel_idx);
+        self.bubble_up_channel(channel_id);
         self.reset_message_selection();
 
         Some(())
@@ -278,20 +274,16 @@ impl App {
         self.get_input().take()
     }
 
-    pub(super) fn send_input(&mut self, channel_idx: usize) {
+    pub(super) fn send_input(&mut self, channel_id: ChannelId) {
         let input = self.take_input();
         let (input, attachments) = Self::extract_attachments(&input, Local::now(), || {
             self.clipboard.as_mut().map(|c| c.get_image())
         });
-        let channel_id = self.channels.items[channel_idx];
-        let channel = self
-            .storage
-            .channel(channel_id)
-            .expect("non-existent channel");
         let editing = self.editing.take();
+        let channel = self.channel(channel_id).expect("non-existent channel");
         let quote = editing.is_none().then(|| self.selected_message()).flatten();
         let (sent_message, response) = self.signal_manager.send_text(
-            &channel,
+            channel,
             input,
             quote.as_deref(),
             editing.map(|id| id.arrived_at),
@@ -310,20 +302,14 @@ impl App {
         });
 
         if let Some(id) = editing {
-            self.storage
-                .store_edited_message(channel_id, id.arrived_at, sent_message);
+            self.store_edited_message(channel_id, id.arrived_at, sent_message);
         } else {
-            let sent_message = self.storage.store_message(channel_id, sent_message);
-            self.messages
-                .get_mut(&channel_id)
-                .expect("non-existent channel")
-                .items
-                .push(sent_message.arrived_at);
+            self.store_message(channel_id, sent_message);
         };
 
         self.reset_message_selection();
         self.reset_unread_messages();
-        self.bubble_up_channel(channel_idx);
+        self.bubble_up_channel(channel_id);
     }
 
     pub fn copy_selection(&mut self) {

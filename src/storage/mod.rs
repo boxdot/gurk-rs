@@ -1,6 +1,5 @@
 mod copy;
 mod forgetful;
-mod memcache;
 mod sql;
 
 use std::borrow::Cow;
@@ -12,7 +11,6 @@ use crate::data::{Channel, ChannelId, Message};
 
 pub use copy::sync_from_signal;
 pub use forgetful::ForgetfulStorage;
-pub use memcache::MemCache;
 pub use sql::SqliteStorage;
 
 /// Storage of channels, messages, names and metadata.
@@ -25,12 +23,27 @@ pub use sql::SqliteStorage;
 /// borrowed objects from the storage. This depends whether the objects are stored as is, or are
 /// converted and/or serialized.
 pub trait Storage {
-    /// Channels in no particular order
-    fn channels(&self) -> Box<dyn Iterator<Item = Cow<'_, Channel>> + '_>;
+    /// Returns the list of channels
+    ///
+    /// The order is from most recent to least recent, that is, descending by arrived_at.
+    fn channels(&self) -> Vec<Channel>;
+
     /// Gets the channel by id
     fn channel(&self, channel_id: ChannelId) -> Option<Cow<'_, Channel>>;
+
     /// Stores the given `channel` and returns it back
     fn store_channel(&mut self, channel: Channel) -> Cow<'_, Channel>;
+
+    /// The newest `limit` messages, ascending by arrived_at.
+    fn messages_tail(&self, channel_id: ChannelId, limit: usize) -> Vec<Message>;
+
+    /// Up to `limit` messages strictly older than `anchor`, ascending by arrived_at.
+    fn messages_before(&self, channel_id: ChannelId, anchor: u64, limit: usize) -> Vec<Message>;
+
+    /// Up to `limit` messages strictly newer than `anchor`, ascending by arrived_at.
+    fn messages_after(&self, channel_id: ChannelId, anchor: u64, limit: usize) -> Vec<Message>;
+
+    // Messages window functions
 
     /// Messages sorted by arrived_at in ascending order
     ///
@@ -46,6 +59,16 @@ pub trait Storage {
         &self,
         message_id: MessageId,
     ) -> Box<dyn DoubleEndedIterator<Item = Cow<'_, Message>> + '_>;
+
+    fn last_message(&self, channel_id: ChannelId) -> Option<Message> {
+        self.messages_tail(channel_id, 1).pop()
+    }
+
+    fn messages_count_after(&self, channel_id: ChannelId, arrived_at: u64) -> usize;
+
+    fn remove_expired(&self, now_ms: u64) -> Vec<MessageId>;
+
+    fn next_expiring_at(&self) -> Option<u64>;
 
     /// Stores the message for the given `channel_id` and returns it back.
     ///
@@ -134,10 +157,10 @@ pub trait Storage {
     /// This methods must guarantee that the data is persisted in any case.
     fn save(&mut self);
 
-    /// Returns `true` if this storage does not contains any channels and no names
-    fn is_empty(&self) -> bool {
-        self.channels().next().is_none() && self.names().next().is_none()
-    }
+    // /// Returns `true` if this storage does not contains any channels and no names
+    // fn is_empty(&self) -> bool {
+    //     self.channels().next().is_none() && self.names().next().is_none()
+    // }
 }
 
 /// A message is identified by its channel and time of arrived in milliseconds
