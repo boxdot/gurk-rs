@@ -385,9 +385,9 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
                 break;
             }
             Some(Event::ContactSynced(at)) => {
-                let mut metadata = app.storage.metadata().into_owned();
+                let mut metadata = app.storage.metadata();
                 metadata.contacts_sync_request_at.replace(at);
-                app.storage.store_metadata(metadata);
+                app.storage.store_metadata(&metadata);
                 info!(%at, "synced contacts");
             }
             Some(Event::AppEvent(event)) => {

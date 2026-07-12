@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use uuid::Uuid;
 
 use crate::data::{Channel, ChannelId, Message};
@@ -14,13 +12,11 @@ impl Storage for ForgetfulStorage {
         Vec::new()
     }
 
-    fn channel(&self, _channel_id: ChannelId) -> Option<Cow<'_, Channel>> {
+    fn channel(&self, _channel_id: ChannelId) -> Option<Channel> {
         None
     }
 
-    fn store_channel(&mut self, channel: Channel) -> Cow<'_, Channel> {
-        Cow::Owned(channel)
-    }
+    fn store_channel(&mut self, _channel: &Channel) {}
 
     fn messages_tail(&self, _channel_id: ChannelId, _limit: usize) -> Vec<Message> {
         Vec::new()
@@ -37,18 +33,15 @@ impl Storage for ForgetfulStorage {
     fn messages(
         &self,
         _channel_id: ChannelId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<'_, Message>> + '_> {
+    ) -> Box<dyn DoubleEndedIterator<Item = Message> + '_> {
         Box::new(std::iter::empty())
     }
 
-    fn message(&self, _message_id: MessageId) -> Option<Cow<'_, Message>> {
+    fn message(&self, _message_id: MessageId) -> Option<Message> {
         None
     }
 
-    fn edits(
-        &self,
-        _message_id: MessageId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<'_, Message>> + '_> {
+    fn edits(&self, _message_id: MessageId) -> Box<dyn DoubleEndedIterator<Item = Message> + '_> {
         Box::new(std::iter::empty())
     }
 
@@ -64,31 +57,25 @@ impl Storage for ForgetfulStorage {
         None
     }
 
-    fn store_message(&mut self, _channel_id: ChannelId, message: Message) -> Cow<'_, Message> {
-        Cow::Owned(message)
-    }
+    fn store_message(&mut self, _channel_id: ChannelId, _message: &Message) {}
 
     fn remove_message(&mut self, _message_id: MessageId) {}
 
-    fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<'_, str>)> + '_> {
+    fn names(&self) -> Box<dyn Iterator<Item = (Uuid, String)> + '_> {
         Box::new(std::iter::empty())
     }
 
-    fn name(&self, _id: Uuid) -> Option<Cow<'_, str>> {
+    fn name(&self, _id: Uuid) -> Option<String> {
         None
     }
 
-    fn store_name(&mut self, _id: Uuid, name: String) -> Cow<'_, str> {
-        Cow::Owned(name)
+    fn store_name(&mut self, _id: Uuid, _name: &str) {}
+
+    fn metadata(&self) -> Metadata {
+        Default::default()
     }
 
-    fn metadata(&self) -> Cow<'_, Metadata> {
-        Cow::Owned(Default::default())
-    }
-
-    fn store_metadata(&mut self, metadata: Metadata) -> Cow<'_, Metadata> {
-        Cow::Owned(metadata)
-    }
+    fn store_metadata(&mut self, _metadata: &Metadata) {}
 
     fn save(&mut self) {}
 }

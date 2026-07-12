@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use sqlx::{
     SqlitePool,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous},
@@ -262,7 +260,7 @@ impl Storage for SqliteStorage {
             .collect()
     }
 
-    fn channel(&self, channel_id: ChannelId) -> Option<Cow<'_, Channel>> {
+    fn channel(&self, channel_id: ChannelId) -> Option<Channel> {
         let channel_id = &channel_id;
         let channel = block_async_in_place(
             query_as!(
@@ -284,10 +282,10 @@ impl Storage for SqliteStorage {
             .fetch_optional(&self.pool),
         )
         .ok_logged()?;
-        channel?.convert().ok_logged().map(Cow::Owned)
+        channel?.convert().ok_logged()
     }
 
-    fn store_channel(&mut self, channel: Channel) -> Cow<'_, Channel> {
+    fn store_channel(&mut self, channel: &Channel) {
         let id = &channel.id;
         let name = &channel.name;
         let (group_master_key, group_revision, group_members) = channel
@@ -335,7 +333,6 @@ impl Storage for SqliteStorage {
             .execute(&self.pool),
         )
         .ok_logged();
-        Cow::Owned(channel)
     }
 
     fn messages_tail(&self, channel_id: ChannelId, limit: usize) -> Vec<Message> {
@@ -485,10 +482,7 @@ impl Storage for SqliteStorage {
             .collect()
     }
 
-    fn messages(
-        &self,
-        channel_id: ChannelId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<'_, Message>> + '_> {
+    fn messages(&self, channel_id: ChannelId) -> Box<dyn DoubleEndedIterator<Item = Message> + '_> {
         let channel_id = &channel_id;
         let messages = block_async_in_place(
             query_as!(
@@ -527,11 +521,11 @@ impl Storage for SqliteStorage {
                 .ok_logged()
                 .into_iter()
                 .flatten()
-                .filter_map(|message| message.convert().ok_logged().map(Cow::Owned)),
+                .filter_map(|message| message.convert().ok_logged()),
         )
     }
 
-    fn message(&self, message_id: MessageId) -> Option<Cow<'_, Message>> {
+    fn message(&self, message_id: MessageId) -> Option<Message> {
         let channel_id = &message_id.channel_id;
         let arrived_at: i64 = message_id
             .arrived_at
@@ -573,13 +567,10 @@ impl Storage for SqliteStorage {
             .fetch_optional(&self.pool),
         );
         let message = message.ok_logged()??.convert().ok_logged()?;
-        Some(Cow::Owned(message))
+        Some(message)
     }
 
-    fn edits(
-        &self,
-        message_id: MessageId,
-    ) -> Box<dyn DoubleEndedIterator<Item = Cow<'_, Message>> + '_> {
+    fn edits(&self, message_id: MessageId) -> Box<dyn DoubleEndedIterator<Item = Message> + '_> {
         let channel_id = &message_id.channel_id;
         let arrived_at: Option<i64> = message_id
             .arrived_at
@@ -627,7 +618,7 @@ impl Storage for SqliteStorage {
                 .ok_logged()
                 .into_iter()
                 .flatten()
-                .filter_map(|message| message.convert().ok_logged().map(Cow::Owned)),
+                .filter_map(|message| message.convert().ok_logged()),
         )
     }
 
@@ -684,7 +675,7 @@ impl Storage for SqliteStorage {
         .ok_logged()??
     }
 
-    fn store_message(&mut self, channel_id: ChannelId, message: Message) -> Cow<'_, Message> {
+    fn store_message(&mut self, channel_id: ChannelId, message: &Message) {
         let channel_id = &channel_id;
         let arrived_at: i64 = message
             .arrived_at
@@ -768,7 +759,6 @@ impl Storage for SqliteStorage {
         if let Err(error) = inserted {
             error!(%error, ?channel_id, arrived_at, "failed to store message");
         }
-        Cow::Owned(message)
     }
 
     fn remove_message(&mut self, message_id: MessageId) {
@@ -792,7 +782,7 @@ impl Storage for SqliteStorage {
         result.ok_logged();
     }
 
-    fn names(&self) -> Box<dyn Iterator<Item = (Uuid, Cow<'_, str>)> + '_> {
+    fn names(&self) -> Box<dyn Iterator<Item = (Uuid, String)> + '_> {
         let names = block_async_in_place(
             query_as!(
                 SqlName,
@@ -804,19 +794,19 @@ impl Storage for SqliteStorage {
             .ok_logged()
             .into_iter()
             .flatten()
-            .map(|SqlName { id, name }| (id, Cow::Owned(name)));
+            .map(|SqlName { id, name }| (id, name));
         Box::new(names)
     }
 
-    fn name(&self, id: Uuid) -> Option<Cow<'_, str>> {
+    fn name(&self, id: Uuid) -> Option<String> {
         let name = block_async_in_place(
             query_scalar!(r#"SELECT name AS "name: _" FROM names WHERE id = ?"#, id)
                 .fetch_optional(&self.pool),
         );
-        name.ok_logged()?.map(Cow::Owned)
+        name.ok_logged()?
     }
 
-    fn store_name(&mut self, id: Uuid, name: String) -> Cow<'_, str> {
+    fn store_name(&mut self, id: Uuid, name: &str) {
         block_async_in_place(
             query!(
                 "
@@ -832,10 +822,9 @@ impl Storage for SqliteStorage {
             .execute(&self.pool),
         )
         .ok_logged();
-        Cow::Owned(name)
     }
 
-    fn metadata(&self) -> Cow<'_, Metadata> {
+    fn metadata(&self) -> Metadata {
         let metadata = block_async_in_place(
             query_as!(
                 Metadata,
@@ -848,10 +837,10 @@ impl Storage for SqliteStorage {
             )
             .fetch_optional(&self.pool),
         );
-        Cow::Owned(metadata.ok_logged().flatten().unwrap_or_default())
+        metadata.ok_logged().flatten().unwrap_or_default()
     }
 
-    fn store_metadata(&mut self, metadata: Metadata) -> Cow<'_, Metadata> {
+    fn store_metadata(&mut self, metadata: &Metadata) {
         block_async_in_place(
             query!(
                 "REPLACE INTO metadata(id, contacts_sync_request_at, fully_migrated)
@@ -863,7 +852,6 @@ impl Storage for SqliteStorage {
             .execute(&self.pool),
         )
         .ok_logged();
-        Cow::Owned(metadata)
     }
 
     fn save(&mut self) {}
@@ -896,7 +884,7 @@ mod tests {
             .unwrap();
 
         let user_channel = ChannelId::User(uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd"));
-        storage.store_channel(Channel {
+        storage.store_channel(&Channel {
             id: user_channel,
             name: "direct-channel".to_owned(),
             group_data: None,
@@ -907,7 +895,7 @@ mod tests {
         });
         storage.store_message(
             user_channel,
-            Message {
+            &Message {
                 from_id: uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a"),
                 message: Some("hello".to_owned()),
                 arrived_at: 1664832050000,
@@ -929,7 +917,7 @@ mod tests {
             52, 49, 52, 57, 98, 57, 54, 56, 54, 56, 48, 55, 102, 100, 98, 52, 97, 56, 99, 57, 53,
             100, 57, 98, 53, 52, 49, 51, 98, 98, 99, 100,
         ]);
-        storage.store_channel(Channel {
+        storage.store_channel(&Channel {
             id: group_channel,
             name: "group-channel".to_owned(),
             group_data: None,
@@ -940,7 +928,7 @@ mod tests {
         });
         storage.store_message(
             group_channel,
-            Message {
+            &Message {
                 from_id: uuid!("ac9b8aa1-691a-47e1-a566-d3e942945d07"),
                 message: Some("world".to_owned()),
                 arrived_at: 1664832050001,
@@ -958,14 +946,8 @@ mod tests {
             },
         );
 
-        storage.store_name(
-            uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd"),
-            "ellie".to_owned(),
-        );
-        storage.store_name(
-            uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a"),
-            "joel".to_owned(),
-        );
+        storage.store_name(uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd"), "ellie");
+        storage.store_name(uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a"), "joel");
 
         storage
     }
@@ -978,7 +960,7 @@ mod tests {
             .unwrap();
 
         let channel_id = ChannelId::User(uuid!("966960e0-a8cd-43f1-ac7a-2c986dd470cd"));
-        storage.store_channel(Channel {
+        storage.store_channel(&Channel {
             id: channel_id,
             name: "direct-channel".to_owned(),
             group_data: None,
@@ -992,7 +974,7 @@ mod tests {
         for arrived_at in (10..=90).step_by(10) {
             storage.store_message(
                 channel_id,
-                Message::text(from_id, arrived_at, format!("message {arrived_at}")),
+                &Message::text(from_id, arrived_at, format!("message {arrived_at}")),
             );
         }
 
@@ -1120,13 +1102,10 @@ mod tests {
         let (mut storage, channel_id) = windowed_fixtures().await;
         let from_id = uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a");
 
-        let quoted = storage
-            .message(MessageId::new(channel_id, 20))
-            .unwrap()
-            .into_owned();
+        let quoted = storage.message(MessageId::new(channel_id, 20)).unwrap();
         let mut reply = Message::text(from_id, 100, "reply".to_owned());
         reply.quote = Some(Box::new(quoted));
-        storage.store_message(channel_id, reply);
+        storage.store_message(channel_id, &reply);
 
         let messages = storage.messages_tail(channel_id, 1);
         assert_eq!(arrived_ats(&messages), [100]);
@@ -1168,11 +1147,11 @@ mod tests {
             (empty, "empty"),
             (middle, "middle"),
         ] {
-            storage.store_channel(test_channel(id, name));
+            storage.store_channel(&test_channel(id, name));
         }
-        storage.store_message(old, Message::text(from_id, 100, "old".to_owned()));
-        storage.store_message(middle, Message::text(from_id, 200, "middle".to_owned()));
-        storage.store_message(recent, Message::text(from_id, 300, "recent".to_owned()));
+        storage.store_message(old, &Message::text(from_id, 100, "old".to_owned()));
+        storage.store_message(middle, &Message::text(from_id, 200, "middle".to_owned()));
+        storage.store_message(recent, &Message::text(from_id, 300, "recent".to_owned()));
 
         // most recent first; the channel without messages sorts last
         let order: Vec<ChannelId> = storage.channels().into_iter().map(|c| c.id).collect();
@@ -1201,11 +1180,11 @@ mod tests {
         let from_id = uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a");
         let channel_id = ChannelId::User(uuid!("11111111-1111-1111-1111-111111111111"));
 
-        storage.store_channel(test_channel(channel_id, "channel"));
+        storage.store_channel(&test_channel(channel_id, "channel"));
         for arrived_at in [100, 200, 300] {
             storage.store_message(
                 channel_id,
-                Message::text(from_id, arrived_at, format!("message {arrived_at}")),
+                &Message::text(from_id, arrived_at, format!("message {arrived_at}")),
             );
         }
         assert_eq!(storage.messages_tail(channel_id, 10).len(), 3);
@@ -1213,7 +1192,7 @@ mod tests {
         // Re-store the same channel
         let mut channel = test_channel(channel_id, "channel");
         channel.muted = true;
-        storage.store_channel(channel);
+        storage.store_channel(&channel);
 
         let messages = storage.messages_tail(channel_id, 10);
         let arrived_ats: Vec<u64> = messages.iter().map(|m| m.arrived_at).collect();
@@ -1266,7 +1245,7 @@ mod tests {
         for (arrived_at, expires_at) in [(101, 100), (102, 200), (103, 300)] {
             let mut message = Message::text(from_id, arrived_at, format!("expiring {arrived_at}"));
             message.expires_at = Some(expires_at);
-            storage.store_message(channel_id, message);
+            storage.store_message(channel_id, &message);
         }
 
         assert_eq!(storage.next_expiring_at(), Some(100));
@@ -1337,14 +1316,11 @@ mod tests {
         let arrived_at = 1664832050000;
         let mut message = storage
             .message(MessageId::new(id.into(), arrived_at))
-            .unwrap()
-            .into_owned();
+            .unwrap();
         message.message = Some("changed".to_string());
 
         let arrived_at = message.arrived_at;
-        let stored_message = storage.store_message(id.into(), message);
-        assert_eq!(stored_message.arrived_at, arrived_at);
-        assert_eq!(stored_message.message.as_deref(), Some("changed"));
+        storage.store_message(id.into(), &message);
 
         let messages: Vec<_> = storage.messages(id.into()).collect();
         assert_eq!(messages.len(), 1);
@@ -1363,8 +1339,7 @@ mod tests {
         let quote_arrived_at = 1664832050000;
         let quote = storage
             .message(MessageId::new(id.into(), quote_arrived_at))
-            .unwrap()
-            .into_owned();
+            .unwrap();
 
         // store message
         let arrived_at = 1664832050001;
@@ -1382,9 +1357,9 @@ mod tests {
             end: 1,
             value: crate::data::AssociatedValue::MentionUuid(id),
         }];
-        let stored_message = storage.store_message(
+        storage.store_message(
             id.into(),
-            Message {
+            &Message {
                 from_id: id,
                 message: Some("new msg".to_string()),
                 arrived_at,
@@ -1401,9 +1376,6 @@ mod tests {
                 expires_at: None,
             },
         );
-
-        assert_eq!(stored_message.arrived_at, arrived_at);
-        assert_eq!(stored_message.message.as_deref(), Some("new msg"));
 
         let messages: Vec<_> = storage.messages(id.into()).collect();
         assert_eq!(messages.len(), 2);
@@ -1426,7 +1398,7 @@ mod tests {
         let arrived_at = 1664832050000;
 
         let channel_b = ChannelId::User(uuid!("91a6315b-027c-44ce-bacb-4d5cf012ba8c"));
-        storage.store_channel(Channel {
+        storage.store_channel(&Channel {
             id: channel_b,
             name: "channel-b".to_owned(),
             group_data: None,
@@ -1437,7 +1409,7 @@ mod tests {
         });
         storage.store_message(
             channel_b,
-            Message::text(
+            &Message::text(
                 uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a"),
                 arrived_at,
                 "world".to_owned(),
@@ -1490,7 +1462,7 @@ mod tests {
         // the foreign key rejects the insert; the message is dropped, not stored
         storage.store_message(
             missing,
-            Message::text(
+            &Message::text(
                 uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a"),
                 123,
                 "lost".to_owned(),
@@ -1513,7 +1485,7 @@ mod tests {
         assert_eq!(storage.name(id1).unwrap(), "ellie");
         assert_eq!(storage.name(id2).unwrap(), "joel");
 
-        assert_eq!(storage.store_name(id3, "abby".to_string()), "abby");
+        storage.store_name(id3, "abby");
         assert_eq!(storage.names().count(), 3);
         assert_eq!(storage.name(id1).unwrap(), "ellie");
         assert_eq!(storage.name(id2).unwrap(), "joel");
@@ -1527,20 +1499,15 @@ mod tests {
         assert_eq!(storage.metadata().contacts_sync_request_at, None);
 
         let dt = Utc::now();
-        assert_eq!(
-            storage
-                .store_metadata(Metadata {
-                    contacts_sync_request_at: Some(dt),
-                    fully_migrated: Some(true),
-                })
-                .contacts_sync_request_at,
-            Some(dt)
-        );
+        storage.store_metadata(&Metadata {
+            contacts_sync_request_at: Some(dt),
+            fully_migrated: Some(true),
+        });
 
         let Metadata {
             contacts_sync_request_at,
             fully_migrated,
-        } = storage.metadata().into_owned();
+        } = storage.metadata();
         assert_eq!(contacts_sync_request_at, Some(dt));
         assert_eq!(fully_migrated, Some(true));
     }

@@ -26,11 +26,11 @@ use super::{
 impl App {
     /// Stores the `message` in the storage and updates the message window if the channel matches.
     pub(crate) fn store_message(&mut self, channel_id: ChannelId, message: Message) {
-        let message = self.storage.store_message(channel_id, message);
+        self.storage.store_message(channel_id, &message);
         if let Some(window) = self.window.as_mut()
             && window.channel_id() == channel_id
         {
-            window.upsert(message.into_owned());
+            window.upsert(message);
         }
     }
 
@@ -44,10 +44,9 @@ impl App {
         target_sent_timestamp: u64,
         message: Message,
     ) -> Option<()> {
-        let message = self
-            .storage
-            .store_edited_message(channel_id, target_sent_timestamp, message)?
-            .into_owned();
+        let message =
+            self.storage
+                .store_edited_message(channel_id, target_sent_timestamp, message)?;
         if let Some(window) = self.window.as_mut()
             && window.channel_id() == channel_id
         {
@@ -407,7 +406,7 @@ impl App {
                 };
 
                 let message_id = MessageId::new(channel_id, target_sent_timestamp);
-                if self.storage.delete_message(message_id).is_some() {
+                if self.storage.delete_message(message_id) {
                     info!(target_sent_timestamp, "message deleted remotely");
                 } else {
                     warn!(
@@ -475,15 +474,14 @@ impl App {
                         .ensure_contact_channel_exists(sender.raw_uuid(), &name)
                         .await;
                     // Reset typing notification as the Tipyng::Stop are not always sent by the server when a message is sent.
-                    let mut channel = self
-                        .channel(channel_id)
-                        .expect("non-existent channel")
-                        .clone();
-                    let from = channel.name.clone();
-                    let channel_muted = channel.muted;
-                    if channel.reset_writing(sender.raw_uuid()) {
-                        self.store_channel(channel);
-                    }
+                    let (from, channel_muted) = {
+                        let channel = self.channel(channel_id).expect("non-existent channel");
+                        (channel.name.clone(), channel.muted)
+                    };
+                    self.channels
+                        .modify_channel_by_id(&mut *self.storage, channel_id, |channel| {
+                            channel.reset_writing(sender.raw_uuid())
+                        });
                     (channel_id, from, channel_muted)
                 };
 
@@ -653,12 +651,15 @@ impl App {
 
     fn update_channel_expire_timer(&mut self, channel_id: ChannelId, expire_timer: Option<u32>) {
         let new_timer = expire_timer.filter(|&t| t > 0);
-        if let Some(mut channel) = self.storage.channel(channel_id).map(|c| c.into_owned())
-            && channel.expire_timer != new_timer
-        {
-            channel.expire_timer = new_timer;
-            self.storage.store_channel(channel);
-        }
+        self.channels
+            .modify_channel_by_id(&mut *self.storage, channel_id, |channel| {
+                if channel.expire_timer != new_timer {
+                    channel.expire_timer = new_timer;
+                    true
+                } else {
+                    false
+                }
+            });
     }
 
     pub fn step_receipts(&mut self) {
@@ -667,19 +668,18 @@ impl App {
 
     /// Expire typing indicators older than TYPING_TIMEOUT_SECS
     pub fn expire_typing_indicators(&mut self) {
-        let mut modified = Vec::new();
-        for channel in self.channels() {
-            if channel.is_writing() {
-                let mut channel = channel.clone();
-                if channel.expire_typing() {
-                    modified.push(channel);
-                }
-            }
-        }
-
         // Can't iterate through channels and update them at the same time
-        for channel in modified {
-            self.store_channel(channel);
+        let writing: Vec<ChannelId> = self
+            .channels()
+            .iter()
+            .filter(|channel| channel.is_writing())
+            .map(|channel| channel.id)
+            .collect();
+        for channel_id in writing {
+            self.channels
+                .modify_channel_by_id(&mut *self.storage, channel_id, |channel| {
+                    channel.expire_typing()
+                });
         }
     }
 
@@ -691,43 +691,47 @@ impl App {
         _timestamp: u64,
     ) -> Result<(), ()> {
         if let Some(gid) = group_id {
-            let mut channel = self
-                .storage
-                .channel(ChannelId::Group(gid))
-                .ok_or(())?
-                .into_owned();
-            if let TypingSet::GroupTyping(ref mut map) = channel.typing {
-                match action {
-                    TypingAction::Started => {
-                        map.insert(sender_uuid, Instant::now());
+            self.channels.modify_channel_by_id(
+                &mut *self.storage,
+                ChannelId::Group(gid),
+                |channel| {
+                    if let TypingSet::GroupTyping(ref mut map) = channel.typing {
+                        match action {
+                            TypingAction::Started => {
+                                map.insert(sender_uuid, Instant::now());
+                            }
+                            TypingAction::Stopped => {
+                                map.remove(&sender_uuid);
+                            }
+                        }
+                        true
+                    } else {
+                        error!("Got a single typing instead of hash set on a group");
+                        false
                     }
-                    TypingAction::Stopped => {
-                        map.remove(&sender_uuid);
-                    }
-                }
-                self.storage.store_channel(channel);
-            } else {
-                error!("Got a single typing instead of hash set on a group");
-            }
+                },
+            );
         } else {
-            let mut channel = self
-                .storage
-                .channel(ChannelId::User(sender_uuid))
-                .ok_or(())?
-                .into_owned();
-            if let TypingSet::SingleTyping(_) = channel.typing {
-                match action {
-                    TypingAction::Started => {
-                        channel.typing = TypingSet::SingleTyping(Some(Instant::now()));
+            self.channels.modify_channel_by_id(
+                &mut *self.storage,
+                ChannelId::User(sender_uuid),
+                |channel| {
+                    if let TypingSet::SingleTyping(_) = channel.typing {
+                        match action {
+                            TypingAction::Started => {
+                                channel.typing = TypingSet::SingleTyping(Some(Instant::now()));
+                            }
+                            TypingAction::Stopped => {
+                                channel.typing = TypingSet::SingleTyping(None);
+                            }
+                        }
+                        true
+                    } else {
+                        error!("Got a hash set instead of single typing on a direct chat");
+                        false
                     }
-                    TypingAction::Stopped => {
-                        channel.typing = TypingSet::SingleTyping(None);
-                    }
-                }
-                self.storage.store_channel(channel);
-            } else {
-                error!("Got a hash set instead of single typing on a direct chat");
-            }
+                },
+            );
         }
         Ok(())
     }
@@ -769,7 +773,7 @@ impl App {
                     .take_while(|msg| msg.arrived_at >= ts)
                     .find(|msg| msg.arrived_at == ts)
                 {
-                    let mut msg = msg.into_owned();
+                    let mut msg = msg;
                     if msg.receipt < receipt {
                         msg.receipt = msg.receipt.max(receipt);
                         messages_to_store.push(msg);
@@ -805,8 +809,7 @@ impl App {
     ) -> Option<()> {
         let mut message = self
             .storage
-            .message(MessageId::new(channel_id, target_sent_timestamp))?
-            .into_owned();
+            .message(MessageId::new(channel_id, target_sent_timestamp))?;
         let from_current_user = self.user_id == message.from_id;
 
         let reaction_idx = message
@@ -954,7 +957,7 @@ impl App {
         let mut read_at: Vec<_> = read.iter().filter_map(|read| read.timestamp).collect();
         read_at.sort_unstable();
 
-        let mut modified = Vec::new();
+        let mut updates = Vec::new();
         for channel in self.channels() {
             // skip channels without unread messages
             if channel.unread_messages == 0 {
@@ -971,15 +974,16 @@ impl App {
             };
 
             let num_unread = self.storage.messages_count_after(channel.id, last_read_at);
-
-            let mut channel = channel.clone();
-            channel.unread_messages = (num_unread as u32).min(channel.unread_messages);
-            modified.push(channel);
+            updates.push((channel.id, (num_unread as u32).min(channel.unread_messages)));
         }
 
         // Can't iterate though channels and update them at the same time
-        for channel in modified {
-            self.store_channel(channel);
+        for (channel_id, unread_messages) in updates {
+            self.channels
+                .modify_channel_by_id(&mut *self.storage, channel_id, |channel| {
+                    channel.unread_messages = unread_messages;
+                    true
+                });
         }
     }
 }
@@ -1054,9 +1058,11 @@ mod tests {
 
     /// Overwrites the unread counter of the given channel in memory and storage.
     fn set_unread(app: &mut App, channel_id: ChannelId, unread_messages: u32) {
-        let mut channel = app.channel(channel_id).unwrap().clone();
-        channel.unread_messages = unread_messages;
-        app.store_channel(channel);
+        app.channels
+            .modify_channel_by_id(&mut *app.storage, channel_id, |channel| {
+                channel.unread_messages = unread_messages;
+                true
+            });
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1067,7 +1073,7 @@ mod tests {
         let channel_id = app.channels().first().unwrap().id;
         app.storage.store_message(
             channel_id,
-            Message::text(app.user_id, 42, "unread message".to_string()),
+            &Message::text(app.user_id, 42, "unread message".to_string()),
         );
         set_unread(&mut app, channel_id, 2);
 
@@ -1092,7 +1098,7 @@ mod tests {
 
         let channel_a = app.channels().first().unwrap().id;
         app.storage
-            .store_message(channel_a, Message::text(app.user_id, 100, "a".to_string()));
+            .store_message(channel_a, &Message::text(app.user_id, 100, "a".to_string()));
         set_unread(&mut app, channel_a, 1);
 
         let channel_b = ChannelId::User(Uuid::new_v4());
@@ -1106,7 +1112,7 @@ mod tests {
             expire_timer: None,
         });
         app.storage
-            .store_message(channel_b, Message::text(app.user_id, 200, "b".to_string()));
+            .store_message(channel_b, &Message::text(app.user_id, 200, "b".to_string()));
 
         // a read receipt for channel A's message must not touch channel B
         app.handle_read(&[Read {

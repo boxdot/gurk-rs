@@ -365,7 +365,7 @@ impl App {
 
     fn delete_selected_message(&mut self) -> Option<()> {
         let message_id = self.selected_message_id()?;
-        let message = self.storage.message(message_id)?.into_owned();
+        let message = self.storage.message(message_id)?;
 
         // Only allow deleting own messages
         if message.from_id != self.user_id {
@@ -373,7 +373,7 @@ impl App {
         }
 
         let channel_id = message_id.channel_id;
-        let channel = self.storage.channel(channel_id)?.into_owned();
+        let channel = self.storage.channel(channel_id)?;
 
         if message.deleted || channel_id == ChannelId::User(self.user_id) {
             // Tombstone or Note to Self: fully remove, sync via deleteForMe
