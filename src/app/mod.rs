@@ -241,7 +241,7 @@ impl App {
             .filter(|name| !name.trim().is_empty())
         {
             debug!(%name, "resolved name from storage");
-            return Some(name.into_owned());
+            return Some(name);
         }
         None
     }
@@ -309,11 +309,7 @@ impl App {
         match event {
             Event::SentTextResult { message_id, result } => {
                 if let Err(error) = result {
-                    let mut message = self
-                        .storage
-                        .message(message_id)
-                        .context("no message")?
-                        .into_owned();
+                    let mut message = self.storage.message(message_id).context("no message")?;
                     message.send_failed = Some(error.to_string());
                     self.store_message(message_id.channel_id, message);
                 }
@@ -443,10 +439,10 @@ pub(crate) mod tests {
             typing: TypingSet::GroupTyping(Default::default()),
             expire_timer: None,
         };
-        storage.store_channel(channel);
+        storage.store_channel(&channel);
         storage.store_message(
             channel_id,
-            Message {
+            &Message {
                 from_id: signal_manager.user_id(),
                 message: Some("First message".to_string()),
                 arrived_at: 0,
@@ -611,8 +607,7 @@ pub(crate) mod tests {
         let mut message = app
             .storage
             .message(MessageId::new(channel_id, arrived_at))
-            .unwrap()
-            .into_owned();
+            .unwrap();
         message
             .reactions
             .push((app.user_id, "\u{1F44D}".to_string()));

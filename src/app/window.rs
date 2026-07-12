@@ -86,7 +86,7 @@ impl MessageWindow {
             .into();
         self.at_oldest = self.items.len() < limit;
         if let Some(message) = storage.message(MessageId::new(self.channel_id, anchor)) {
-            self.items.push_back(message.into_owned());
+            self.items.push_back(message);
         }
         let suffix = storage.messages_after(self.channel_id, anchor, limit);
         self.at_newest = suffix.len() < limit;
@@ -328,7 +328,7 @@ mod tests {
     async fn storage_with(arrived_ats: &[u64]) -> SqliteStorage {
         let url = "sqlite::memory:".parse().unwrap();
         let mut storage = SqliteStorage::open_unencrypted(&url).await.unwrap();
-        storage.store_channel(Channel {
+        storage.store_channel(&Channel {
             id: ch(),
             name: "test".to_owned(),
             group_data: None,
@@ -338,7 +338,7 @@ mod tests {
             expire_timer: None,
         });
         for &a in arrived_ats {
-            storage.store_message(ch(), Message::text(FROM, a, format!("m{a}")));
+            storage.store_message(ch(), &Message::text(FROM, a, format!("m{a}")));
         }
         storage
     }
@@ -565,7 +565,7 @@ mod tests {
         let channel_id = app.channels().first().unwrap().id;
         for a in 1..=800u64 {
             app.storage
-                .store_message(channel_id, Message::text(FROM, a, format!("m{a}")));
+                .store_message(channel_id, &Message::text(FROM, a, format!("m{a}")));
         }
 
         // viewport far taller than the window can hold, anchored in the middle

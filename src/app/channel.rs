@@ -45,7 +45,7 @@ impl App {
     }
 
     pub(crate) fn store_channel(&mut self, channel: Channel) {
-        let channel = self.storage.store_channel(channel).into_owned();
+        self.storage.store_channel(&channel);
         if let Some(old_channel) = self.channels.items.iter_mut().find(|c| c.id == channel.id) {
             *old_channel = channel;
         } else {
@@ -223,7 +223,7 @@ impl App {
                     }
                 }
             };
-            self.storage.store_name(uuid, name);
+            self.storage.store_name(uuid, &name);
         }
     }
 
@@ -427,7 +427,7 @@ impl App {
 
         for (arrived_at, timer) in to_activate {
             let message_id = crate::storage::MessageId::new(channel_id, arrived_at);
-            if let Some(mut msg) = self.storage.message(message_id).map(|m| m.into_owned()) {
+            if let Some(mut msg) = self.storage.message(message_id) {
                 msg.expires_at = Some(now_ms + u64::from(timer) * 1000);
                 self.schedule_expiry(msg.expires_at);
                 self.store_message(channel_id, msg);
