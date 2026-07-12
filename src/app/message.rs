@@ -478,11 +478,10 @@ impl App {
                         let channel = self.channel(channel_id).expect("non-existent channel");
                         (channel.name.clone(), channel.muted)
                     };
-                    self.channels.modify_channel_by_id(
-                        &mut *self.storage,
-                        channel_id,
-                        |channel| channel.reset_writing(sender.raw_uuid()),
-                    );
+                    self.channels
+                        .modify_channel_by_id(&mut *self.storage, channel_id, |channel| {
+                            channel.reset_writing(sender.raw_uuid())
+                        });
                     (channel_id, from, channel_muted)
                 };
 
@@ -692,8 +691,10 @@ impl App {
         _timestamp: u64,
     ) -> Result<(), ()> {
         if let Some(gid) = group_id {
-            self.channels
-                .modify_channel_by_id(&mut *self.storage, ChannelId::Group(gid), |channel| {
+            self.channels.modify_channel_by_id(
+                &mut *self.storage,
+                ChannelId::Group(gid),
+                |channel| {
                     if let TypingSet::GroupTyping(ref mut map) = channel.typing {
                         match action {
                             TypingAction::Started => {
@@ -708,7 +709,8 @@ impl App {
                         error!("Got a single typing instead of hash set on a group");
                         false
                     }
-                });
+                },
+            );
         } else {
             self.channels.modify_channel_by_id(
                 &mut *self.storage,
