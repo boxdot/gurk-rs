@@ -334,11 +334,7 @@ impl App {
     }
 
     pub(crate) fn touch_channel(&mut self, channel_id: ChannelId, from_current_user: bool) {
-        if self.selected_channel_id() == Some(channel_id) {
-            return;
-        }
-
-        if !from_current_user {
+        if !from_current_user && self.selected_channel_id() != Some(channel_id) {
             self.channels
                 .modify_channel_by_id(&mut *self.storage, channel_id, |channel| {
                     channel.unread_messages += 1;
