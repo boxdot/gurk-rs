@@ -9,7 +9,7 @@ repository = "https://github.com/boxdot/gurk-rs"
 license = "AGPL-3.0-only"
 categories = ["command-line-utilities"]
 resolver = "2"
-rust-version = "1.88.0"
+rust-version = "1.94.0"
 
 [workspace]
 members = ["xtask"]
@@ -37,11 +37,11 @@ debug = true
 dev = ["prost", "base64", "serde_json"]
 
 [dependencies]
-presage = { git = "https://github.com/whisperfish/presage", rev = "600c4ede51865f7de6ca21507e738a7bd70cc7ae", default-features = false }
-presage-store-sqlite = { git = "https://github.com/whisperfish/presage", rev = "600c4ede51865f7de6ca21507e738a7bd70cc7ae", default-features = false }
+presage = { git = "https://github.com/whisperfish/presage", rev = "9e1f0b8d4d96b4aa9bdf6055b8a18c27083e2975", default-features = false }
+presage-store-sqlite = { git = "https://github.com/whisperfish/presage", rev = "9e1f0b8d4d96b4aa9bdf6055b8a18c27083e2975", default-features = false }
 
 # dev feature dependenciestoml
-prost = { version = "0.13.4", optional = true }
+prost = { version = "0.14.4", optional = true }
 base64 = { version = "0.22.1", optional = true }
 
 aho-corasick = "1.1.3"

@@ -2,6 +2,7 @@ use std::fs::OpenOptions;
 use std::io::BufWriter;
 
 use base64::prelude::*;
+use chrono::{DateTime, Utc};
 use presage::libsignal_service::protocol::ServiceId;
 use presage::libsignal_service::{
     content::{Content, Metadata},
@@ -28,7 +29,8 @@ struct MetadataDef {
     destination: ServiceId,
     #[serde(with = "device_id")]
     sender_device: DeviceId,
-    timestamp: u64,
+    timestamp: DateTime<Utc>,
+    server_timestamp: DateTime<Utc>,
     needs_receipt: bool,
     unidentified_sender: bool,
     server_guid: Option<Uuid>,
@@ -83,6 +85,7 @@ impl From<Metadata> for MetadataDef {
             destination: metadata.destination,
             sender_device: metadata.sender_device,
             timestamp: metadata.timestamp,
+            server_timestamp: metadata.server_timestamp,
             needs_receipt: metadata.needs_receipt,
             unidentified_sender: metadata.unidentified_sender,
             server_guid: metadata.server_guid,
