@@ -6,12 +6,24 @@
       {
         "name": "channel_id: _",
         "ordinal": 0,
-        "type_info": "Blob"
+        "type_info": "Blob",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "channel_id"
+          }
+        }
       },
       {
         "name": "arrived_at: _",
         "ordinal": 1,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "arrived_at"
+          }
+        }
       }
     ],
     "parameters": {

@@ -6,12 +6,24 @@
       {
         "name": "contacts_sync_request_at: _",
         "ordinal": 0,
-        "type_info": "Datetime"
+        "type_info": "Datetime",
+        "origin": {
+          "Table": {
+            "table": "metadata",
+            "name": "contacts_sync_request_at"
+          }
+        }
       },
       {
         "name": "fully_migrated: _",
         "ordinal": 1,
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "metadata",
+            "name": "fully_migrated"
+          }
+        }
       }
     ],
     "parameters": {
