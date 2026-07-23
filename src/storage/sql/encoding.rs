@@ -26,7 +26,7 @@ impl Decode<'_, Sqlite> for ChannelId {
 impl<'q> Encode<'q, Sqlite> for &'q ChannelId {
     fn encode_by_ref(
         &self,
-        buf: &mut <Sqlite as Database>::ArgumentBuffer<'q>,
+        buf: &mut <Sqlite as Database>::ArgumentBuffer,
     ) -> Result<IsNull, BoxDynError> {
         match self {
             ChannelId::User(uuid) => uuid.encode(buf),
@@ -60,7 +60,7 @@ impl<T: DeserializeOwned> Decode<'_, Sqlite> for BlobData<T> {
 impl<'q, T: Serialize> Encode<'q, Sqlite> for BlobData<T> {
     fn encode_by_ref(
         &self,
-        buf: &mut <Sqlite as Database>::ArgumentBuffer<'q>,
+        buf: &mut <Sqlite as Database>::ArgumentBuffer,
     ) -> Result<IsNull, BoxDynError> {
         if let Some(bytes) = postcard::to_allocvec(&self.0).ok_logged() {
             Encode::<'_, Sqlite>::encode(bytes, buf)

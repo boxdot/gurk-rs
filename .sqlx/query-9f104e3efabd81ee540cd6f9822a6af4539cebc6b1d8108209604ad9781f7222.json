@@ -6,92 +6,195 @@
       {
         "name": "arrived_at!",
         "ordinal": 0,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "arrived_at"
+          }
+        }
       },
       {
         "name": "from_id: _",
         "ordinal": 1,
-        "type_info": "Blob"
+        "type_info": "Blob",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "from_id"
+          }
+        }
       },
       {
         "name": "message",
         "ordinal": 2,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "message"
+          }
+        }
       },
       {
         "name": "receipt: _",
         "ordinal": 3,
-        "type_info": "Blob"
+        "type_info": "Blob",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "receipt"
+          }
+        }
       },
       {
         "name": "body_ranges: _",
         "ordinal": 4,
-        "type_info": "Blob"
+        "type_info": "Blob",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "body_ranges"
+          }
+        }
       },
       {
         "name": "attachments: _",
         "ordinal": 5,
-        "type_info": "Blob"
+        "type_info": "Blob",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "attachments"
+          }
+        }
       },
       {
         "name": "reactions: _",
         "ordinal": 6,
-        "type_info": "Blob"
+        "type_info": "Blob",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "reactions"
+          }
+        }
       },
       {
         "name": "quote_arrived_at: _",
         "ordinal": 7,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "arrived_at"
+          }
+        }
       },
       {
         "name": "quote_from_id: _",
         "ordinal": 8,
-        "type_info": "Blob"
+        "type_info": "Blob",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "from_id"
+          }
+        }
       },
       {
         "name": "quote_message",
         "ordinal": 9,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "message"
+          }
+        }
       },
       {
         "name": "quote_attachments: _",
         "ordinal": 10,
-        "type_info": "Blob"
+        "type_info": "Blob",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "attachments"
+          }
+        }
       },
       {
         "name": "quote_body_ranges: _",
         "ordinal": 11,
-        "type_info": "Blob"
+        "type_info": "Blob",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "body_ranges"
+          }
+        }
       },
       {
         "name": "quote_receipt: _",
         "ordinal": 12,
-        "type_info": "Blob"
+        "type_info": "Blob",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "receipt"
+          }
+        }
       },
       {
         "name": "edit: _",
         "ordinal": 13,
-        "type_info": "Null"
+        "type_info": "Null",
+        "origin": "Expression"
       },
       {
         "name": "edited: _",
         "ordinal": 14,
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "edited"
+          }
+        }
       },
       {
         "name": "deleted: _",
         "ordinal": 15,
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "deleted"
+          }
+        }
       },
       {
         "name": "expire_timer: _",
         "ordinal": 16,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "expire_timer"
+          }
+        }
       },
       {
         "name": "expires_at: _",
         "ordinal": 17,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "expires_at"
+          }
+        }
       }
     ],
     "parameters": {
@@ -105,13 +208,13 @@
       true,
       true,
       true,
-      false,
-      false,
       true,
       true,
       true,
       true,
-      null,
+      true,
+      true,
+      true,
       false,
       false,
       true,

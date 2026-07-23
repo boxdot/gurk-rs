@@ -6,12 +6,24 @@
       {
         "name": "id: _",
         "ordinal": 0,
-        "type_info": "Blob"
+        "type_info": "Blob",
+        "origin": {
+          "Table": {
+            "table": "names",
+            "name": "id"
+          }
+        }
       },
       {
         "name": "name: _",
         "ordinal": 1,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "names",
+            "name": "name"
+          }
+        }
       }
     ],
     "parameters": {
