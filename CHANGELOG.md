@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.1] - 2026-07-26
+
+This release fixes potential account linking issues.
+
+### 🐛 Bug Fixes
+
+- Fix potential segfault on exit  (#567)
+
+### 💼 Other
+
+- *(deps)* Upgrade presage to the latest rev on main (#564)
+- *(deps)* Upgrade dependencies (#565, #566)
+
 ## [0.10.0] - 2026-07-19
 
 This release significantly improves startup time and memory usage: messages
