@@ -471,6 +471,10 @@ impl SignalManager for PresageManager {
                     warn!("Received contacts, but not implemented yet");
                     None
                 }
+                Received::DecryptionError(service_id) => {
+                    error!(?service_id, "Received decryption error");
+                    None
+                }
             },
         )))
     }
