@@ -399,16 +399,13 @@ fn build_candidates(
     let mut items_ats: Vec<u64> = Vec::new();
     let mut heights: Vec<usize> = Vec::new();
 
-    // The day of the message at the bottom of the viewport
-    let first_msg_timestamp = candidates.first().map(|m| m.arrived_at).unwrap_or_default();
-    let mut previous_msg_timestamp = first_msg_timestamp;
-    let mut previous_msg_day = utc_timestamp_msec_to_local(first_msg_timestamp).num_days_from_ce();
-
-    for (idx, msg) in candidates.iter().enumerate() {
+    let mut candidates = candidates.iter().enumerate().peekable();
+    while let Some((idx, msg)) = candidates.next() {
+        // the iterator is reversed, so the peeked item is the older, *previous* message
+        let prev_msg = candidates.peek();
         let date_division = display_date_line(
             msg.arrived_at,
-            previous_msg_timestamp,
-            &mut previous_msg_day,
+            prev_msg.map(|(_, msg)| msg.arrived_at),
             width,
         );
 
@@ -418,8 +415,6 @@ fn build_candidates(
                     + "new messages"
                     + &"-".repeat(width.saturating_sub(prefix_width))
             });
-
-        previous_msg_timestamp = msg.arrived_at;
         let show_receipt = ShowReceipt::from_msg(msg, app.user_id, app.config.show_receipts);
 
         if let Some(item) = display_message(
@@ -690,18 +685,16 @@ fn replace_mentions(msg: &Message, names: &NameResolver, text: String) -> String
 
 fn display_date_line(
     msg_timestamp: u64,
-    previous_msg_timestamp: u64,
-    previous_msg_day: &mut i32,
+    previous_msg_timestamp: Option<u64>,
     width: usize,
 ) -> Option<String> {
     let local_time = utc_timestamp_msec_to_local(msg_timestamp);
     let current_msg_day = local_time.num_days_from_ce();
+    let previous_msg_day =
+        previous_msg_timestamp.map(|t| utc_timestamp_msec_to_local(t).num_days_from_ce());
 
-    if current_msg_day != *previous_msg_day {
-        // Show the date of the previous section (the day we're leaving)
-        let previous_local_time = utc_timestamp_msec_to_local(previous_msg_timestamp);
-        let date = format!("{:=^width$}", previous_local_time.format(" %A, %x "));
-        *previous_msg_day = current_msg_day;
+    if Some(current_msg_day) != previous_msg_day {
+        let date = format!("{:=^width$}", local_time.format(" %A, %x "));
         Some(date)
     } else {
         None
