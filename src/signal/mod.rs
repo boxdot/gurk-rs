@@ -134,8 +134,8 @@ async fn gen_qr_code(rx: oneshot::Receiver<Url>, path: &Path) -> anyhow::Result<
     // Print QR code as text
     let text = qr
         .render::<Dense1x2>()
-        .dark_color(Dense1x2::Dark)
-        .light_color(Dense1x2::Light)
+        .dark_color(Dense1x2::Light)
+        .light_color(Dense1x2::Dark)
         .build();
     println!("{text}");
 
