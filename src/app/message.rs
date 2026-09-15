@@ -146,6 +146,7 @@ impl App {
                                 Some(DataMessage {
                                     mut body,
                                     attachments: attachment_pointers,
+                                    quote,
                                     sticker,
                                     body_ranges,
                                     reaction: None,
@@ -163,9 +164,11 @@ impl App {
                 let attachments = self.save_attachments(attachment_pointers).await;
                 add_emoji_from_sticker(&mut body, sticker);
 
+                let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
 
                 let message = Message {
+                    quote,
                     expire_timer,
                     ..Message::new(user_id, body, body_ranges, timestamp, attachments)
                 };
