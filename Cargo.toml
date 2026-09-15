@@ -37,8 +37,8 @@ debug = true
 dev = ["prost", "base64", "serde_json"]
 
 [dependencies]
-presage = { git = "https://github.com/whisperfish/presage", rev = "9e1f0b8d4d96b4aa9bdf6055b8a18c27083e2975", default-features = false }
-presage-store-sqlite = { git = "https://github.com/whisperfish/presage", rev = "9e1f0b8d4d96b4aa9bdf6055b8a18c27083e2975", default-features = false }
+presage = { git = "https://github.com/whisperfish/presage", rev = "f74b96e0fb9099ce8be2b28b7ca9d11f78a6faea", default-features = false }
+presage-store-sqlite = { git = "https://github.com/whisperfish/presage", rev = "f74b96e0fb9099ce8be2b28b7ca9d11f78a6faea", default-features = false }
 
 # dev feature dependenciestoml
 prost = { version = "0.14.4", optional = true }
@@ -132,9 +132,6 @@ required-features = ["dev"]
 # libsignal-service = { path = "../libsignal-service-rs" }
 
 [patch.crates-io]
-# signal-protocol uses a fork of this library via the patch mechanism of cargo.
-# Since it is not transitive, we have to add the patch here explicitly.
-"curve25519-dalek" = { git = 'https://github.com/signalapp/curve25519-dalek', tag = 'signal-curve25519-4.1.3' }
 # - Custom crypto provider
 # - Disable atexit cleanup in sqlcipher, which unsafe when other threads may
 #   still be closing database connections.
