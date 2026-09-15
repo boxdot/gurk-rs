@@ -1025,7 +1025,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "074bc31bff1084f74e5a145ad5f6ac74469fa312159faa5144f0b1c4506b8d80"
 dependencies = [
  "crokey-proc_macros",
- "crossterm 0.29.0",
+ "crossterm",
  "once_cell",
  "serde",
  "strict",
@@ -1037,7 +1037,7 @@ version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b88c4ff2d5717616c3bb4a31d06b0b241ed811c7c0c41d077d77631bee7caad0"
 dependencies = [
- "crossterm 0.29.0",
+ "crossterm",
  "proc-macro2",
  "quote",
  "strict",
@@ -1086,19 +1086,6 @@ name = "crossbeam-utils"
 version = "0.8.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a31eee39dddec8330830986fcd7625edb5a24ec90ea038215273bbc3adb08ac6"
-
-[[package]]
-name = "crossterm"
-version = "0.28.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "829d955a0bb380ef178a640b91779e3987da38c9aea133b20614cfed8cdea9c6"
-dependencies = [
- "bitflags 2.13.2",
- "crossterm_winapi",
- "parking_lot",
- "rustix 0.38.44",
- "winapi",
-]
 
 [[package]]
 name = "crossterm"
@@ -1916,7 +1903,7 @@ dependencies = [
  "clap",
  "criterion",
  "crokey",
- "crossterm 0.29.0",
+ "crossterm",
  "dialoguer",
  "dirs",
  "edit",
@@ -1937,7 +1924,6 @@ dependencies = [
  "presage",
  "presage-store-sqlite",
  "prost",
- "qr2term",
  "qrcode",
  "quickcheck",
  "quickcheck_macros",
@@ -4111,16 +4097,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d55d956fa96f5ec02be2e13af0e20391a5aa83d6a074e3ad368959d0fab299ea"
 
 [[package]]
-name = "qr2term"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6867c60b38e9747a079a19614dbb5981a53f21b9a56c265f3bfdf6011a50a957"
-dependencies = [
- "crossterm 0.28.1",
- "qrcode",
-]
-
-[[package]]
 name = "qrcode"
 version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4296,7 +4272,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "567584a3b0e6a8203c23de40b4861497266725eb5363dbfd18a1edd603cca9f0"
 dependencies = [
  "cfg-if",
- "crossterm 0.29.0",
+ "crossterm",
  "instability",
  "ratatui-core",
 ]

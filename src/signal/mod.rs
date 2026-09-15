@@ -11,6 +11,7 @@ use futures_channel::oneshot;
 use image::Luma;
 use presage::{libsignal_service::configuration::SignalServers, model::identity::OnNewIdentity};
 use presage_store_sqlite::SqliteStore;
+use qrcode::render::unicode::Dense1x2;
 use tracing::{error, info};
 use url::Url;
 
@@ -120,21 +121,23 @@ async fn relink_device(
 async fn gen_qr_code(rx: oneshot::Receiver<Url>, path: &Path) -> anyhow::Result<()> {
     let url = rx.await.map_err(|e| anyhow!("error linking device {e}"))?;
 
-    if let Err(error) = save_qr_code_png(&url, path) {
+    let qr = qrcode::QrCode::new(url.to_string())?;
+
+    // Save QR code as PNG
+    let image = qr.render::<Luma<u8>>().build();
+    if let Err(error) = image.save(&path) {
         error!(%error, "failed to generate PNG QR code");
     } else {
         println!("QR code saved to {}", path.display());
     }
 
-    qr2term::print_qr(url.to_string()).context("failed to generated qr")?;
-
-    Ok(())
-}
-
-fn save_qr_code_png(url: &Url, path: &Path) -> anyhow::Result<()> {
-    let image = qrcode::QrCode::new(url.to_string())?
-        .render::<Luma<u8>>()
+    // Print QR code as text
+    let text = qr
+        .render::<Dense1x2>()
+        .dark_color(Dense1x2::Dark)
+        .light_color(Dense1x2::Light)
         .build();
-    image.save(&path)?;
+    println!("{text}");
+
     Ok(())
 }

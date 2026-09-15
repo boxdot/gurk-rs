@@ -67,7 +67,6 @@ notify-rust = "4.11.3"
 opener = "0.8.2"
 phonenumber = "0.3.6"
 postcard = { version = "1.1.1", features = ["alloc"] }
-qr2term = "0.3.3"
 ratatui = "0.30.0"
 regex = "1.11.1"
 scopeguard = "1.2.0"
