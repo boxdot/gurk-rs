@@ -703,24 +703,14 @@ fn display_date_line(
 }
 
 fn add_attachments(msg: &Message, out: &mut String) {
-    if !msg.attachments.is_empty() {
+    for attachment in &msg.attachments {
         if !out.is_empty() {
             out.push('\n');
         }
-
-        fmt::write(
-            out,
-            format_args!(
-                "{}",
-                msg.attachments
-                    .iter()
-                    .format_with("\n", |attachment, f| f(&format_args!(
-                        "<file://{}>",
-                        attachment.filename.display()
-                    )))
-            ),
-        )
-        .expect("formatting attachments failed");
+        if attachment.content_type.starts_with("audio/") {
+            out.push_str("[Voice Note] ");
+        }
+        out.push_str(&format!("<file://{}>", attachment.filename.display()));
     }
 }
 
@@ -961,6 +951,15 @@ mod tests {
         }
     }
 
+    fn test_voice_note() -> Attachment {
+        Attachment {
+            id: "2022-01-16T12:00:00.000000+00:00".to_string(),
+            content_type: "audio/aac".into(),
+            filename: "/tmp/gurk/signal-2022-01-16T12:00:00.000000+00:00.aac".into(),
+            size: 12345,
+        }
+    }
+
     fn test_link_preview() -> LinkPreview {
         LinkPreview {
             url: Some("https://example.com/article".into()),
@@ -1146,6 +1145,46 @@ mod tests {
             Line::from(vec![Span::raw("                  A short description")]),
             Line::from(vec![Span::raw(
                 "                  https://example.com/article",
+            )]),
+        ]));
+        assert_eq!(rendered, Some(expected));
+    }
+
+    #[test]
+    fn test_display_voice_note_message() {
+        let names = name_resolver();
+        let msg = Message {
+            attachments: vec![test_voice_note()],
+            ..test_message()
+        };
+        let rendered = display_message(
+            &names,
+            &msg,
+            PREFIX,
+            WIDTH,
+            HEIGHT,
+            ShowReceipt::Never,
+            None,
+            None,
+            false,
+        );
+
+        let expected = ListItem::new(Text::from(vec![
+            Line::from(vec![
+                Span::styled("", Style::default().fg(Color::Yellow)),
+                Span::styled(
+                    display_time(msg.arrived_at),
+                    Style::default().fg(Color::Yellow),
+                ),
+                Span::styled("boxdot", Style::default().fg(Color::Green)),
+                Span::raw(": "),
+                Span::raw("[Voice Note] <file:///"),
+            ]),
+            Line::from(vec![Span::raw(
+                "                  tmp/gurk/signal-2022-01-",
+            )]),
+            Line::from(vec![Span::raw(
+                "                  16T12:00:00.000000+00:00.aac>",
             )]),
         ]));
         assert_eq!(rendered, Some(expected));
