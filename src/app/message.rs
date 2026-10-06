@@ -14,7 +14,7 @@ use presage::proto::{GroupContextV2, data_message::Delete, data_message::Reactio
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use crate::data::{BodyRange, ChannelId, Message, TypingAction, TypingSet, parse_uuid};
+use crate::data::{BodyRange, ChannelId, LinkPreview, Message, TypingAction, TypingSet, parse_uuid};
 use crate::receipt::{Receipt, ReceiptEvent};
 use crate::signal::{Attachment, GroupIdentifierBytes};
 use crate::storage::MessageId;
@@ -151,6 +151,7 @@ impl App {
                                     body_ranges,
                                     reaction: None,
                                     expire_timer,
+                                    preview,
                                     ..
                                 }),
                             ..
@@ -166,10 +167,12 @@ impl App {
 
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
+                let link_previews = preview.iter().map(LinkPreview::from_proto).collect();
 
                 let message = Message {
                     quote,
                     expire_timer,
+                    link_previews,
                     ..Message::new(user_id, body, body_ranges, timestamp, attachments)
                 };
                 (channel_id, message)
@@ -319,6 +322,7 @@ impl App {
                                     body_ranges,
                                     reaction: None,
                                     expire_timer,
+                                    preview,
                                     ..
                                 }),
                             ..
@@ -364,10 +368,12 @@ impl App {
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let attachments = self.save_attachments(attachment_pointers).await;
                 let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
+                let link_previews = preview.iter().map(LinkPreview::from_proto).collect();
 
                 let message = Message {
                     quote,
                     expire_timer,
+                    link_previews,
                     ..Message::new(user_id, body, body_ranges, timestamp, attachments)
                 };
 
@@ -432,6 +438,7 @@ impl App {
                     sticker,
                     body_ranges,
                     expire_timer,
+                    preview,
                     ..
                 }),
             ) => {
@@ -507,9 +514,11 @@ impl App {
 
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
+                let link_previews = preview.iter().map(LinkPreview::from_proto).collect();
                 let message = Message {
                     quote,
                     expire_timer,
+                    link_previews,
                     ..Message::new(sender.raw_uuid(), body, body_ranges, timestamp, attachments)
                 };
 

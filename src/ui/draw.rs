@@ -551,6 +551,7 @@ fn display_message(
         let text = strip_ansi_escapes::strip_str(msg.message.as_deref().unwrap_or_default());
         let mut text = replace_mentions(msg, names, text);
         add_attachments(msg, &mut text);
+        add_link_previews(msg, &mut text);
         if text.is_empty() {
             return None; // no text => nothing to render
         }
@@ -720,6 +721,30 @@ fn add_attachments(msg: &Message, out: &mut String) {
             ),
         )
         .expect("formatting attachments failed");
+    }
+}
+
+fn add_link_previews(msg: &Message, out: &mut String) {
+    for preview in &msg.link_previews {
+        if preview.is_empty() {
+            continue;
+        }
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        out.push_str("[Link Preview]");
+        if let Some(title) = &preview.title {
+            out.push('\n');
+            out.push_str(&strip_ansi_escapes::strip_str(title));
+        }
+        if let Some(desc) = &preview.description {
+            out.push('\n');
+            out.push_str(&strip_ansi_escapes::strip_str(desc));
+        }
+        if let Some(url) = &preview.url {
+            out.push('\n');
+            out.push_str(&strip_ansi_escapes::strip_str(url));
+        }
     }
 }
 
@@ -956,6 +981,7 @@ mod tests {
             deleted: Default::default(),
             expire_timer: None,
             expires_at: None,
+            link_previews: Default::default(),
         }
     }
 
