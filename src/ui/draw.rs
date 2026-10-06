@@ -1191,6 +1191,46 @@ mod tests {
     }
 
     #[test]
+    fn test_display_voice_note_message() {
+        let names = name_resolver();
+        let msg = Message {
+            attachments: vec![test_voice_note()],
+            ..test_message()
+        };
+        let rendered = display_message(
+            &names,
+            &msg,
+            PREFIX,
+            WIDTH,
+            HEIGHT,
+            ShowReceipt::Never,
+            None,
+            None,
+            false,
+        );
+
+        let expected = ListItem::new(Text::from(vec![
+            Line::from(vec![
+                Span::styled("", Style::default().fg(Color::Yellow)),
+                Span::styled(
+                    display_time(msg.arrived_at),
+                    Style::default().fg(Color::Yellow),
+                ),
+                Span::styled("boxdot", Style::default().fg(Color::Green)),
+                Span::raw(": "),
+                Span::raw("[Voice Note] <file:///"),
+            ]),
+            Line::from(vec![Span::raw(
+                "                  tmp/gurk/signal-2022-01-",
+            )]),
+            Line::from(vec![Span::raw(
+                "                  16T12:00:00.000000+00:00.aac>",
+            )]),
+        ]));
+        assert_eq!(rendered, Some(expected));
+    }
+
+    #[test]
     fn test_display_sent_receipt() {
         let names = name_resolver();
         let msg = Message {
