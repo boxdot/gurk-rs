@@ -212,6 +212,8 @@ impl SqlMessage {
             deleted,
             expire_timer: expire_timer.and_then(|t| u32::try_from(t).ok()),
             expires_at: expires_at.and_then(|t| u64::try_from(t).ok()),
+            // ponytail: link_previews not persisted yet, populated on incoming messages only
+            link_previews: Default::default(),
         })
     }
 }
@@ -912,6 +914,7 @@ mod tests {
                 deleted: Default::default(),
                 expire_timer: None,
                 expires_at: None,
+                link_previews: Default::default(),
             },
         );
 
@@ -946,6 +949,7 @@ mod tests {
                 deleted: Default::default(),
                 expire_timer: None,
                 expires_at: None,
+                link_previews: Default::default(),
             },
         );
 
@@ -1378,6 +1382,7 @@ mod tests {
                 deleted: Default::default(),
                 expire_timer: None,
                 expires_at: None,
+                link_previews: Default::default(),
             },
         );
 
