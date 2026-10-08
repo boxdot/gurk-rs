@@ -409,7 +409,9 @@ impl SignalManager for PresageManager {
             ..Default::default()
         };
         let sync_message = ContentBody::SynchronizeMessage(SyncMessage {
-            delete_for_me: Some(delete_for_me),
+            content: Some(presage::proto::sync_message::Content::DeleteForMe(
+                delete_for_me,
+            )),
             ..Default::default()
         });
 
