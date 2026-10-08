@@ -6,7 +6,7 @@ use anyhow::{Context as _, anyhow};
 use itertools::Itertools;
 use presage::libsignal_service::content::{Content, ContentBody, Metadata};
 use presage::libsignal_service::protocol::ServiceId;
-use presage::proto::sync_message::{Read, Sent};
+use presage::proto::sync_message::{Content as SyncContent, Read, Sent};
 use presage::proto::{
     AttachmentPointer, DataMessage, EditMessage, ReceiptMessage, SyncMessage, TypingMessage,
 };
@@ -77,8 +77,8 @@ impl App {
                 _,
                 ContentBody::SynchronizeMessage(
                     sync_message @ SyncMessage {
-                        sent:
-                            Some(Sent {
+                        content:
+                            Some(SyncContent::Sent(Sent {
                                 message:
                                     Some(DataMessage {
                                         delete:
@@ -88,7 +88,7 @@ impl App {
                                         ..
                                     }),
                                 ..
-                            }),
+                            })),
                         ..
                     },
                 ),
@@ -109,7 +109,7 @@ impl App {
             (
                 _,
                 ContentBody::SynchronizeMessage(SyncMessage {
-                    delete_for_me: Some(delete_for_me),
+                    content: Some(SyncContent::DeleteForMe(delete_for_me)),
                     ..
                 }),
             ) => {
@@ -137,8 +137,8 @@ impl App {
             (
                 _,
                 ContentBody::SynchronizeMessage(SyncMessage {
-                    sent:
-                        Some(Sent {
+                    content:
+                        Some(SyncContent::Sent(Sent {
                             destination_service_id: ref dest_str,
                             destination_service_id_binary: ref dest_binary,
                             timestamp: Some(timestamp),
@@ -154,7 +154,7 @@ impl App {
                                     ..
                                 }),
                             ..
-                        }),
+                        })),
                     ..
                 }),
             ) if parse_uuid(dest_str.as_deref(), dest_binary.as_deref()) == Some(user_id) => {
@@ -178,8 +178,8 @@ impl App {
             (
                 Metadata { sender, .. },
                 ContentBody::SynchronizeMessage(SyncMessage {
-                    sent:
-                        Some(Sent {
+                    content:
+                        Some(SyncContent::Sent(Sent {
                             destination_service_id: ref dest_str,
                             destination_service_id_binary: ref dest_binary,
                             message:
@@ -198,7 +198,7 @@ impl App {
                                     ..
                                 }),
                             ..
-                        }),
+                        })),
                     read,
                     ..
                 }),
@@ -303,8 +303,8 @@ impl App {
             (
                 Metadata { sender, .. },
                 ContentBody::SynchronizeMessage(SyncMessage {
-                    sent:
-                        Some(Sent {
+                    content:
+                        Some(SyncContent::Sent(Sent {
                             destination_service_id: ref dest_str,
                             destination_service_id_binary: ref dest_binary,
                             timestamp: Some(timestamp),
@@ -322,7 +322,7 @@ impl App {
                                     ..
                                 }),
                             ..
-                        }),
+                        })),
                     ..
                 }),
             ) if sender.raw_uuid() == user_id => {
@@ -923,7 +923,7 @@ impl App {
         };
 
         // edit message
-        if let Some(Sent {
+        if let Some(SyncContent::Sent(Sent {
             edit_message:
                 Some(EditMessage {
                     target_sent_timestamp: Some(target_sent_timestamp),
@@ -935,7 +935,7 @@ impl App {
                         }),
                 }),
             ..
-        }) = sync_message.sent
+        })) = sync_message.content
         {
             let from_id = metadata.sender.raw_uuid();
             self.store_edited_message(
@@ -999,7 +999,9 @@ trait MessageExt {
 impl MessageExt for SyncMessage {
     fn channel_id(&self) -> Option<ChannelId> {
         // only sent sync message are attached to a conversation
-        let sent = self.sent.as_ref()?;
+        let Some(SyncContent::Sent(sent)) = &self.content else {
+            return None;
+        };
         if let Some(uuid) = sent.parse_destination_uuid() {
             Some(ChannelId::User(uuid))
         } else {
