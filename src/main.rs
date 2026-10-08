@@ -27,7 +27,10 @@ use gurk::{
 };
 use gurk::{signal, ui};
 use presage::libsignal_service::content::Content;
-use ratatui::{Terminal, backend::CrosstermBackend};
+use ratatui::{
+    Terminal,
+    backend::{Backend, ClearType, CrosstermBackend},
+};
 use tokio::{runtime, select};
 use tokio_stream::StreamExt;
 use tracing::{debug, error, info};
@@ -297,7 +300,10 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
             }
         } else {
             if app.should_clear {
-                terminal.clear()?;
+                // Don't use Terminal::clear: it queries the cursor position, and the reply is
+                // consumed by the running event reader, so the query times out.
+                terminal.backend_mut().clear_region(ClearType::All)?;
+                terminal.swap_buffers();
                 app.should_clear = false;
             }
             terminal.draw(|f| ui::draw(f, &mut app))?;
