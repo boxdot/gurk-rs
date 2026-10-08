@@ -457,6 +457,7 @@ pub(crate) mod tests {
                 deleted: Default::default(),
                 expire_timer: None,
                 expires_at: None,
+                link_previews: Default::default(),
             },
         );
 

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n                    SELECT\n                        m.arrived_at AS \"arrived_at!\",\n                        m.from_id AS \"from_id: _\",\n                        m.message,\n                        m.receipt AS \"receipt: _\",\n                        m.body_ranges AS \"body_ranges: _\",\n                        m.attachments AS \"attachments: _\",\n                        m.reactions AS \"reactions: _\",\n                        q.arrived_at AS \"quote_arrived_at: _\",\n                        q.from_id AS \"quote_from_id: _\",\n                        q.message AS quote_message,\n                        q.attachments AS \"quote_attachments: _\",\n                        q.body_ranges AS \"quote_body_ranges: _\",\n                        q.receipt AS \"quote_receipt: _\",\n                        NULL AS \"edit: _\",\n                        m.edited AS \"edited: _\",\n                        m.deleted AS \"deleted: _\",\n                        m.expire_timer AS \"expire_timer: _\",\n                        m.expires_at AS \"expires_at: _\"\n                    FROM messages AS m\n                    LEFT JOIN messages AS q ON q.channel_id = ?1 AND q.arrived_at = m.quote\n                    WHERE m.channel_id = ?1 AND m.arrived_at > ?2 AND m.edit IS NULL\n                    ORDER BY m.arrived_at ASC\n                    LIMIT ?3\n                ",
+  "query": "\n                    SELECT\n                        m.arrived_at AS \"arrived_at!\",\n                        m.from_id AS \"from_id: _\",\n                        m.message,\n                        m.receipt AS \"receipt: _\",\n                        m.body_ranges AS \"body_ranges: _\",\n                        m.attachments AS \"attachments: _\",\n                        m.reactions AS \"reactions: _\",\n                        q.arrived_at AS \"quote_arrived_at: _\",\n                        q.from_id AS \"quote_from_id: _\",\n                        q.message AS quote_message,\n                        q.attachments AS \"quote_attachments: _\",\n                        q.body_ranges AS \"quote_body_ranges: _\",\n                        q.receipt AS \"quote_receipt: _\",\n                        NULL AS \"edit: _\",\n                        m.edited AS \"edited: _\",\n                        m.deleted AS \"deleted: _\",\n                        m.expire_timer AS \"expire_timer: _\",\n                        m.expires_at AS \"expires_at: _\",\n                        m.link_previews AS \"link_previews: _\"\n                    FROM messages AS m\n                    LEFT JOIN messages AS q ON q.channel_id = ?1 AND q.arrived_at = m.quote\n                    WHERE m.channel_id = ?1 AND m.arrived_at < ?2 AND m.edit IS NULL\n                    ORDER BY m.arrived_at DESC\n                    LIMIT ?3\n                ",
   "describe": {
     "columns": [
       {
@@ -195,6 +195,17 @@
             "name": "expires_at"
           }
         }
+      },
+      {
+        "name": "link_previews: _",
+        "ordinal": 18,
+        "type_info": "Blob",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "link_previews"
+          }
+        }
       }
     ],
     "parameters": {
@@ -218,8 +229,9 @@
       false,
       false,
       true,
+      true,
       true
     ]
   },
-  "hash": "9f104e3efabd81ee540cd6f9822a6af4539cebc6b1d8108209604ad9781f7222"
+  "hash": "6a761570db29262f1638cc132ed1ab1032f9e28c55ae60e0d13c894a830b181f"
 }
