@@ -719,20 +719,25 @@ fn add_link_previews(msg: &Message, out: &mut String) {
         if preview.is_empty() {
             continue;
         }
-        if !out.is_empty() {
-            out.push('\n');
-        }
-        out.push_str("[Link Preview]");
         if let Some(title) = &preview.title {
-            out.push('\n');
+            if !out.is_empty() {
+                out.push('\n');
+            }
+            out.push_str("[preview title] ");
             out.push_str(&strip_ansi_escapes::strip_str(title));
         }
         if let Some(desc) = &preview.description {
-            out.push('\n');
+            if !out.is_empty() {
+                out.push('\n');
+            }
+            out.push_str("[preview desc] ");
             out.push_str(&strip_ansi_escapes::strip_str(desc));
         }
         if let Some(url) = &preview.url {
-            out.push('\n');
+            if !out.is_empty() {
+                out.push('\n');
+            }
+            out.push_str("[preview url] ");
             out.push_str(&strip_ansi_escapes::strip_str(url));
         }
     }
@@ -962,7 +967,7 @@ mod tests {
 
     fn test_link_preview() -> LinkPreview {
         LinkPreview {
-            url: Some("https://example.com/article".into()),
+            url: Some("https://x.co/a".into()),
             title: Some("Example Article".into()),
             description: Some("A short description".into()),
         }
@@ -1098,12 +1103,13 @@ mod tests {
                 ),
                 Span::styled("boxdot", Style::default().fg(Color::Green)),
                 Span::raw(": "),
-                Span::raw("[Link Preview]"),
+                Span::raw("[preview title] Example Article"),
             ]),
-            Line::from(vec![Span::raw("                  Example Article")]),
-            Line::from(vec![Span::raw("                  A short description")]),
             Line::from(vec![Span::raw(
-                "                  https://example.com/article",
+                "                  [preview desc] A short description",
+            )]),
+            Line::from(vec![Span::raw(
+                "                  [preview url] https://x.co/a",
             )]),
         ]));
         assert_eq!(rendered, Some(expected));
@@ -1140,11 +1146,14 @@ mod tests {
                 Span::raw(": "),
                 Span::raw("Check this out"),
             ]),
-            Line::from(vec![Span::raw("                  [Link Preview]")]),
-            Line::from(vec![Span::raw("                  Example Article")]),
-            Line::from(vec![Span::raw("                  A short description")]),
             Line::from(vec![Span::raw(
-                "                  https://example.com/article",
+                "                  [preview title] Example Article",
+            )]),
+            Line::from(vec![Span::raw(
+                "                  [preview desc] A short description",
+            )]),
+            Line::from(vec![Span::raw(
+                "                  [preview url] https://x.co/a",
             )]),
         ]));
         assert_eq!(rendered, Some(expected));
