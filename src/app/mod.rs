@@ -16,7 +16,7 @@ use crate::event::Event;
 use crate::input::Input;
 use crate::receipt::ReceiptHandler;
 use crate::signal::{Attachment, SignalManager};
-use crate::storage::{MessageId, Storage};
+use crate::storage::{MessageId, SqliteStorage};
 use crate::util::StatefulList;
 use crate::{
     app::channel::ChannelPosition,
@@ -34,7 +34,7 @@ mod window;
 pub struct App {
     pub config: Config,
     signal_manager: Box<dyn SignalManager>,
-    pub storage: Box<dyn Storage>,
+    pub storage: SqliteStorage,
     /// List of channels in memory
     ///
     /// Additionally used as in-memory cache. All writes to the storage must update the data in this
@@ -73,16 +73,16 @@ pub struct App {
 }
 
 impl App {
-    pub fn try_new(
+    pub async fn try_new(
         config: Config,
         signal_manager: Box<dyn SignalManager>,
-        storage: Box<dyn Storage>,
+        storage: SqliteStorage,
     ) -> anyhow::Result<(Self, mpsc::UnboundedReceiver<Event>)> {
         let user_id = signal_manager.user_id();
 
         // build the list of channels
         let mut channels = StatefulList {
-            items: storage.channels(),
+            items: storage.channels().await,
             ..Default::default()
         };
         channels.next();
@@ -96,7 +96,7 @@ impl App {
         let mode_keybindings = get_keybindings(&config.keybindings, config.default_keybindings)
             .expect("keybinding configuration failed");
 
-        let next_expiring_at = storage.next_expiring_at();
+        let next_expiring_at = storage.next_expiring_at().await;
 
         let mut app = Self {
             config,
@@ -128,7 +128,7 @@ impl App {
             message_view_height: 0,
         };
 
-        app.on_channel_changed();
+        app.on_channel_changed().await;
 
         Ok((app, event_rx))
     }
@@ -238,6 +238,7 @@ impl App {
         if let Some(name) = self
             .storage
             .name(user_id)
+            .await
             .filter(|name| !name.trim().is_empty())
         {
             debug!(%name, "resolved name from storage");
@@ -305,13 +306,17 @@ impl App {
         self.show_channel_list = !self.show_channel_list;
     }
 
-    pub fn handle_event(&mut self, event: Event) -> anyhow::Result<()> {
+    pub async fn handle_event(&mut self, event: Event) -> anyhow::Result<()> {
         match event {
             Event::SentTextResult { message_id, result } => {
                 if let Err(error) = result {
-                    let mut message = self.storage.message(message_id).context("no message")?;
+                    let mut message = self
+                        .storage
+                        .message(message_id)
+                        .await
+                        .context("no message")?;
                     message.send_failed = Some(error.to_string());
-                    self.store_message(message_id.channel_id, message);
+                    self.store_message(message_id.channel_id, message).await;
                 }
             }
         }
@@ -420,7 +425,7 @@ pub(crate) mod tests {
         Rc<RefCell<Vec<Message>>>,
     ) {
         let url = "sqlite::memory:".parse().unwrap();
-        let mut storage = SqliteStorage::open_unencrypted(&url).await.unwrap();
+        let storage = SqliteStorage::open_unencrypted(&url).await.unwrap();
 
         let signal_manager = SignalManagerMock::new();
         let sent_messages = signal_manager.sent_messages.clone();
@@ -439,36 +444,36 @@ pub(crate) mod tests {
             typing: TypingSet::GroupTyping(Default::default()),
             expire_timer: None,
         };
-        storage.store_channel(&channel);
-        storage.store_message(
-            channel_id,
-            &Message {
-                from_id: signal_manager.user_id(),
-                message: Some("First message".to_string()),
-                arrived_at: 0,
-                quote: Default::default(),
-                attachments: Default::default(),
-                reactions: Default::default(),
-                receipt: Default::default(),
-                body_ranges: Default::default(),
-                send_failed: Default::default(),
-                edit: Default::default(),
-                edited: Default::default(),
-                deleted: Default::default(),
-                expire_timer: None,
-                expires_at: None,
-            },
-        );
+        storage.store_channel(&channel).await;
+        storage
+            .store_message(
+                channel_id,
+                &Message {
+                    from_id: signal_manager.user_id(),
+                    message: Some("First message".to_string()),
+                    arrived_at: 0,
+                    quote: Default::default(),
+                    attachments: Default::default(),
+                    reactions: Default::default(),
+                    receipt: Default::default(),
+                    body_ranges: Default::default(),
+                    send_failed: Default::default(),
+                    edit: Default::default(),
+                    edited: Default::default(),
+                    deleted: Default::default(),
+                    expire_timer: None,
+                    expires_at: None,
+                },
+            )
+            .await;
 
         let user = User {
             display_name: "Tyler Durden".to_string(),
         };
-        let (mut app, events) = App::try_new(
-            Config::with_user(user),
-            Box::new(signal_manager),
-            Box::new(storage),
-        )
-        .unwrap();
+        let (mut app, events) =
+            App::try_new(Config::with_user(user), Box::new(signal_manager), storage)
+                .await
+                .unwrap();
         app.channels.state.select(Some(0));
 
         (app, events, sent_messages)
@@ -482,7 +487,7 @@ pub(crate) mod tests {
             app.get_input().put_char(c);
         }
         let channel_id = app.channels().first().unwrap().id;
-        app.send_input(channel_id);
+        app.send_input(channel_id).await;
 
         assert_eq!(sent_messages.borrow().len(), 1);
         let msg = sent_messages.borrow()[0].clone();
@@ -510,7 +515,7 @@ pub(crate) mod tests {
         }
 
         let channel_id = app.channels().first().unwrap().id;
-        app.send_input(channel_id);
+        app.send_input(channel_id).await;
 
         assert_eq!(sent_messages.borrow().len(), 1);
         let msg = sent_messages.borrow()[0].clone();
@@ -535,7 +540,7 @@ pub(crate) mod tests {
         }
 
         let channel_id = app.channels().first().unwrap().id;
-        app.send_input(channel_id);
+        app.send_input(channel_id).await;
 
         assert_eq!(sent_messages.borrow().len(), 1);
         let msg = sent_messages.borrow()[0].clone();
@@ -555,17 +560,18 @@ pub(crate) mod tests {
 
         let channel_id = app.channels().first().unwrap().id;
         app.positions.entry(channel_id).or_default().selected =
-            Some(app.storage.messages_tail(channel_id, 1)[0].arrived_at);
+            Some(app.storage.messages_tail(channel_id, 1).await[0].arrived_at);
 
         app.get_input().put_char('\u{1F44D}');
 
         let channel_id = app.channels().first().unwrap().id;
         app.add_reaction(channel_id, None).await;
 
-        let arrived_at = app.storage.messages_tail(channel_id, 1)[0].arrived_at;
+        let arrived_at = app.storage.messages_tail(channel_id, 1).await[0].arrived_at;
         let reactions = &app
             .storage
             .message(MessageId::new(channel_id, arrived_at))
+            .await
             .unwrap()
             .reactions;
         assert_eq!(reactions.len(), 1);
@@ -578,17 +584,18 @@ pub(crate) mod tests {
 
         let channel_id = app.channels().first().unwrap().id;
         app.positions.entry(channel_id).or_default().selected =
-            Some(app.storage.messages_tail(channel_id, 1)[0].arrived_at);
+            Some(app.storage.messages_tail(channel_id, 1).await[0].arrived_at);
 
         for c in ":thumbsup:".chars() {
             app.get_input().put_char(c);
         }
         app.add_reaction(channel_id, None).await;
 
-        let arrived_at = app.storage.messages_tail(channel_id, 1)[0].arrived_at;
+        let arrived_at = app.storage.messages_tail(channel_id, 1).await[0].arrived_at;
         let reactions = &app
             .storage
             .message(MessageId::new(channel_id, arrived_at))
+            .await
             .unwrap()
             .reactions;
         assert_eq!(reactions.len(), 1);
@@ -601,22 +608,24 @@ pub(crate) mod tests {
 
         let channel_id = app.channels().first().unwrap().id;
         app.positions.entry(channel_id).or_default().selected =
-            Some(app.storage.messages_tail(channel_id, 1)[0].arrived_at);
+            Some(app.storage.messages_tail(channel_id, 1).await[0].arrived_at);
 
-        let arrived_at = app.storage.messages_tail(channel_id, 1)[0].arrived_at;
+        let arrived_at = app.storage.messages_tail(channel_id, 1).await[0].arrived_at;
         let mut message = app
             .storage
             .message(MessageId::new(channel_id, arrived_at))
+            .await
             .unwrap();
         message
             .reactions
             .push((app.user_id, "\u{1F44D}".to_string()));
-        app.store_message(channel_id, message);
+        app.store_message(channel_id, message).await;
         app.add_reaction(channel_id, None).await;
 
         let reactions = &app
             .storage
             .message(MessageId::new(channel_id, arrived_at))
+            .await
             .unwrap()
             .reactions;
         assert!(reactions.is_empty());
@@ -628,7 +637,7 @@ pub(crate) mod tests {
 
         let channel_id = app.channels().first().unwrap().id;
         app.positions.entry(channel_id).or_default().selected =
-            Some(app.storage.messages_tail(channel_id, 1)[0].arrived_at);
+            Some(app.storage.messages_tail(channel_id, 1).await[0].arrived_at);
 
         for c in ":thumbsup".chars() {
             app.get_input().put_char(c);
@@ -636,10 +645,11 @@ pub(crate) mod tests {
         app.add_reaction(channel_id, None).await;
 
         assert_eq!(app.get_input().data, ":thumbsup");
-        let arrived_at = app.storage.messages_tail(channel_id, 1)[0].arrived_at;
+        let arrived_at = app.storage.messages_tail(channel_id, 1).await[0].arrived_at;
         let reactions = &app
             .storage
             .message(MessageId::new(channel_id, arrived_at))
+            .await
             .unwrap()
             .reactions;
         assert!(reactions.is_empty());

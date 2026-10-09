@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     data::{Channel, ChannelId},
-    storage::Storage,
+    storage::SqliteStorage,
 };
 
 const MESSAGE_SCROLL_BACK: bool = false;
@@ -101,15 +101,15 @@ impl StatefulList<Channel> {
     ///
     /// If the channel is not found, does nothing. Returns `Some(true)` if the channel was modified.
     /// Returns `None` if the channel does not exist.
-    pub(crate) fn modify_channel(
+    pub(crate) async fn modify_channel(
         &mut self,
-        storage: &mut dyn Storage,
+        storage: &SqliteStorage,
         idx: usize,
         f: impl FnOnce(&mut Channel) -> bool,
     ) -> Option<bool> {
         let channel = self.items.get_mut(idx)?;
         if f(channel) {
-            storage.store_channel(channel);
+            storage.store_channel(channel).await;
             Some(true)
         } else {
             Some(false)
@@ -120,22 +120,22 @@ impl StatefulList<Channel> {
     ///
     /// If the channel is not found, does nothing. Returns `Some(true)` if the channel was modified.
     /// Returns `None` if no channel is selected or the channel does not exist.
-    pub(crate) fn modify_selected_channel(
+    pub(crate) async fn modify_selected_channel(
         &mut self,
-        storage: &mut dyn Storage,
+        storage: &SqliteStorage,
         f: impl FnOnce(&mut Channel) -> bool,
     ) -> Option<bool> {
         let idx = self.state.selected()?;
-        self.modify_channel(storage, idx, f)
+        self.modify_channel(storage, idx, f).await
     }
 
     /// Modifies the channel with the given id and writes it to the storage.
     ///
     /// If the channel is not found, does nothing. Returns `Some(true)` if the channel was modified.
     /// Returns `None` if the channel does not exist.
-    pub(crate) fn modify_channel_by_id(
+    pub(crate) async fn modify_channel_by_id(
         &mut self,
-        storage: &mut dyn Storage,
+        storage: &SqliteStorage,
         channel_id: ChannelId,
         f: impl FnOnce(&mut Channel) -> bool,
     ) -> Option<bool> {
@@ -143,7 +143,7 @@ impl StatefulList<Channel> {
             .items
             .iter()
             .position(|channel| channel.id == channel_id)?;
-        self.modify_channel(storage, idx, f)
+        self.modify_channel(storage, idx, f).await
     }
 }
 

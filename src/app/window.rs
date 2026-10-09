@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use crate::{
     app::App,
     data::{ChannelId, Message},
-    storage::{MessageId, Storage},
+    storage::{MessageId, SqliteStorage},
 };
 
 /// Fetch granularity for load_*/extend_*
@@ -40,7 +40,7 @@ pub(crate) struct MessageWindow {
 
 impl App {
     /// Ensures the message window is filled with enough messages to fill the viewport
-    pub fn ensure_message_window_filled(&mut self) {
+    pub async fn ensure_message_window_filled(&mut self) {
         let Some(window) = self.window.as_ref() else {
             return;
         };
@@ -54,10 +54,10 @@ impl App {
         let target = (self.message_view_height + FILL_MARGIN).min(MAX_WINDOW / 2);
         let window = self.window.as_mut().expect("logic error: no window");
         while !window.at_oldest() && window.loaded_above(anchor) < target {
-            window.extend_older(&*self.storage, PAGE);
+            window.extend_older(&self.storage, PAGE).await;
         }
         while !window.at_newest() && window.loaded_below(anchor) < target {
-            window.extend_newer(&*self.storage, PAGE);
+            window.extend_newer(&self.storage, PAGE).await;
         }
     }
 }
@@ -74,35 +74,41 @@ impl MessageWindow {
     }
 
     /// Load newest `limit` messages.
-    pub(crate) fn load_tail(&mut self, storage: &dyn Storage, limit: usize) {
-        self.items = storage.messages_tail(self.channel_id, limit).into();
+    pub(crate) async fn load_tail(&mut self, storage: &SqliteStorage, limit: usize) {
+        self.items = storage.messages_tail(self.channel_id, limit).await.into();
         self.at_newest = true;
         self.at_oldest = self.items.len() < limit;
     }
 
-    pub(crate) fn load_around(&mut self, storage: &dyn Storage, anchor: u64, limit: usize) {
+    pub(crate) async fn load_around(&mut self, storage: &SqliteStorage, anchor: u64, limit: usize) {
         self.items = storage
             .messages_before(self.channel_id, anchor, limit)
+            .await
             .into();
         self.at_oldest = self.items.len() < limit;
-        if let Some(message) = storage.message(MessageId::new(self.channel_id, anchor)) {
+        if let Some(message) = storage
+            .message(MessageId::new(self.channel_id, anchor))
+            .await
+        {
             self.items.push_back(message);
         }
-        let suffix = storage.messages_after(self.channel_id, anchor, limit);
+        let suffix = storage.messages_after(self.channel_id, anchor, limit).await;
         self.at_newest = suffix.len() < limit;
         self.items.extend(suffix);
     }
 
     // Grow at edges
 
-    pub(crate) fn extend_older(&mut self, storage: &dyn Storage, count: usize) {
+    pub(crate) async fn extend_older(&mut self, storage: &SqliteStorage, count: usize) {
         if self.at_oldest {
             return;
         }
         let Some(oldest) = self.oldest() else {
             return;
         };
-        let prefix = storage.messages_before(self.channel_id, oldest, count);
+        let prefix = storage
+            .messages_before(self.channel_id, oldest, count)
+            .await;
         self.at_oldest = prefix.len() < count;
         for message in prefix.into_iter().rev() {
             self.items.push_front(message);
@@ -113,14 +119,14 @@ impl MessageWindow {
         }
     }
 
-    pub(crate) fn extend_newer(&mut self, storage: &dyn Storage, count: usize) {
+    pub(crate) async fn extend_newer(&mut self, storage: &SqliteStorage, count: usize) {
         if self.at_newest {
             return;
         }
         let Some(newest) = self.newest() else {
             return;
         };
-        let suffix = storage.messages_after(self.channel_id, newest, count);
+        let suffix = storage.messages_after(self.channel_id, newest, count).await;
         self.at_newest = suffix.len() < count;
         self.items.extend(suffix);
         if self.items.len() > MAX_WINDOW {
@@ -327,18 +333,22 @@ mod tests {
 
     async fn storage_with(arrived_ats: &[u64]) -> SqliteStorage {
         let url = "sqlite::memory:".parse().unwrap();
-        let mut storage = SqliteStorage::open_unencrypted(&url).await.unwrap();
-        storage.store_channel(&Channel {
-            id: ch(),
-            name: "test".to_owned(),
-            group_data: None,
-            unread_messages: 0,
-            muted: false,
-            typing: TypingSet::new(false),
-            expire_timer: None,
-        });
+        let storage = SqliteStorage::open_unencrypted(&url).await.unwrap();
+        storage
+            .store_channel(&Channel {
+                id: ch(),
+                name: "test".to_owned(),
+                group_data: None,
+                unread_messages: 0,
+                muted: false,
+                typing: TypingSet::new(false),
+                expire_timer: None,
+            })
+            .await;
         for &a in arrived_ats {
-            storage.store_message(ch(), &Message::text(FROM, a, format!("m{a}")));
+            storage
+                .store_message(ch(), &Message::text(FROM, a, format!("m{a}")))
+                .await;
         }
         storage
     }
@@ -472,7 +482,7 @@ mod tests {
     async fn load_tail_returns_newest_ascending() {
         let storage = storage_with(&[10, 20, 30, 40, 50, 60, 70, 80, 90]).await;
         let mut w = MessageWindow::new(ch());
-        w.load_tail(&storage, 3);
+        w.load_tail(&storage, 3).await;
         assert_eq!(ats(&w), [70, 80, 90]);
         assert!(w.at_newest());
         assert!(!w.at_oldest());
@@ -482,7 +492,7 @@ mod tests {
     async fn load_tail_short_result_sets_at_oldest() {
         let storage = storage_with(&[10, 20, 30]).await;
         let mut w = MessageWindow::new(ch());
-        w.load_tail(&storage, 10);
+        w.load_tail(&storage, 10).await;
         assert_eq!(ats(&w), [10, 20, 30]);
         assert!(w.at_newest());
         assert!(w.at_oldest());
@@ -492,7 +502,7 @@ mod tests {
     async fn load_tail_empty_channel() {
         let storage = storage_with(&[]).await;
         let mut w = MessageWindow::new(ch());
-        w.load_tail(&storage, 10);
+        w.load_tail(&storage, 10).await;
         assert!(w.is_empty());
         assert!(w.at_oldest() && w.at_newest());
     }
@@ -503,7 +513,7 @@ mod tests {
     async fn load_around_centers_on_anchor() {
         let storage = storage_with(&[10, 20, 30, 40, 50, 60, 70, 80, 90]).await;
         let mut w = MessageWindow::new(ch());
-        w.load_around(&storage, 50, 2);
+        w.load_around(&storage, 50, 2).await;
         assert_eq!(ats(&w), [30, 40, 50, 60, 70]);
         assert!(!w.at_oldest());
         assert!(!w.at_newest());
@@ -513,7 +523,7 @@ mod tests {
     async fn load_around_at_oldest_edge() {
         let storage = storage_with(&[10, 20, 30, 40, 50]).await;
         let mut w = MessageWindow::new(ch());
-        w.load_around(&storage, 10, 2);
+        w.load_around(&storage, 10, 2).await;
         assert_eq!(ats(&w), [10, 20, 30]);
         assert!(w.at_oldest());
         assert!(!w.at_newest());
@@ -525,18 +535,18 @@ mod tests {
     async fn extend_older_pages_in_and_stops_at_oldest() {
         let storage = storage_with(&[10, 20, 30, 40, 50]).await;
         let mut w = MessageWindow::new(ch());
-        w.load_tail(&storage, 2);
+        w.load_tail(&storage, 2).await;
         assert_eq!(ats(&w), [40, 50]);
 
-        w.extend_older(&storage, 2);
+        w.extend_older(&storage, 2).await;
         assert_eq!(ats(&w), [20, 30, 40, 50]);
         assert!(!w.at_oldest());
 
-        w.extend_older(&storage, 2); // only 10 left -> short -> at_oldest
+        w.extend_older(&storage, 2).await; // only 10 left -> short -> at_oldest
         assert_eq!(ats(&w), [10, 20, 30, 40, 50]);
         assert!(w.at_oldest());
 
-        w.extend_older(&storage, 2); // no-op at the oldest
+        w.extend_older(&storage, 2).await; // no-op at the oldest
         assert_eq!(ats(&w), [10, 20, 30, 40, 50]);
     }
 
@@ -544,15 +554,15 @@ mod tests {
     async fn extend_newer_pages_in_and_stops_at_newest() {
         let storage = storage_with(&[10, 20, 30, 40, 50]).await;
         let mut w = MessageWindow::new(ch());
-        w.load_around(&storage, 20, 1); // [10, 20, 30], not at newest
+        w.load_around(&storage, 20, 1).await; // [10, 20, 30], not at newest
         assert_eq!(ats(&w), [10, 20, 30]);
         assert!(!w.at_newest());
 
-        w.extend_newer(&storage, 1);
+        w.extend_newer(&storage, 1).await;
         assert_eq!(ats(&w), [10, 20, 30, 40]);
         assert!(!w.at_newest());
 
-        w.extend_newer(&storage, 5); // only 50 left -> short -> at_newest
+        w.extend_newer(&storage, 5).await; // only 50 left -> short -> at_newest
         assert_eq!(ats(&w), [10, 20, 30, 40, 50]);
         assert!(w.at_newest());
     }
@@ -565,15 +575,16 @@ mod tests {
         let channel_id = app.channels().first().unwrap().id;
         for a in 1..=800u64 {
             app.storage
-                .store_message(channel_id, &Message::text(FROM, a, format!("m{a}")));
+                .store_message(channel_id, &Message::text(FROM, a, format!("m{a}")))
+                .await;
         }
 
         // viewport far taller than the window can hold, anchored in the middle
         app.message_view_height = MAX_WINDOW * 4;
         app.positions.entry(channel_id).or_default().viewport_bottom = Some(400);
-        app.on_channel_changed();
+        app.on_channel_changed().await;
 
-        app.ensure_message_window_filled();
+        app.ensure_message_window_filled().await;
 
         let window = app.window.as_ref().unwrap();
         assert!(
@@ -591,13 +602,13 @@ mod tests {
         let storage = storage_with(&arrived_ats).await;
         let mut w = MessageWindow::new(ch());
 
-        w.load_tail(&storage, MAX_WINDOW);
+        w.load_tail(&storage, MAX_WINDOW).await;
         assert_eq!(w.items.len(), MAX_WINDOW);
         assert!(w.at_newest());
         assert!(!w.at_oldest());
         let newest_before = w.newest();
 
-        w.extend_older(&storage, PAGE); // pushes over MAX_WINDOW -> trim the newest edge
+        w.extend_older(&storage, PAGE).await; // pushes over MAX_WINDOW -> trim the newest edge
         assert_eq!(w.items.len(), MAX_WINDOW);
         assert!(!w.at_newest()); // newest end was trimmed
         assert!(!w.at_oldest());

@@ -4,7 +4,7 @@ use ratatui::widgets::ListState;
 
 use crate::data::ChannelId;
 use crate::input::Input;
-use crate::storage::Storage;
+use crate::storage::SqliteStorage;
 
 #[derive(Default)]
 pub(crate) struct SelectChannel {
@@ -21,24 +21,28 @@ pub(crate) struct ItemData {
 }
 
 impl SelectChannel {
-    pub fn reset(&mut self, storage: &dyn Storage) {
+    pub async fn reset(&mut self, storage: &SqliteStorage) {
         self.input.take();
         self.state = Default::default();
 
-        let items = storage.channels().into_iter().map(|channel| ItemData {
-            channel_id: channel.id,
-            name: channel.name.clone(),
-        });
-        self.items.clear();
-        self.items.extend(items);
-
-        // sort_by_cached_key: the key hits the storage, evaluate it once per channel
-        self.items.sort_by_cached_key(|item| {
+        let channels = storage.channels().await;
+        let mut items = Vec::with_capacity(channels.len());
+        for channel in channels {
             let last_message_arrived_at = storage
-                .last_message(item.channel_id)
+                .last_message(channel.id)
+                .await
                 .map(|message| message.arrived_at);
-            (Reverse(last_message_arrived_at), item.name.clone())
-        });
+            items.push((
+                (Reverse(last_message_arrived_at), channel.name.clone()),
+                ItemData {
+                    channel_id: channel.id,
+                    name: channel.name,
+                },
+            ));
+        }
+        items.sort_by(|(a, _), (b, _)| a.cmp(b));
+        self.items.clear();
+        self.items.extend(items.into_iter().map(|(_, item)| item));
 
         self.filtered_index.clear();
     }

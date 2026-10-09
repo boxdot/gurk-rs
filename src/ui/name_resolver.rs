@@ -5,7 +5,7 @@ use ratatui::style::Color;
 use uuid::Uuid;
 
 use crate::app::App;
-use crate::storage::MessageId;
+use crate::data::{ChannelId, Message};
 
 /// Once constructed for a channel, resolves uuid to name and color
 ///
@@ -16,33 +16,32 @@ pub struct NameResolver<'a> {
 }
 
 impl<'a> NameResolver<'a> {
-    pub fn compute(
+    pub fn compute<'m>(
         app: &'a App,
-        relevant_message_ids: impl IntoIterator<Item = MessageId>,
+        channel_id: ChannelId,
+        relevant_messages: impl IntoIterator<Item = &'m Message>,
     ) -> Self {
         let mut names_and_colors: HashMap<Uuid, (String, Color)> = Default::default();
         names_and_colors.insert(app.user_id, app.name_and_color(app.user_id));
-        for message_id in relevant_message_ids {
-            if let Some(message) = app.storage.message(message_id) {
-                names_and_colors
-                    .entry(message.from_id)
-                    .or_insert_with(|| app.name_and_color(message.from_id));
-                if message_id.channel_id.is_user() {
-                    if message_id.channel_id == app.user_id {
-                        break; // amortize notes channel
-                    } else if message.from_id != app.user_id {
-                        // use different color for our user name
-                        let &(_, contact_color) =
-                            names_and_colors.get(&message.from_id).expect("logic error");
-                        let (_, self_color) =
-                            names_and_colors.get_mut(&app.user_id).expect("logic error");
-                        if self_color == &contact_color
-                            && let Some(idx) = USER_COLORS.iter().position(|&c| c == *self_color)
-                        {
-                            *self_color = USER_COLORS[(idx + 1) % USER_COLORS.len()];
-                        }
-                        break; // amortize direct channel
+        for message in relevant_messages {
+            names_and_colors
+                .entry(message.from_id)
+                .or_insert_with(|| app.name_and_color(message.from_id));
+            if channel_id.is_user() {
+                if channel_id == app.user_id {
+                    break; // amortize notes channel
+                } else if message.from_id != app.user_id {
+                    // use different color for our user name
+                    let &(_, contact_color) =
+                        names_and_colors.get(&message.from_id).expect("logic error");
+                    let (_, self_color) =
+                        names_and_colors.get_mut(&app.user_id).expect("logic error");
+                    if self_color == &contact_color
+                        && let Some(idx) = USER_COLORS.iter().position(|&c| c == *self_color)
+                    {
+                        *self_color = USER_COLORS[(idx + 1) % USER_COLORS.len()];
                     }
+                    break; // amortize direct channel
                 }
             }
         }

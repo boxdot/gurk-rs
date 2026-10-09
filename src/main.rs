@@ -23,7 +23,7 @@ use gurk::{app::App, config::Config};
 use gurk::{backoff::Backoff, passphrase::Passphrase};
 use gurk::{
     onboarding,
-    storage::{SqliteStorage, Storage, sync_from_signal},
+    storage::{SqliteStorage, sync_from_signal},
 };
 use gurk::{signal, ui};
 use presage::libsignal_service::content::Content;
@@ -39,7 +39,6 @@ use url::Url;
 const TARGET_FPS: u64 = 144;
 const RECEIPT_TICK_PERIOD: u64 = 144;
 const FRAME_BUDGET: Duration = Duration::from_millis(1000 / TARGET_FPS);
-const SAVE_BUDGET: Duration = Duration::from_millis(1000);
 const RECEIPT_BUDGET: Duration = Duration::from_millis(RECEIPT_TICK_PERIOD * 1000 / TARGET_FPS);
 
 #[derive(Debug, Parser)]
@@ -155,7 +154,7 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
     let mut signal_manager =
         signal::ensure_linked_device(relink, local_pool.clone(), &config, &passphrase).await?;
 
-    let mut storage: Box<dyn Storage> = {
+    let storage = {
         let url = match config
             .sqlite
             .as_ref()
@@ -167,15 +166,15 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
         };
 
         debug!(%url, "opening sqlite data storage");
-        let sqlite_storage = SqliteStorage::maybe_encrypt_and_open(&url, &passphrase, false)
+        SqliteStorage::maybe_encrypt_and_open(&url, &passphrase, false)
             .await
-            .with_context(|| format!("failed to open sqlite data storage at: {url}"))?;
-        Box::new(sqlite_storage)
+            .with_context(|| format!("failed to open sqlite data storage at: {url}"))?
     };
 
-    sync_from_signal(&*signal_manager, &mut *storage).await;
+    sync_from_signal(&*signal_manager, &storage).await;
 
-    let (mut app, mut app_events) = App::try_new(config, signal_manager.clone_boxed(), storage)?;
+    let (mut app, mut app_events) =
+        App::try_new(config, signal_manager.clone_boxed(), storage).await?;
     app.populate_names_cache().await;
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Event>(100);
@@ -262,7 +261,6 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
 
     let mut res = Ok(()); // result on quit
     let mut last_render_at = Instant::now();
-    let mut last_save_at = Instant::now();
     let is_render_spawned = Arc::new(AtomicBool::new(false));
 
     let tick_tx = tx.clone();
@@ -306,6 +304,9 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
                 terminal.swap_buffers();
                 app.should_clear = false;
             }
+            if !app.is_help() {
+                app.prepare_receipts().await;
+            }
             terminal.draw(|f| ui::draw(f, &mut app))?;
             last_render_at = Instant::now();
         }
@@ -318,12 +319,12 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
         match event {
             Some(Event::Tick) => {
                 app.step_receipts();
-                app.expire_typing_indicators();
+                app.expire_typing_indicators().await;
                 expire_tick_counter += 1;
                 if expire_tick_counter >= 5 {
                     expire_tick_counter = 0;
-                    app.activate_expire_timers();
-                    app.expire_messages();
+                    app.activate_expire_timers().await;
+                    app.expire_messages().await;
                 }
             }
             Some(Event::Click(event)) => match event.kind {
@@ -339,26 +340,26 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
                         app.channels.state.select(Some(channel_idx));
                         let new = app.selected_channel_id();
                         app.swap_channel_draft(old, new);
-                        app.on_channel_changed();
-                        app.reset_unread_messages();
+                        app.on_channel_changed().await;
+                        app.reset_unread_messages().await;
                     }
                 }
                 MouseEventKind::ScrollUp => {
                     if event.column
                         < terminal.get_frame().area().width / ui::CHANNEL_VIEW_RATIO as u16
                     {
-                        app.select_previous_channel()
+                        app.select_previous_channel().await
                     } else {
-                        app.on_pgup()
+                        app.on_pgup().await
                     }
                 }
                 MouseEventKind::ScrollDown => {
                     if event.column
                         < terminal.get_frame().area().width / ui::CHANNEL_VIEW_RATIO as u16
                     {
-                        app.select_next_channel()
+                        app.select_next_channel().await
                     } else {
-                        app.on_pgdn()
+                        app.on_pgdn().await
                     }
                 }
                 _ => {}
@@ -391,13 +392,13 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
                 break;
             }
             Some(Event::ContactSynced(at)) => {
-                let mut metadata = app.storage.metadata();
+                let mut metadata = app.storage.metadata().await;
                 metadata.contacts_sync_request_at.replace(at);
-                app.storage.store_metadata(&metadata);
+                app.storage.store_metadata(&metadata).await;
                 info!(%at, "synced contacts");
             }
             Some(Event::AppEvent(event)) => {
-                if let Err(error) = app.handle_event(event) {
+                if let Err(error) = app.handle_event(event).await {
                     error!(%error, "failed to handle app event");
                 }
             }
@@ -406,7 +407,7 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
             }
         }
 
-        app.ensure_message_window_filled();
+        app.ensure_message_window_filled().await;
 
         if app.open_editor_requested {
             app.open_editor_requested = false;
@@ -443,11 +444,6 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
                 app.input.data = text;
                 app.input.on_end();
             }
-        }
-
-        if last_save_at.elapsed() > SAVE_BUDGET || app.should_quit {
-            app.storage.save();
-            last_save_at = Instant::now();
         }
 
         if app.should_quit {
