@@ -60,6 +60,9 @@ pub struct Config {
     /// Whether to enable the default keybindings
     #[serde(default = "default_true")]
     pub default_keybindings: bool,
+    /// REST API configuration
+    #[serde(default)]
+    pub api: ApiConfig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -105,6 +108,32 @@ impl Default for NotificationConfig {
 pub struct DeveloperConfig {
     /// Dump raw messages to `messages.json` for collecting debug/benchmark data
     pub dump_raw_messages: bool,
+}
+
+/// Configuration for the local REST API
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ApiConfig {
+    /// Whether to enable the API server
+    #[serde(default)]
+    pub enabled: bool,
+    /// Address to bind the API server (default: 127.0.0.1:23374)
+    #[serde(default = "ApiConfig::default_bind")]
+    pub bind: String,
+}
+
+impl Default for ApiConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            bind: Self::default_bind(),
+        }
+    }
+}
+
+impl ApiConfig {
+    fn default_bind() -> String {
+        "127.0.0.1:23374".to_string()
+    }
 }
 
 #[cfg(feature = "dev")]
@@ -207,6 +236,7 @@ impl Config {
             colored_messages: false,
             default_keybindings: true,
             keybindings: ModeKeybindingConfig::default(),
+            api: ApiConfig::default(),
         }
     }
 
@@ -318,7 +348,7 @@ impl Config {
         let parent_dir = path
             .parent()
             .ok_or_else(|| anyhow!("invalid config path {}: no parent dir", path.display()))?;
-        fs::create_dir_all(parent_dir).unwrap();
+        fs::create_dir_all(parent_dir)?;
         write_config(path, &content)?;
         Ok(())
     }
@@ -329,6 +359,25 @@ impl Config {
 
     pub(crate) fn signal_db_path(&self) -> PathBuf {
         self.data_dir.join(SIGNAL_DB_NAME)
+    }
+
+    /// Path to the API token file
+    pub fn api_token_path(&self) -> PathBuf {
+        self.data_dir.join("api_token")
+    }
+
+    /// Load or generate the API token
+    pub fn api_token(&self) -> anyhow::Result<String> {
+        let path = self.api_token_path();
+        if path.exists() {
+            Ok(fs::read_to_string(&path)?.trim().to_string())
+        } else {
+            // ponytail: uuid v4 gives 122 bits of randomness, plenty for a local API token
+            let token = format!("{}{}", uuid::Uuid::new_v4(), uuid::Uuid::new_v4())
+                .replace('-', "");
+            write_config(&path, &token)?;
+            Ok(token)
+        }
     }
 }
 

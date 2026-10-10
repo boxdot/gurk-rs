@@ -6,7 +6,7 @@ use std::path::Path;
 use anyhow::Context as _;
 use itertools::Itertools;
 use regex::Regex;
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 use tracing::{debug, error, warn};
 use uuid::Uuid;
 
@@ -57,6 +57,7 @@ pub struct App {
     pub(crate) select_channel: SelectChannel,
     clipboard: Option<arboard::Clipboard>,
     event_tx: mpsc::UnboundedSender<Event>,
+    api_event_tx: Option<broadcast::Sender<crate::api::ApiEvent>>,
     // It is expensive to hit the signal manager contacts storage, so we cache it
     names_cache: Cell<Option<BTreeMap<Uuid, String>>>,
     pub mode_keybindings: ModeKeybinding,
@@ -77,6 +78,7 @@ impl App {
         config: Config,
         signal_manager: Box<dyn SignalManager>,
         storage: Box<dyn Storage>,
+        api_event_tx: Option<broadcast::Sender<crate::api::ApiEvent>>,
     ) -> anyhow::Result<(Self, mpsc::UnboundedReceiver<Event>)> {
         let user_id = signal_manager.user_id();
 
@@ -120,6 +122,7 @@ impl App {
             select_channel: Default::default(),
             clipboard,
             event_tx,
+            api_event_tx,
             names_cache: Default::default(),
             mode_keybindings,
             channel_selected_at: std::time::Instant::now(),
@@ -189,7 +192,9 @@ impl App {
             let uuids: Box<dyn Iterator<Item = Uuid>> = match &channel.typing {
                 TypingSet::GroupTyping(map) => Box::new(map.keys().copied()),
                 TypingSet::SingleTyping(Some(_)) => {
-                    Box::new(std::iter::once(channel.user_id().unwrap()))
+                    Box::new(std::iter::once(channel.user_id().expect(
+                        "SingleTyping is only set on 1:1 channels which have a user_id",
+                    )))
                 }
                 TypingSet::SingleTyping(None) => Box::new(std::iter::empty()),
             };
@@ -318,8 +323,58 @@ impl App {
         Ok(())
     }
 
+    /// Broadcast an event to API SSE clients (if enabled)
+    fn broadcast_api_event(&self, event: crate::api::ApiEvent) {
+        if let Some(tx) = &self.api_event_tx {
+            let _ = tx.send(event); // ignore errors (no subscribers)
+        }
+    }
+
+    /// Handle a command from the API server
+    pub fn handle_api_command(&mut self, cmd: crate::event::ApiCommand) {
+        use crate::event::{ApiCommandKind, ApiResponse};
+
+        let response = match cmd.kind {
+            ApiCommandKind::SendMessage { channel_id, text } => {
+                if let Some(channel) = self.channel(channel_id) {
+                    let (sent_message, _response) = self.signal_manager.send_text(
+                        channel,
+                        text,
+                        None, // no quote
+                        None, // not editing
+                        vec![], // no attachments
+                    );
+                    let arrived_at = sent_message.arrived_at;
+                    self.store_message(channel_id, sent_message.clone());
+                    self.bubble_up_channel(channel_id);
+
+                    // Broadcast to SSE clients
+                    self.broadcast_api_event(crate::api::ApiEvent::MessageSent {
+                        chat_id: channel_id_to_string(&channel_id),
+                        message_id: format!("{}-{}", channel_id_to_string(&channel_id), arrived_at),
+                        arrived_at,
+                    });
+
+                    ApiResponse::MessageSent { arrived_at }
+                } else {
+                    ApiResponse::Error("channel not found".into())
+                }
+            }
+        };
+
+        // Send response back to API
+        let _ = cmd.response_tx.send(response);
+    }
+
     pub(crate) fn is_editing(&self) -> bool {
         self.editing.is_some()
+    }
+}
+
+fn channel_id_to_string(id: &ChannelId) -> String {
+    match id {
+        ChannelId::User(uuid) => format!("user-{}", uuid),
+        ChannelId::Group(bytes) => format!("group-{}", hex::encode(bytes)),
     }
 }
 
@@ -457,6 +512,7 @@ pub(crate) mod tests {
                 deleted: Default::default(),
                 expire_timer: None,
                 expires_at: None,
+                link_previews: Default::default(),
             },
         );
 
@@ -467,6 +523,7 @@ pub(crate) mod tests {
             Config::with_user(user),
             Box::new(signal_manager),
             Box::new(storage),
+            None,
         )
         .unwrap();
         app.channels.state.select(Some(0));

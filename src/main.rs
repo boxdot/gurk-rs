@@ -23,7 +23,7 @@ use gurk::{app::App, config::Config};
 use gurk::{backoff::Backoff, passphrase::Passphrase};
 use gurk::{
     onboarding,
-    storage::{SqliteStorage, Storage, sync_from_signal},
+    storage::{SharedStorage, SqliteStorage, Storage, sync_from_signal},
 };
 use gurk::{signal, ui};
 use presage::libsignal_service::content::Content;
@@ -143,6 +143,7 @@ pub enum Event {
     ContactSynced(DateTime<Utc>),
     Tick,
     AppEvent(gurk::event::Event),
+    ApiCommand(gurk::event::ApiCommand),
 }
 
 async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Result<()> {
@@ -152,30 +153,44 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
     let mut signal_manager =
         signal::ensure_linked_device(relink, local_pool.clone(), &config, &passphrase).await?;
 
-    let mut storage: Box<dyn Storage> = {
-        let url = match config
-            .sqlite
-            .as_ref()
-            .map(|sqlite_config| sqlite_config.url.clone())
-        {
-            Some(url) => url,
-            None => Url::from_file_path(config.gurk_db_path())
-                .map_err(|_| anyhow!("failed to convert gurk db path to url"))?,
-        };
-
-        debug!(%url, "opening sqlite data storage");
-        let sqlite_storage = SqliteStorage::maybe_encrypt_and_open(&url, &passphrase, false)
-            .await
-            .with_context(|| format!("failed to open sqlite data storage at: {url}"))?;
-        Box::new(sqlite_storage)
+    let db_url = match config
+        .sqlite
+        .as_ref()
+        .map(|sqlite_config| sqlite_config.url.clone())
+    {
+        Some(url) => url,
+        None => Url::from_file_path(config.gurk_db_path())
+            .map_err(|_| anyhow!("failed to convert gurk db path to url"))?,
     };
+
+    // Create shared storage for both App and API
+    let shared_storage = {
+        debug!(%db_url, "opening sqlite data storage");
+        let sqlite_storage = SqliteStorage::maybe_encrypt_and_open(&db_url, &passphrase, false)
+            .await
+            .with_context(|| format!("failed to open sqlite data storage at: {db_url}"))?;
+        SharedStorage::new(sqlite_storage)
+    };
+
+    // Get Arc for API before wrapping in Box
+    let api_storage_arc = shared_storage.inner();
+
+    let mut storage: Box<dyn Storage> = Box::new(shared_storage);
 
     sync_from_signal(&*signal_manager, &mut *storage).await;
 
-    let (mut app, mut app_events) = App::try_new(config, signal_manager.clone_boxed(), storage)?;
-    app.populate_names_cache().await;
-
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Event>(100);
+    let (api_tx, mut api_rx) = tokio::sync::mpsc::channel::<gurk::event::ApiCommand>(100);
+
+    // Start API server if enabled, sharing the same storage
+    let api_event_tx = if config.api.enabled {
+        gurk::api::start_server(&config, api_storage_arc, api_tx).await?
+    } else {
+        None
+    };
+
+    let (mut app, mut app_events) = App::try_new(config, signal_manager.clone_boxed(), storage, api_event_tx)?;
+    app.populate_names_cache().await;
     let inner_tx = tx.clone();
     local_pool.spawn(move || async move {
         let mut backoff = Backoff::new();
@@ -307,6 +322,7 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
         let event = select! {
             v = rx.recv() => v,
             v = app_events.recv() => v.map(Event::AppEvent),
+            v = api_rx.recv() => v.map(Event::ApiCommand),
         };
 
         match event {
@@ -394,6 +410,9 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
                 if let Err(error) = app.handle_event(event) {
                     error!(%error, "failed to handle app event");
                 }
+            }
+            Some(Event::ApiCommand(cmd)) => {
+                app.handle_api_command(cmd);
             }
             None => {
                 break;
