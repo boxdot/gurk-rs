@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.2] - 2026-10-12
+
+### 🚀 Features
+
+- Display audio attachments as Voice Note (#583)
+
+### 🐛 Bug Fixes
+
+- Quotes in private note messages (#571)
+- Clear screen (ctrl+l) crash (#584)
+- Fix date line being off by 1 message (#570)
+
+### 💼 Other
+
+- *(deps)* Upgrade presage/libsignal-service with libsignal 0.99 (#569, #585, #588)
+- *(deps)* Update dependencies (#576)
+- *(deps)* Remove qr2term dependency (#577)
+
+
 ## [0.10.1] - 2026-07-26
 
 This release fixes potential account linking issues.
