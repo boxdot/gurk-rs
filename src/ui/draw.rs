@@ -853,6 +853,7 @@ fn help_indicators<'a>() -> Vec<Line<'a>> {
     let indicators: &[(&str, &str)] = &[
         ("(N)", "N unread messages in channel"),
         ("[M]", "Channel is muted (notifications silenced)"),
+        ("[T]", "Someone is typing in channel"),
         ("○", "Message sent"),
         ("◉", "Message delivered"),
         ("●", "Message read"),
