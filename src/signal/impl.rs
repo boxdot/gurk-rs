@@ -278,6 +278,7 @@ impl SignalManager for PresageManager {
                 .expire_timer
                 .filter(|&t| t > 0)
                 .map(|t| timestamp + u64::from(t) * 1000),
+            link_previews: Default::default(),
         };
         (message, response)
     }

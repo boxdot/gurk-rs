@@ -111,6 +111,7 @@ impl SignalManager for SignalManagerMock {
             deleted: Default::default(),
             expire_timer: None,
             expires_at: None,
+            link_previews: Default::default(),
         };
         self.sent_messages.borrow_mut().push(message.clone());
         let (tx, rx) = oneshot::channel();

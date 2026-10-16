@@ -551,6 +551,7 @@ fn display_message(
         let text = strip_ansi_escapes::strip_str(msg.message.as_deref().unwrap_or_default());
         let mut text = replace_mentions(msg, names, text);
         add_attachments(msg, &mut text);
+        add_link_previews(msg, &mut text);
         if text.is_empty() {
             return None; // no text => nothing to render
         }
@@ -710,6 +711,35 @@ fn add_attachments(msg: &Message, out: &mut String) {
             out.push_str("[Voice Note] ");
         }
         out.push_str(&format!("<file://{}>", attachment.filename.display()));
+    }
+}
+
+fn add_link_previews(msg: &Message, out: &mut String) {
+    for preview in &msg.link_previews {
+        if preview.is_empty() {
+            continue;
+        }
+        if let Some(title) = &preview.title {
+            if !out.is_empty() {
+                out.push('\n');
+            }
+            out.push_str("[preview title] ");
+            out.push_str(&strip_ansi_escapes::strip_str(title));
+        }
+        if let Some(desc) = &preview.description {
+            if !out.is_empty() {
+                out.push('\n');
+            }
+            out.push_str("[preview desc] ");
+            out.push_str(&strip_ansi_escapes::strip_str(desc));
+        }
+        if let Some(url) = &preview.url {
+            if !out.is_empty() {
+                out.push('\n');
+            }
+            out.push_str("[preview url] ");
+            out.push_str(&strip_ansi_escapes::strip_str(url));
+        }
     }
 }
 
@@ -905,7 +935,7 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 
 #[cfg(test)]
 mod tests {
-    use crate::data::{AssociatedValue, BodyRange};
+    use crate::data::{AssociatedValue, BodyRange, LinkPreview};
     use crate::signal::Attachment;
 
     use super::*;
@@ -935,6 +965,14 @@ mod tests {
         }
     }
 
+    fn test_link_preview() -> LinkPreview {
+        LinkPreview {
+            url: Some("https://x.co/a".into()),
+            title: Some("Example Article".into()),
+            description: Some("A short description".into()),
+        }
+    }
+
     fn name_resolver() -> NameResolver<'static> {
         NameResolver::single_user(USER_ID, "boxdot".to_string(), Color::Green)
     }
@@ -955,6 +993,7 @@ mod tests {
             deleted: Default::default(),
             expire_timer: None,
             expires_at: None,
+            link_previews: Default::default(),
         }
     }
 
@@ -1031,6 +1070,130 @@ mod tests {
             )]),
             Line::from(vec![Span::raw(
                 "                  16T11:59:58.405665+00:00.jpg>",
+            )]),
+        ]));
+        assert_eq!(rendered, Some(expected));
+    }
+
+    #[test]
+    fn test_display_voice_note_message() {
+        let names = name_resolver();
+        let msg = Message {
+            attachments: vec![test_voice_note()],
+            ..test_message()
+        };
+        let rendered = display_message(
+            &names,
+            &msg,
+            PREFIX,
+            WIDTH,
+            HEIGHT,
+            ShowReceipt::Never,
+            None,
+            None,
+            false,
+        );
+
+        let expected = ListItem::new(Text::from(vec![
+            Line::from(vec![
+                Span::styled("", Style::default().fg(Color::Yellow)),
+                Span::styled(
+                    display_time(msg.arrived_at),
+                    Style::default().fg(Color::Yellow),
+                ),
+                Span::styled("boxdot", Style::default().fg(Color::Green)),
+                Span::raw(": "),
+                Span::raw("[Voice Note] <file:///"),
+            ]),
+            Line::from(vec![Span::raw(
+                "                  tmp/gurk/signal-2022-01-",
+            )]),
+            Line::from(vec![Span::raw(
+                "                  16T12:00:00.000000+00:00.aac>",
+            )]),
+        ]));
+        assert_eq!(rendered, Some(expected));
+    }
+
+    #[test]
+    fn test_display_link_preview_only_message() {
+        let names = name_resolver();
+        let msg = Message {
+            link_previews: vec![test_link_preview()],
+            ..test_message()
+        };
+        let rendered = display_message(
+            &names,
+            &msg,
+            PREFIX,
+            WIDTH,
+            HEIGHT,
+            ShowReceipt::Never,
+            None,
+            None,
+            false,
+        );
+
+        let expected = ListItem::new(Text::from(vec![
+            Line::from(vec![
+                Span::styled("", Style::default().fg(Color::Yellow)),
+                Span::styled(
+                    display_time(msg.arrived_at),
+                    Style::default().fg(Color::Yellow),
+                ),
+                Span::styled("boxdot", Style::default().fg(Color::Green)),
+                Span::raw(": "),
+                Span::raw("[preview title] Example Article"),
+            ]),
+            Line::from(vec![Span::raw(
+                "                  [preview desc] A short description",
+            )]),
+            Line::from(vec![Span::raw(
+                "                  [preview url] https://x.co/a",
+            )]),
+        ]));
+        assert_eq!(rendered, Some(expected));
+    }
+
+    #[test]
+    fn test_display_text_and_link_preview_message() {
+        let names = name_resolver();
+        let msg = Message {
+            message: Some("Check this out".into()),
+            link_previews: vec![test_link_preview()],
+            ..test_message()
+        };
+        let rendered = display_message(
+            &names,
+            &msg,
+            PREFIX,
+            WIDTH,
+            HEIGHT,
+            ShowReceipt::Never,
+            None,
+            None,
+            false,
+        );
+
+        let expected = ListItem::new(Text::from(vec![
+            Line::from(vec![
+                Span::styled("", Style::default().fg(Color::Yellow)),
+                Span::styled(
+                    display_time(msg.arrived_at),
+                    Style::default().fg(Color::Yellow),
+                ),
+                Span::styled("boxdot", Style::default().fg(Color::Green)),
+                Span::raw(": "),
+                Span::raw("Check this out"),
+            ]),
+            Line::from(vec![Span::raw(
+                "                  [preview title] Example Article",
+            )]),
+            Line::from(vec![Span::raw(
+                "                  [preview desc] A short description",
+            )]),
+            Line::from(vec![Span::raw(
+                "                  [preview url] https://x.co/a",
             )]),
         ]));
         assert_eq!(rendered, Some(expected));
