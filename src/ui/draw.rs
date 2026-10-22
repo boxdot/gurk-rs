@@ -711,6 +711,24 @@ fn add_attachments(msg: &Message, out: &mut String) {
         }
         out.push_str(&format!("<file://{}>", attachment.filename.display()));
     }
+    if msg.attachment_downloads.failed > 0 {
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        out.push_str(&format!(
+            "<failed to download attachments ({})>",
+            msg.attachment_downloads.failed
+        ));
+    }
+    if msg.attachment_downloads.pending > 0 {
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        out.push_str(&format!(
+            "<downloading attachments ({})...>",
+            msg.attachment_downloads.pending
+        ));
+    }
 }
 
 fn add_reactions(msg: &Message, out: &mut dyn fmt::Write) {
@@ -950,6 +968,7 @@ mod tests {
             receipt: Receipt::Sent,
             body_ranges: Default::default(),
             send_failed: Default::default(),
+            attachment_downloads: Default::default(),
             edit: Default::default(),
             edited: Default::default(),
             deleted: Default::default(),
