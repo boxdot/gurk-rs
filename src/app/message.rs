@@ -1230,8 +1230,14 @@ mod tests {
         assert_eq!(saved_id, message_id);
 
         app.on_attachment_saved(message_id, attachment);
-        let downloads =
-            |app: &App| app.window.as_ref().unwrap().get(1000).unwrap().attachment_downloads;
+        let downloads = |app: &App| {
+            app.window
+                .as_ref()
+                .unwrap()
+                .get(1000)
+                .unwrap()
+                .attachment_downloads
+        };
         assert_eq!(
             downloads(&app),
             AttachmentDownloads {
