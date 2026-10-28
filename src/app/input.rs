@@ -44,30 +44,32 @@ impl App {
                 self.get_input().move_line_down()
             }
             Command::SelectMessage(MoveDirection::Previous, MoveAmountVisual::Entry) => {
-                self.on_pgup()
+                self.on_pgup().await
             }
-            Command::SelectMessage(MoveDirection::Next, MoveAmountVisual::Entry) => self.on_pgdn(),
+            Command::SelectMessage(MoveDirection::Next, MoveAmountVisual::Entry) => {
+                self.on_pgdn().await
+            }
             Command::KillBackwardLine => self.get_input().on_delete_line(),
             Command::KillWord => self.get_input().on_delete_word(),
             Command::CopyMessage(_) => self.copy_selection(),
             Command::KillLine => self.get_input().on_delete_suffix(),
-            Command::SelectChannel(MoveDirection::Previous) => self.select_previous_channel(),
-            Command::SelectChannel(MoveDirection::Next) => self.select_next_channel(),
+            Command::SelectChannel(MoveDirection::Previous) => self.select_previous_channel().await,
+            Command::SelectChannel(MoveDirection::Next) => self.select_next_channel().await,
             Command::SelectChannelModal(MoveDirection::Previous) => self.select_channel_prev(),
             Command::SelectChannelModal(MoveDirection::Next) => self.select_channel_next(),
             Command::KillWholeLine => self.get_input().on_delete_line(),
             Command::BeginningOfLine => self.get_input().on_home(),
             Command::EndOfLine => self.get_input().on_end(),
             Command::EditMessage => {
-                self.start_editing();
+                self.start_editing().await;
             }
             // Command::ReplyMessage => unimplemented!("{command:?}"),
             Command::DeleteMessage => {
-                self.delete_selected_message();
+                self.delete_selected_message().await;
             }
             Command::ToggleChannelModal => {
                 if !self.select_channel.is_shown {
-                    self.select_channel.reset(&*self.storage);
+                    self.select_channel.reset(&self.storage).await;
                 }
                 self.select_channel.is_shown = !self.select_channel.is_shown;
             }
@@ -106,7 +108,7 @@ impl App {
                 // TODO: prevent overscrolling
                 self.help_scroll.0 += 1
             }
-            Command::ToggleMuteChannel => self.toggle_mute_channel(),
+            Command::ToggleMuteChannel => self.toggle_mute_channel().await,
             Command::ToggleChannelList => self.toggle_channel_list(),
             Command::OpenEditor => {
                 self.open_editor_requested = true;
@@ -137,7 +139,7 @@ impl App {
                             self.get_input().new_line();
                         } else if !self.input.data.is_empty() {
                             if let Some(channel_id) = self.selected_channel_id() {
-                                self.send_input(channel_id);
+                                self.send_input(channel_id).await;
                             }
                         } else {
                             // input is empty
@@ -157,7 +159,7 @@ impl App {
                         self.channels.state.select(Some(idx));
                         let new = self.selected_channel_id();
                         self.swap_channel_draft(old, new);
-                        self.on_channel_changed();
+                        self.on_channel_changed().await;
                     }
                 }
                 KeyCode::Esc if !self.reset_editing() => {
@@ -263,7 +265,7 @@ impl App {
         )
         .await;
 
-        self.reset_unread_messages();
+        self.reset_unread_messages().await;
         self.bubble_up_channel(channel_id);
         self.reset_message_selection();
 
@@ -274,7 +276,7 @@ impl App {
         self.get_input().take()
     }
 
-    pub(super) fn send_input(&mut self, channel_id: ChannelId) {
+    pub(super) async fn send_input(&mut self, channel_id: ChannelId) {
         let input = self.take_input();
         let (input, attachments) = Self::extract_attachments(&input, Local::now(), || {
             self.clipboard.as_mut().map(|c| c.get_image())
@@ -302,13 +304,14 @@ impl App {
         });
 
         if let Some(id) = editing {
-            self.store_edited_message(channel_id, id.arrived_at, sent_message);
+            self.store_edited_message(channel_id, id.arrived_at, sent_message)
+                .await;
         } else {
-            self.store_message(channel_id, sent_message);
+            self.store_message(channel_id, sent_message).await;
         };
 
         self.reset_message_selection();
-        self.reset_unread_messages();
+        self.reset_unread_messages().await;
         self.bubble_up_channel(channel_id);
     }
 
@@ -336,13 +339,13 @@ impl App {
         is_reset
     }
 
-    fn start_editing(&mut self) -> Option<()> {
+    async fn start_editing(&mut self) -> Option<()> {
         if !self.input.is_empty() {
             return None;
         }
 
         let message_id = self.selected_message_id()?;
-        let message = self.storage.message(message_id)?;
+        let message = self.storage.message(message_id).await?;
         if message.from_id != self.user_id {
             return None;
         }
@@ -350,6 +353,7 @@ impl App {
         let target_sent_timestamp = self
             .storage
             .edits(message_id)
+            .await
             .last()
             .map(|last_edit| last_edit.arrived_at)
             .unwrap_or(message.arrived_at);
@@ -363,9 +367,9 @@ impl App {
         Some(())
     }
 
-    fn delete_selected_message(&mut self) -> Option<()> {
+    async fn delete_selected_message(&mut self) -> Option<()> {
         let message_id = self.selected_message_id()?;
-        let message = self.storage.message(message_id)?;
+        let message = self.storage.message(message_id).await?;
 
         // Only allow deleting own messages
         if message.from_id != self.user_id {
@@ -373,18 +377,18 @@ impl App {
         }
 
         let channel_id = message_id.channel_id;
-        let channel = self.storage.channel(channel_id)?;
+        let channel = self.storage.channel(channel_id).await?;
 
         if message.deleted || channel_id == ChannelId::User(self.user_id) {
             // Tombstone or Note to Self: fully remove, sync via deleteForMe
             self.signal_manager.send_delete_for_me(&channel, &message);
-            self.storage.remove_message(message_id);
+            self.storage.remove_message(message_id).await;
             self.remove_message_from_view(channel_id, message.arrived_at);
         } else {
             // Regular channel: delete for everyone (tombstone)
             self.signal_manager
                 .send_delete(&channel, message.arrived_at);
-            self.storage.delete_message(message_id);
+            self.storage.delete_message(message_id).await;
         }
 
         Some(())

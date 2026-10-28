@@ -23,8 +23,7 @@ use crate::channels::SelectChannel;
 use crate::command::{Command, WindowMode};
 use crate::cursor::Cursor;
 use crate::data::{AssociatedValue, Message};
-use crate::receipt::{Receipt, ReceiptEvent};
-use crate::storage::MessageId;
+use crate::receipt::Receipt;
 use crate::util::utc_timestamp_msec_to_local;
 
 use super::CHANNEL_VIEW_RATIO;
@@ -236,37 +235,6 @@ fn draw_chat(f: &mut Frame, app: &mut App, area: Rect) {
     }
 }
 
-// TODO: This does IO and needs to be moved into App
-fn prepare_receipts(app: &mut App) {
-    let user_id = app.user_id;
-    let Some(window) = app.window.as_ref() else {
-        return;
-    };
-    let channel_id = window.channel_id();
-    let viewport_bottom = app
-        .positions
-        .get(&channel_id)
-        .and_then(|pos| pos.viewport_bottom);
-
-    // viewport_bottom and everything older that's loaded
-    let read_messages: Vec<Message> = window
-        .iter_rev_from(viewport_bottom)
-        .filter(|msg| matches!(msg.receipt, Receipt::Delivered) && msg.from_id != user_id)
-        .map(|msg| {
-            let mut msg = msg.clone();
-            msg.receipt = Receipt::Read;
-            msg
-        })
-        .collect();
-
-    for message in read_messages {
-        let from_id = message.from_id;
-        let arrived_at = message.arrived_at;
-        app.store_message(channel_id, message);
-        app.add_receipt_event(ReceiptEvent::new(from_id, arrived_at, Receipt::Read));
-    }
-}
-
 fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     // area without borders
     let height = area.height.saturating_sub(2) as usize;
@@ -275,9 +243,6 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
         return;
     }
     app.message_view_height = height;
-
-    // to be removed because we don't want any IO in the rendering pass
-    prepare_receipts(app);
 
     let Some(window) = app.window.as_ref() else {
         // No channel selected
@@ -379,12 +344,7 @@ fn build_candidates(
     }
 
     // precalculate names for candidates
-    let names = NameResolver::compute(
-        app,
-        candidates
-            .iter()
-            .map(|message| MessageId::new(channel_id, message.arrived_at)),
-    );
+    let names = NameResolver::compute(app, channel_id, candidates.iter().copied());
 
     // message display options
     const TIME_WIDTH: usize = 6; // width of "00:00 "

@@ -45,8 +45,8 @@ impl App {
         self.channels.selected_item().map(|c| c.id)
     }
 
-    pub(crate) fn store_channel(&mut self, channel: Channel) {
-        self.storage.store_channel(&channel);
+    pub(crate) async fn store_channel(&mut self, channel: Channel) {
+        self.storage.store_channel(&channel).await;
         if let Some(old_channel) = self.channels.items.iter_mut().find(|c| c.id == channel.id) {
             *old_channel = channel;
         } else {
@@ -63,25 +63,25 @@ impl App {
         }
     }
 
-    pub fn select_previous_channel(&mut self) {
-        self.reset_unread_messages();
+    pub async fn select_previous_channel(&mut self) {
+        self.reset_unread_messages().await;
         let old = self.selected_channel_id();
         self.channels.previous();
         let new = self.selected_channel_id();
         self.swap_channel_draft(old, new);
-        self.on_channel_changed();
+        self.on_channel_changed().await;
     }
 
-    pub fn select_next_channel(&mut self) {
-        self.reset_unread_messages();
+    pub async fn select_next_channel(&mut self) {
+        self.reset_unread_messages().await;
         let old = self.selected_channel_id();
         self.channels.next();
         let new = self.selected_channel_id();
         self.swap_channel_draft(old, new);
-        self.on_channel_changed();
+        self.on_channel_changed().await;
     }
 
-    pub fn on_pgup(&mut self) {
+    pub async fn on_pgup(&mut self) {
         let Some(window) = self.window.as_mut() else {
             return;
         };
@@ -94,7 +94,7 @@ impl App {
         match window.older(selected) {
             Some(prev) => pos.selected = Some(prev),
             None if !window.at_oldest() => {
-                window.extend_older(&*self.storage, PAGE);
+                window.extend_older(&self.storage, PAGE).await;
                 if let Some(older) = window.older(selected) {
                     pos.selected = Some(older);
                 }
@@ -103,7 +103,7 @@ impl App {
         }
     }
 
-    pub fn on_pgdn(&mut self) {
+    pub async fn on_pgdn(&mut self) {
         let Some(window) = self.window.as_mut() else {
             return;
         };
@@ -114,7 +114,7 @@ impl App {
         match window.newer(cur) {
             Some(next) => pos.selected = Some(next),
             None if !window.at_newest() => {
-                window.extend_newer(&*self.storage, PAGE);
+                window.extend_newer(&self.storage, PAGE).await;
                 if let Some(newer) = window.newer(cur) {
                     pos.selected = Some(newer);
                 }
@@ -123,16 +123,17 @@ impl App {
         }
     }
 
-    pub fn reset_unread_messages(&mut self) {
+    pub async fn reset_unread_messages(&mut self) {
         self.channels
-            .modify_selected_channel(&mut *self.storage, |channel| {
+            .modify_selected_channel(&self.storage, |channel| {
                 if channel.unread_messages > 0 {
                     channel.unread_messages = 0;
                     true
                 } else {
                     false
                 }
-            });
+            })
+            .await;
     }
 
     pub(super) async fn ensure_group_channel_exists(
@@ -157,11 +158,12 @@ impl App {
                     .await;
 
                 self.channels
-                    .modify_channel_by_id(&mut *self.storage, channel_id, |channel| {
+                    .modify_channel_by_id(&self.storage, channel_id, |channel| {
                         channel.name = name;
                         channel.group_data = Some(group_data);
                         true
-                    });
+                    })
+                    .await;
             }
             Ok(channel_id)
         } else {
@@ -184,7 +186,7 @@ impl App {
                 typing: TypingSet::GroupTyping(Default::default()),
                 expire_timer: None,
             };
-            self.store_channel(channel);
+            self.store_channel(channel).await;
 
             Ok(channel_id)
         }
@@ -199,7 +201,7 @@ impl App {
         uuid: Uuid,
         profile_key: Option<ProfileKeyBytes>,
     ) {
-        let stored_name = self.storage.name(uuid);
+        let stored_name = self.storage.name(uuid).await;
         let is_known = stored_name
             .as_deref()
             .is_some_and(|name| !is_placeholder_name(uuid, name));
@@ -207,11 +209,11 @@ impl App {
             return;
         }
         if let Some(name) = self.signal_manager.profile_name(uuid).await {
-            self.storage.store_name(uuid, &name);
+            self.storage.store_name(uuid, &name).await;
             return;
         }
         if stored_name.is_none() {
-            self.storage.store_name(uuid, &uuid.to_string());
+            self.storage.store_name(uuid, &uuid.to_string()).await;
         }
         if let Some(profile_key) = profile_key
             && self.resolving_profile_names.insert(uuid)
@@ -229,8 +231,8 @@ impl App {
     }
 
     /// Stores the name resolved from the user's profile and replaces placeholder names.
-    pub(super) fn on_profile_name_resolved(&mut self, uuid: Uuid, name: String) {
-        self.storage.store_name(uuid, &name);
+    pub(super) async fn on_profile_name_resolved(&mut self, uuid: Uuid, name: String) {
+        self.storage.store_name(uuid, &name).await;
 
         let mut cache = self.names_cache.take().unwrap_or_default();
         if cache
@@ -242,14 +244,15 @@ impl App {
         self.names_cache.replace(Some(cache));
 
         self.channels
-            .modify_channel_by_id(&mut *self.storage, ChannelId::User(uuid), |channel| {
+            .modify_channel_by_id(&self.storage, ChannelId::User(uuid), |channel| {
                 if is_placeholder_name(uuid, &channel.name) {
                     channel.name = name;
                     true
                 } else {
                     false
                 }
-            });
+            })
+            .await;
     }
 
     async fn ensure_users_are_known(
@@ -261,7 +264,7 @@ impl App {
         }
     }
 
-    pub(super) fn ensure_own_channel_exists(&mut self) -> ChannelId {
+    pub(super) async fn ensure_own_channel_exists(&mut self) -> ChannelId {
         let user_id = self.user_id;
         let channel_id = ChannelId::User(user_id);
         if self.channel(channel_id).is_none() {
@@ -274,7 +277,7 @@ impl App {
                 typing: TypingSet::SingleTyping(None),
                 expire_timer: None,
             };
-            self.store_channel(channel);
+            self.store_channel(channel).await;
         }
         channel_id
     }
@@ -287,7 +290,7 @@ impl App {
         let channel_id = ChannelId::User(uuid);
         let exists = self
             .channels
-            .modify_channel_by_id(&mut *self.storage, channel_id, |channel| {
+            .modify_channel_by_id(&self.storage, channel_id, |channel| {
                 if channel.name != name {
                     channel.name = name.to_string();
                     true
@@ -295,6 +298,7 @@ impl App {
                     false
                 }
             })
+            .await
             .is_some();
 
         if !exists {
@@ -307,13 +311,17 @@ impl App {
                 typing: TypingSet::SingleTyping(None),
                 expire_timer: None,
             };
-            self.store_channel(channel);
+            self.store_channel(channel).await;
         }
 
         channel_id
     }
 
-    pub(super) fn add_message_to_channel(&mut self, channel_id: ChannelId, mut message: Message) {
+    pub(super) async fn add_message_to_channel(
+        &mut self,
+        channel_id: ChannelId,
+        mut message: Message,
+    ) {
         let Some(channel) = self.channel(channel_id) else {
             return;
         };
@@ -330,8 +338,8 @@ impl App {
         }
 
         let from_current_user = self.user_id == message.from_id;
-        self.store_message(channel_id, message);
-        self.touch_channel(channel_id, from_current_user);
+        self.store_message(channel_id, message).await;
+        self.touch_channel(channel_id, from_current_user).await;
     }
 
     pub(super) fn remove_message_from_view(&mut self, channel_id: ChannelId, arrived_at: u64) {
@@ -354,15 +362,16 @@ impl App {
         window.remove(arrived_at);
     }
 
-    pub(crate) fn touch_channel(&mut self, channel_id: ChannelId, from_current_user: bool) {
+    pub(crate) async fn touch_channel(&mut self, channel_id: ChannelId, from_current_user: bool) {
         if !from_current_user && self.selected_channel_id() != Some(channel_id) {
             self.channels
-                .modify_channel_by_id(&mut *self.storage, channel_id, |channel| {
+                .modify_channel_by_id(&self.storage, channel_id, |channel| {
                     channel.unread_messages += 1;
                     true
-                });
+                })
+                .await;
         } else {
-            self.reset_unread_messages();
+            self.reset_unread_messages().await;
         }
 
         self.bubble_up_channel(channel_id);
@@ -399,15 +408,15 @@ impl App {
     }
 
     /// Reset dwell tracking when channel selection changes
-    pub fn on_channel_changed(&mut self) {
+    pub async fn on_channel_changed(&mut self) {
         let Some(channel) = self.channels.selected_item() else {
             return;
         };
         let pos = self.positions.entry(channel.id).or_default();
         let mut window = MessageWindow::new(channel.id);
         match pos.viewport_bottom {
-            Some(anchor) => window.load_around(&*self.storage, anchor, PAGE),
-            None => window.load_tail(&*self.storage, PAGE),
+            Some(anchor) => window.load_around(&self.storage, anchor, PAGE).await,
+            None => window.load_tail(&self.storage, PAGE).await,
         }
         self.window = Some(window);
 
@@ -415,17 +424,18 @@ impl App {
         self.timers_activated_for = None;
     }
 
-    pub fn toggle_mute_channel(&mut self) {
+    pub async fn toggle_mute_channel(&mut self) {
         self.channels
-            .modify_selected_channel(&mut *self.storage, |channel| {
+            .modify_selected_channel(&self.storage, |channel| {
                 channel.muted = !channel.muted;
                 true
-            });
+            })
+            .await;
     }
 
     /// Activate expire timers for messages in the currently viewed channel.
     /// Runs once per channel selection after a 10-second dwell.
-    pub fn activate_expire_timers(&mut self) {
+    pub async fn activate_expire_timers(&mut self) {
         if self.channel_selected_at.elapsed() < std::time::Duration::from_secs(10) {
             return;
         }
@@ -445,6 +455,8 @@ impl App {
         let to_activate: Vec<(u64, u32)> = self
             .storage
             .messages(channel_id)
+            .await
+            .into_iter()
             .filter_map(|msg| {
                 if msg.expires_at.is_none() && msg.expire_timer.is_some_and(|t| t > 0) {
                     Some((msg.arrived_at, msg.expire_timer.unwrap()))
@@ -456,10 +468,10 @@ impl App {
 
         for (arrived_at, timer) in to_activate {
             let message_id = crate::storage::MessageId::new(channel_id, arrived_at);
-            if let Some(mut msg) = self.storage.message(message_id) {
+            if let Some(mut msg) = self.storage.message(message_id).await {
                 msg.expires_at = Some(now_ms + u64::from(timer) * 1000);
                 self.schedule_expiry(msg.expires_at);
-                self.store_message(channel_id, msg);
+                self.store_message(channel_id, msg).await;
             }
         }
 
@@ -473,19 +485,19 @@ impl App {
     /// Remove messages that have expired.
     ///
     /// This function is called per-frame, therefore it should not hit the storage all the time.
-    pub fn expire_messages(&mut self) {
+    pub async fn expire_messages(&mut self) {
         let now_ms = crate::util::utc_now_timestamp_msec();
 
         if self.next_expiring_at.is_none_or(|t| now_ms < t) {
             return; // nothing to expire yet
         }
 
-        let removed = self.storage.remove_expired(now_ms);
+        let removed = self.storage.remove_expired(now_ms).await;
         for message_id in removed {
             self.remove_message_from_view(message_id.channel_id, message_id.arrived_at);
         }
 
-        self.next_expiring_at = self.storage.next_expiring_at();
+        self.next_expiring_at = self.storage.next_expiring_at().await;
     }
 }
 

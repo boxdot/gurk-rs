@@ -4,7 +4,7 @@ use uuid::Uuid;
 use crate::data::{Channel, ChannelId, GroupData, TypingSet};
 use crate::signal::SignalManager;
 
-use super::Storage;
+use super::SqliteStorage;
 
 /// Copies contacts and groups from the signal manager into the storages
 ///
@@ -13,27 +13,29 @@ use super::Storage;
 ///
 /// Note: At the moment, there is no group sync implemented in presage, so only contacts are
 /// synced fully.
-pub async fn sync_from_signal(manager: &dyn SignalManager, storage: &mut dyn Storage) {
+pub async fn sync_from_signal(manager: &dyn SignalManager, storage: &SqliteStorage) {
     for contact in manager.contacts().await {
         if contact.name.is_empty() {
             // not sure what to do with contacts without a name
             continue;
         }
         let channel_id = contact.uuid.into();
-        if storage.channel(channel_id).is_none() {
+        if storage.channel(channel_id).await.is_none() {
             debug!(
                 name =% contact.name,
                 "storing new contact from signal manager"
             );
-            storage.store_channel(&Channel {
-                id: channel_id,
-                name: contact.name.trim().to_owned(),
-                group_data: None,
-                unread_messages: 0,
-                muted: false,
-                typing: TypingSet::new(false),
-                expire_timer: None,
-            });
+            storage
+                .store_channel(&Channel {
+                    id: channel_id,
+                    name: contact.name.trim().to_owned(),
+                    group_data: None,
+                    unread_messages: 0,
+                    muted: false,
+                    typing: TypingSet::new(false),
+                    expire_timer: None,
+                })
+                .await;
         }
     }
 
@@ -54,7 +56,7 @@ pub async fn sync_from_signal(manager: &dyn SignalManager, storage: &mut dyn Sto
                 .collect(),
             revision: group.revision,
         };
-        match storage.channel(channel_id) {
+        match storage.channel(channel_id).await {
             Some(mut channel) => {
                 let mut is_changed = false;
                 if channel.name != group.title {
@@ -80,20 +82,22 @@ pub async fn sync_from_signal(manager: &dyn SignalManager, storage: &mut dyn Sto
                 }
                 if is_changed {
                     debug!(?channel_id, "storing modified channel from signal manager");
-                    storage.store_channel(&channel);
+                    storage.store_channel(&channel).await;
                 }
             }
             None => {
                 debug!(?channel_id, "storing new channel from signal manager");
-                storage.store_channel(&Channel {
-                    id: channel_id,
-                    name: group.title,
-                    group_data: Some(new_group_data()),
-                    unread_messages: 0,
-                    muted: false,
-                    typing: TypingSet::new(true),
-                    expire_timer: None,
-                });
+                storage
+                    .store_channel(&Channel {
+                        id: channel_id,
+                        name: group.title,
+                        group_data: Some(new_group_data()),
+                        unread_messages: 0,
+                        muted: false,
+                        typing: TypingSet::new(true),
+                        expire_timer: None,
+                    })
+                    .await;
             }
         }
     }

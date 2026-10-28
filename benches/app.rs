@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
+use gurk::app::App;
 use gurk::signal::test::SignalManagerMock;
-use gurk::{app::App, storage::Storage};
 use gurk::{
     config::{Config, NotificationConfig, User},
     storage::SqliteStorage,
@@ -10,7 +10,7 @@ use gurk::{
 use presage::libsignal_service::content::Content;
 use tracing::info;
 
-fn test_app(storage: impl Storage + 'static) -> App {
+async fn test_app(storage: SqliteStorage) -> App {
     let (app, _) = App::try_new(
         Config {
             notifications: NotificationConfig {
@@ -22,8 +22,9 @@ fn test_app(storage: impl Storage + 'static) -> App {
             })
         },
         Box::new(SignalManagerMock::new()),
-        Box::new(storage),
+        storage,
     )
+    .await
     .unwrap();
     app
 }
@@ -39,11 +40,12 @@ pub fn bench_on_message(c: &mut Criterion) {
         b.to_async(tokio::runtime::Runtime::new().unwrap())
             .iter_batched(
                 || {
-                    let storage = rt.block_on(async {
+                    let app = rt.block_on(async {
                         let url = "sqlite::memory:".parse().unwrap();
-                        SqliteStorage::open_unencrypted(&url).await.unwrap()
+                        let storage = SqliteStorage::open_unencrypted(&url).await.unwrap();
+                        test_app(storage).await
                     });
-                    (test_app(storage), data.clone())
+                    (app, data.clone())
                 },
                 |(mut app, data)| async move {
                     for content in data {
