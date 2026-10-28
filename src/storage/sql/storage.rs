@@ -202,6 +202,7 @@ impl SqlMessage {
             receipt: receipt.map(BlobData::into_inner).unwrap_or_default(),
             body_ranges: body_ranges.map(BlobData::into_inner).unwrap_or_default(),
             send_failed: Default::default(),
+            attachment_downloads: Default::default(),
             edit: edit.and_then(|edit| {
                 edit.try_into()
                     .map_err(|_| MessageConvertError::InvalidTimestamp)
@@ -954,6 +955,7 @@ mod tests {
                     receipt: Receipt::Nothing,
                     body_ranges: Default::default(),
                     send_failed: Default::default(),
+                    attachment_downloads: Default::default(),
                     edit: Default::default(),
                     edited: Default::default(),
                     deleted: Default::default(),
@@ -991,6 +993,7 @@ mod tests {
                     receipt: Receipt::Nothing,
                     body_ranges: Default::default(),
                     send_failed: Default::default(),
+                    attachment_downloads: Default::default(),
                     edit: Default::default(),
                     edited: Default::default(),
                     deleted: Default::default(),
@@ -1468,6 +1471,7 @@ mod tests {
                     receipt,
                     body_ranges: body_ranges.clone(),
                     send_failed: Default::default(),
+                    attachment_downloads: Default::default(),
                     edit: Default::default(),
                     edited: Default::default(),
                     deleted: Default::default(),

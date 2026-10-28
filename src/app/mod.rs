@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::cell::Cell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
 use anyhow::Context as _;
@@ -15,7 +15,7 @@ use crate::data::{Channel, ChannelId, Message, TypingSet};
 use crate::event::Event;
 use crate::input::Input;
 use crate::receipt::ReceiptHandler;
-use crate::signal::{Attachment, SignalManager};
+use crate::signal::SignalManager;
 use crate::storage::{MessageId, SqliteStorage};
 use crate::util::StatefulList;
 use crate::{
@@ -59,6 +59,8 @@ pub struct App {
     event_tx: mpsc::UnboundedSender<Event>,
     // It is expensive to hit the signal manager contacts storage, so we cache it
     names_cache: Cell<Option<BTreeMap<Uuid, String>>>,
+    /// Users whose profile name is being resolved via Signal server
+    resolving_profile_names: HashSet<Uuid>,
     pub mode_keybindings: ModeKeybinding,
     /// When the current channel was selected (for dwell-based timer activation)
     channel_selected_at: std::time::Instant,
@@ -121,6 +123,7 @@ impl App {
             clipboard,
             event_tx,
             names_cache: Default::default(),
+            resolving_profile_names: Default::default(),
             mode_keybindings,
             channel_selected_at: std::time::Instant::now(),
             timers_activated_for: None,
@@ -319,6 +322,18 @@ impl App {
                     self.store_message(message_id.channel_id, message).await;
                 }
             }
+            Event::AttachmentSaved {
+                message_id,
+                attachment,
+            } => {
+                self.on_attachment_saved(message_id, attachment).await;
+            }
+            Event::ProfileNameResolved { user_id, name } => {
+                self.resolving_profile_names.remove(&user_id);
+                if let Some(name) = name.filter(|name| !name.is_empty()) {
+                    self.on_profile_name_resolved(user_id, name).await;
+                }
+            }
         }
         Ok(())
     }
@@ -389,8 +404,8 @@ pub(super) fn open_file(message: &Message) -> Option<()> {
     Some(())
 }
 
-pub(super) fn notification_text_for_attachments(attachments: &[Attachment]) -> Option<String> {
-    match attachments.len() {
+pub(super) fn notification_text_for_attachments(num_attachments: usize) -> Option<String> {
+    match num_attachments {
         0 => None,
         1 => Some("<attachment>".into()),
         n => Some(format!("<attachments ({n})>")),
@@ -458,6 +473,7 @@ pub(crate) mod tests {
                     receipt: Default::default(),
                     body_ranges: Default::default(),
                     send_failed: Default::default(),
+                    attachment_downloads: Default::default(),
                     edit: Default::default(),
                     edited: Default::default(),
                     deleted: Default::default(),
@@ -503,6 +519,7 @@ pub(crate) mod tests {
                 assert_eq!(message_id.arrived_at, msg.arrived_at);
                 assert!(result.is_ok());
             }
+            event => panic!("unexpected event: {event:?}"),
         }
     }
 
@@ -528,6 +545,7 @@ pub(crate) mod tests {
                 assert_eq!(message_id.arrived_at, msg.arrived_at);
                 assert!(result.is_ok());
             }
+            event => panic!("unexpected event: {event:?}"),
         }
     }
 
@@ -551,6 +569,7 @@ pub(crate) mod tests {
                 assert_eq!(message_id.arrived_at, msg.arrived_at);
                 assert!(result.is_ok());
             }
+            event => panic!("unexpected event: {event:?}"),
         }
     }
 
@@ -703,5 +722,30 @@ pub(crate) mod tests {
             specs[2].0.file_name,
             Some(format!("screenshot-{at_str}.png"))
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_ensure_user_is_known_resolves_in_background() {
+        let (mut app, mut events, _sent_messages) = test_app().await;
+        let uuid = Uuid::new_v4();
+
+        app.ensure_user_is_known(uuid, Some([0; 32])).await;
+        assert_eq!(app.storage.name(uuid).await, Some(uuid.to_string()));
+        let name = app.name_by_id(uuid).await;
+        let channel_id = app.ensure_contact_channel_exists(uuid, &name).await;
+
+        match events.recv().await.unwrap() {
+            Event::ProfileNameResolved { user_id, name } => {
+                assert_eq!(user_id, uuid);
+                assert_eq!(name, None);
+            }
+            event => panic!("unexpected event: {event:?}"),
+        }
+
+        app.on_profile_name_resolved(uuid, "ellie".to_string())
+            .await;
+        assert_eq!(app.storage.name(uuid).await.as_deref(), Some("ellie"));
+        assert_eq!(app.name_by_id(uuid).await, "ellie");
+        assert_eq!(app.channel(channel_id).unwrap().name, "ellie");
     }
 }

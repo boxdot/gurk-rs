@@ -31,10 +31,11 @@ pub trait SignalManager {
         master_key_bytes: GroupMasterKeyBytes,
     ) -> anyhow::Result<ResolvedGroup>;
 
-    async fn save_attachment(
-        &mut self,
+    /// Downloads and saves an attachment in the background.
+    fn save_attachment(
+        &self,
         attachment_pointer: AttachmentPointer,
-    ) -> anyhow::Result<Attachment>;
+    ) -> oneshot::Receiver<anyhow::Result<Attachment>>;
 
     fn send_receipt(&self, sender_uuid: Uuid, timestamps: Vec<u64>, receipt: Receipt);
 
@@ -56,11 +57,11 @@ pub trait SignalManager {
     async fn profile_name(&self, id: Uuid) -> Option<String>;
 
     /// Resolves contact name from user's profile via Signal server
-    async fn resolve_profile_name(
-        &mut self,
+    fn resolve_profile_name(
+        &self,
         id: Uuid,
         profile_key: ProfileKeyBytes,
-    ) -> Option<String>;
+    ) -> oneshot::Receiver<Option<String>>;
 
     async fn contact(&self, id: Uuid) -> Option<Contact>;
 
