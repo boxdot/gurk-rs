@@ -1,5 +1,6 @@
 mod copy;
 mod forgetful;
+mod shared;
 mod sql;
 
 use chrono::{DateTime, Utc};
@@ -9,6 +10,7 @@ use crate::data::{Channel, ChannelId, Message};
 
 pub use copy::sync_from_signal;
 pub use forgetful::ForgetfulStorage;
+pub use shared::SharedStorage;
 pub use sql::SqliteStorage;
 
 /// Storage of channels, messages, names and metadata.

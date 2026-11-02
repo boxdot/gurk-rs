@@ -15,7 +15,7 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::data::{
-    AttachmentDownloads, BodyRange, ChannelId, Message, TypingAction, TypingSet, parse_uuid,
+    AttachmentDownloads, BodyRange, ChannelId, LinkPreview, Message, TypingAction, TypingSet, parse_uuid,
 };
 use crate::event::Event;
 use crate::receipt::{Receipt, ReceiptEvent};
@@ -29,11 +29,24 @@ use super::{
 impl App {
     /// Stores the `message` in the storage and updates the message window if the channel matches.
     pub(crate) fn store_message(&mut self, channel_id: ChannelId, message: Message) {
+        let is_incoming = message.from_id != self.user_id;
+        let arrived_at = message.arrived_at;
+
         self.storage.store_message(channel_id, &message);
         if let Some(window) = self.window.as_mut()
             && window.channel_id() == channel_id
         {
             window.upsert(message);
+        }
+
+        // Broadcast to API SSE clients
+        if is_incoming && let Some(tx) = &self.api_event_tx {
+            let chat_id = super::channel_id_to_string(&channel_id);
+            let _ = tx.send(crate::api::ApiEvent::MessageReceived {
+                chat_id: chat_id.clone(),
+                message_id: format!("{}-{}", chat_id, arrived_at),
+                arrived_at,
+            });
         }
     }
 
@@ -154,6 +167,7 @@ impl App {
                                     body_ranges,
                                     reaction: None,
                                     expire_timer,
+                                    preview,
                                     ..
                                 }),
                             ..
@@ -168,11 +182,13 @@ impl App {
 
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
+                let link_previews = preview.iter().map(LinkPreview::from_proto).collect();
 
                 let message = Message {
                     quote,
                     expire_timer,
                     attachment_downloads: AttachmentDownloads::pending(attachment_pointers.len()),
+                    link_previews,
                     ..Message::new(user_id, body, body_ranges, timestamp, Vec::new())
                 };
                 (channel_id, message, attachment_pointers)
@@ -243,7 +259,7 @@ impl App {
                     self.handle_receipt(
                         r.parse_sender_aci().map(Into::into).unwrap_or_default(),
                         Receipt::Read,
-                        vec![r.timestamp.unwrap()],
+                        vec![r.timestamp.unwrap_or_default()],
                     );
                 });
                 return Ok(());
@@ -322,6 +338,7 @@ impl App {
                                     body_ranges,
                                     reaction: None,
                                     expire_timer,
+                                    preview,
                                     ..
                                 }),
                             ..
@@ -366,11 +383,13 @@ impl App {
 
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
+                let link_previews = preview.iter().map(LinkPreview::from_proto).collect();
 
                 let message = Message {
                     quote,
                     expire_timer,
                     attachment_downloads: AttachmentDownloads::pending(attachment_pointers.len()),
+                    link_previews,
                     ..Message::new(user_id, body, body_ranges, timestamp, Vec::new())
                 };
 
@@ -435,6 +454,7 @@ impl App {
                     sticker,
                     body_ranges,
                     expire_timer,
+                    preview,
                     ..
                 }),
             ) => {
@@ -509,10 +529,12 @@ impl App {
 
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
+                let link_previews = preview.iter().map(LinkPreview::from_proto).collect();
                 let message = Message {
                     quote,
                     expire_timer,
                     attachment_downloads: AttachmentDownloads::pending(attachment_pointers.len()),
+                    link_previews,
                     ..Message::new(sender.raw_uuid(), body, body_ranges, timestamp, Vec::new())
                 };
 
@@ -748,6 +770,10 @@ impl App {
         action: TypingAction,
         _timestamp: u64,
     ) -> Result<(), ()> {
+        let channel_id = group_id
+            .map(ChannelId::Group)
+            .unwrap_or(ChannelId::User(sender_uuid));
+
         if let Some(gid) = group_id {
             self.channels.modify_channel_by_id(
                 &mut *self.storage,
@@ -791,6 +817,22 @@ impl App {
                 },
             );
         }
+
+        // Broadcast typing event to API SSE clients
+        if let Some(tx) = &self.api_event_tx {
+            let event = match action {
+                TypingAction::Started => crate::api::ApiEvent::TypingStarted {
+                    chat_id: super::channel_id_to_string(&channel_id),
+                    user_id: sender_uuid.to_string(),
+                },
+                TypingAction::Stopped => crate::api::ApiEvent::TypingStopped {
+                    chat_id: super::channel_id_to_string(&channel_id),
+                    user_id: sender_uuid.to_string(),
+                },
+            };
+            let _ = tx.send(event);
+        }
+
         Ok(())
     }
 

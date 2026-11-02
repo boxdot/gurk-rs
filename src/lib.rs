@@ -1,5 +1,6 @@
 //! Signal Messenger client for terminal
 
+pub mod api;
 pub mod app;
 pub mod backoff;
 mod channels;
