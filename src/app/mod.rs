@@ -13,6 +13,7 @@ use uuid::Uuid;
 use crate::config::Config;
 use crate::data::{Channel, ChannelId, Message, TypingSet};
 use crate::event::Event;
+use crate::images::ImageCache;
 use crate::input::Input;
 use crate::receipt::ReceiptHandler;
 use crate::signal::SignalManager;
@@ -72,6 +73,7 @@ pub struct App {
     ///
     /// Written by the renderer, used to load enough messages to fill the view
     pub(crate) message_view_height: usize,
+    pub(crate) images: ImageCache,
 }
 
 impl App {
@@ -99,6 +101,7 @@ impl App {
             .expect("keybinding configuration failed");
 
         let next_expiring_at = storage.next_expiring_at();
+        let images = ImageCache::new(config.image_height, event_tx.clone());
 
         let mut app = Self {
             config,
@@ -129,6 +132,7 @@ impl App {
             timers_activated_for: None,
             next_expiring_at,
             message_view_height: 0,
+            images,
         };
 
         app.on_channel_changed();
@@ -304,6 +308,20 @@ impl App {
         self.show_channel_list
     }
 
+    pub fn is_images_enabled(&self) -> bool {
+        self.images.is_enabled()
+    }
+
+    /// Enables inline images with the terminal graphics protocol detected by `picker`
+    pub fn set_image_picker(&mut self, picker: ratatui_image::picker::Picker) {
+        self.images.set_picker(picker);
+    }
+
+    /// Re-encodes inline images on the next draw, e.g. after the terminal was cleared
+    pub fn reset_images(&mut self) {
+        self.images.clear_encoded();
+    }
+
     pub fn toggle_channel_list(&mut self) {
         self.show_channel_list = !self.show_channel_list;
     }
@@ -329,6 +347,7 @@ impl App {
                     self.on_profile_name_resolved(user_id, name);
                 }
             }
+            Event::ImageLoaded => {} // redrawn after every event
         }
         Ok(())
     }

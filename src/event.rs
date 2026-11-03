@@ -17,4 +17,6 @@ pub enum Event {
         user_id: Uuid,
         name: Option<String>,
     },
+    /// An inline image preview finished loading
+    ImageLoaded,
 }
