@@ -267,10 +267,23 @@ impl App {
             ) => {
                 let channel_id = if let Some(GroupContextV2 {
                     master_key: Some(master_key),
+                    revision,
                     ..
                 }) = group_v2
                 {
-                    ChannelId::from_master_key_bytes(master_key)?
+                    let channel_id = match revision {
+                        Some(revision) => {
+                            let master_key = master_key
+                                .try_into()
+                                .map_err(|_| anyhow!("invalid group master key"))?;
+                            self.ensure_group_channel_exists(master_key, revision)
+                                .await
+                                .context("failed to create group channel")?
+                        }
+                        None => ChannelId::from_master_key_bytes(master_key)?,
+                    };
+                    self.ensure_group_member(channel_id, sender.raw_uuid())?;
+                    channel_id
                 } else if sender.raw_uuid() == self.user_id {
                     // reaction from us => target author is the user channel
                     let uuid = parse_uuid(
@@ -402,9 +415,12 @@ impl App {
                     let master_key = master_key
                         .try_into()
                         .map_err(|_| anyhow!("invalid group master key"))?;
-                    self.ensure_group_channel_exists(master_key, revision)
+                    let channel_id = self
+                        .ensure_group_channel_exists(master_key, revision)
                         .await
-                        .context("failed to create group channel")?
+                        .context("failed to create group channel")?;
+                    self.ensure_group_member(channel_id, sender.raw_uuid())?;
+                    channel_id
                 } else {
                     let name = self.name_by_id(sender.raw_uuid()).await;
                     self.ensure_contact_channel_exists(sender.raw_uuid(), &name)
@@ -461,6 +477,7 @@ impl App {
                         .ensure_group_channel_exists(master_key, revision)
                         .await
                         .context("failed to create group channel")?;
+                    self.ensure_group_member(channel_id, sender.raw_uuid())?;
 
                     self.ensure_user_is_known(sender.raw_uuid(), profile_key)
                         .await;
@@ -602,6 +619,7 @@ impl App {
                         .ensure_group_channel_exists(master_key, revision)
                         .await
                         .context("failed to create group channel")?;
+                    self.ensure_group_member(channel_id, sender.raw_uuid())?;
                     self.ensure_user_is_known(sender.raw_uuid(), profile_key)
                         .await;
                     channel_id
@@ -1257,5 +1275,158 @@ mod tests {
         let message = app.storage.message(message_id).unwrap();
         assert_eq!(message.attachments.len(), 1);
         assert_eq!(message.attachments[0].id, "key");
+    }
+}
+
+#[cfg(test)]
+mod group_member_tests {
+    use presage::libsignal_service::protocol::DeviceId;
+
+    use crate::app::tests::test_app;
+    use crate::data::{Channel, GroupData};
+    use crate::signal::GroupMasterKeyBytes;
+
+    use super::*;
+
+    const MASTER_KEY: GroupMasterKeyBytes = [7; 32];
+
+    fn group_content(sender: Uuid, data_message: DataMessage) -> Box<Content> {
+        let now = chrono::Utc::now();
+        Box::new(Content {
+            metadata: Metadata {
+                sender: ServiceId::Aci(sender.into()),
+                destination: ServiceId::Aci(Uuid::nil().into()),
+                sender_device: DeviceId::new(1).unwrap(),
+                pni_verified: None,
+                client_timestamp: now,
+                server_timestamp: now,
+                needs_receipt: false,
+                unidentified_sender: false,
+                was_plaintext: false,
+                server_guid: None,
+            },
+            body: ContentBody::DataMessage(DataMessage {
+                group_v2: Some(GroupContextV2 {
+                    master_key: Some(MASTER_KEY.to_vec()),
+                    // revision returned by SignalManagerMock::resolve_group
+                    revision: Some(0),
+                    ..Default::default()
+                }),
+                ..data_message
+            }),
+        })
+    }
+
+    /// Creates a group channel with the user and `member` as members
+    fn add_group(app: &mut App, member: Uuid) -> ChannelId {
+        let channel_id = ChannelId::from_master_key_bytes(MASTER_KEY).unwrap();
+        let members = vec![app.user_id, member];
+        app.store_channel(Channel {
+            id: channel_id,
+            name: "group".to_string(),
+            group_data: Some(GroupData {
+                master_key_bytes: MASTER_KEY,
+                members,
+                revision: 0,
+            }),
+            unread_messages: 0,
+            muted: false,
+            typing: TypingSet::GroupTyping(Default::default()),
+            expire_timer: None,
+        });
+        channel_id
+    }
+
+    fn text(body: &str, timestamp: u64) -> DataMessage {
+        DataMessage {
+            body: Some(body.to_string()),
+            timestamp: Some(timestamp),
+            ..Default::default()
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_group_message_from_member() {
+        let (mut app, _events, _sent_messages) = test_app().await;
+        let member = Uuid::new_v4();
+        let channel_id = add_group(&mut app, member);
+
+        app.on_message(group_content(member, text("hi", 1000)))
+            .await
+            .unwrap();
+
+        let message = app
+            .storage
+            .message(MessageId::new(channel_id, 1000))
+            .unwrap();
+        assert_eq!(message.from_id, member);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_group_message_from_non_member_is_dropped() {
+        let (mut app, _events, _sent_messages) = test_app().await;
+        let channel_id = add_group(&mut app, Uuid::new_v4());
+
+        let result = app
+            .on_message(group_content(Uuid::new_v4(), text("hi", 1000)))
+            .await;
+
+        assert!(result.is_err());
+        assert_eq!(app.storage.message(MessageId::new(channel_id, 1000)), None);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_group_reaction_from_non_member_is_dropped() {
+        let (mut app, _events, _sent_messages) = test_app().await;
+        let member = Uuid::new_v4();
+        let channel_id = add_group(&mut app, member);
+        app.storage
+            .store_message(channel_id, &Message::text(member, 1000, "hi".into()));
+
+        let reaction = DataMessage {
+            reaction: Some(Reaction {
+                emoji: Some("\u{1F44D}".to_string()),
+                target_author_aci: Some(member.to_string()),
+                target_sent_timestamp: Some(1000),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let result = app
+            .on_message(group_content(Uuid::new_v4(), reaction))
+            .await;
+
+        assert!(result.is_err());
+        let message = app
+            .storage
+            .message(MessageId::new(channel_id, 1000))
+            .unwrap();
+        assert!(message.reactions.is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_group_edit_from_non_member_is_dropped() {
+        let (mut app, _events, _sent_messages) = test_app().await;
+        let member = Uuid::new_v4();
+        let channel_id = add_group(&mut app, member);
+        app.storage
+            .store_message(channel_id, &Message::text(member, 1000, "hi".into()));
+
+        let mut content = group_content(Uuid::new_v4(), text("edited", 2000));
+        let ContentBody::DataMessage(data_message) = content.body else {
+            unreachable!()
+        };
+        content.body = ContentBody::EditMessage(EditMessage {
+            target_sent_timestamp: Some(1000),
+            data_message: Some(data_message),
+        });
+        let result = app.on_message(content).await;
+
+        assert!(result.is_err());
+        let message = app
+            .storage
+            .message(MessageId::new(channel_id, 1000))
+            .unwrap();
+        assert_eq!(message.message.as_deref(), Some("hi"));
     }
 }
