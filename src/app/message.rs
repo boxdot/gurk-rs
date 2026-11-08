@@ -240,10 +240,13 @@ impl App {
                 )
                 .await;
                 read.into_iter().for_each(|r| {
+                    let Some(timestamp) = r.timestamp else {
+                        return;
+                    };
                     self.handle_receipt(
                         r.parse_sender_aci().map(Into::into).unwrap_or_default(),
                         Receipt::Read,
-                        vec![r.timestamp.unwrap()],
+                        vec![timestamp],
                     );
                 });
                 return Ok(());
@@ -1104,6 +1107,60 @@ mod tests {
     use crate::data::Channel;
 
     use super::*;
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sync_reaction_with_read_without_timestamp() {
+        use presage::libsignal_service::protocol::DeviceId;
+        use presage::proto::SyncMessage;
+
+        let (mut app, _events, _sent_messages) = test_app().await;
+        let channel_id = app.channels().first().unwrap().id;
+        let ChannelId::User(peer) = channel_id else {
+            panic!("test channel is a user channel");
+        };
+        let target_sent_timestamp = app.storage.messages_tail(channel_id, 1)[0].arrived_at;
+
+        let now = chrono::Utc::now();
+        let content = Content {
+            metadata: Metadata {
+                sender: ServiceId::Aci(app.user_id.into()),
+                destination: ServiceId::Aci(app.user_id.into()),
+                sender_device: DeviceId::new(2).unwrap(),
+                pni_verified: None,
+                client_timestamp: now,
+                server_timestamp: now,
+                needs_receipt: false,
+                unidentified_sender: false,
+                was_plaintext: false,
+                server_guid: None,
+            },
+            body: ContentBody::SynchronizeMessage(SyncMessage {
+                content: Some(SyncContent::Sent(Sent {
+                    destination_service_id: Some(peer.to_string()),
+                    message: Some(DataMessage {
+                        reaction: Some(Reaction {
+                            emoji: Some("\u{1F44D}".to_string()),
+                            target_author_aci: Some(app.user_id.to_string()),
+                            target_sent_timestamp: Some(target_sent_timestamp),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                })),
+                read: vec![Read::default()],
+                ..Default::default()
+            }),
+        };
+
+        app.on_message(Box::new(content)).await.unwrap();
+
+        let message = app
+            .storage
+            .message(MessageId::new(channel_id, target_sent_timestamp))
+            .unwrap();
+        assert_eq!(message.reactions.len(), 1);
+    }
 
     /// Overwrites the unread counter of the given channel in memory and storage.
     fn set_unread(app: &mut App, channel_id: ChannelId, unread_messages: u32) {
