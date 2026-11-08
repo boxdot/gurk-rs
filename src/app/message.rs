@@ -933,10 +933,10 @@ impl App {
             } else {
                 "gurk"
             })
-            .body(if self.config.notifications.show_message_text {
-                text
+            .body(&if self.config.notifications.show_message_text {
+                escape_notification_markup(text)
             } else {
-                "New message!"
+                "New message!".into()
             });
         // Showing a notification is a blocking call (e.g. D-Bus)
         tokio::task::spawn_blocking(move || {
@@ -1096,6 +1096,28 @@ fn conversation_to_channel_id(conv: &presage::proto::ConversationIdentifier) -> 
     }
 }
 
+/// Escapes text for the body of a desktop notification
+///
+/// On freedesktop.org notification servers the body may contain markup (e.g. `<b>`, `<a href>`,
+/// `<img src>`), so the message text has to be escaped to be shown as is. Other platforms show the
+/// body as plain text.
+fn escape_notification_markup(text: &str) -> Cow<'_, str> {
+    if cfg!(all(unix, not(target_os = "macos"))) && text.contains(['&', '<', '>']) {
+        let mut escaped = String::with_capacity(text.len());
+        for c in text.chars() {
+            match c {
+                '&' => escaped.push_str("&amp;"),
+                '<' => escaped.push_str("&lt;"),
+                '>' => escaped.push_str("&gt;"),
+                c => escaped.push(c),
+            }
+        }
+        Cow::Owned(escaped)
+    } else {
+        Cow::Borrowed(text)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use presage::libsignal_service::prelude::AttachmentIdentifier;
@@ -1104,6 +1126,19 @@ mod tests {
     use crate::data::Channel;
 
     use super::*;
+
+    #[test]
+    #[cfg(all(unix, not(target_os = "macos")))]
+    fn test_escape_notification_markup() {
+        assert!(matches!(
+            escape_notification_markup("hello"),
+            Cow::Borrowed("hello")
+        ));
+        assert_eq!(
+            escape_notification_markup("<b>a & b</b> <img src=\"file:///x\">"),
+            "&lt;b&gt;a &amp; b&lt;/b&gt; &lt;img src=\"file:///x\"&gt;"
+        );
+    }
 
     /// Overwrites the unread counter of the given channel in memory and storage.
     fn set_unread(app: &mut App, channel_id: ChannelId, unread_messages: u32) {
