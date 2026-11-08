@@ -130,6 +130,14 @@ impl ReceiptHandler {
             .add(event.timestamp, event.receipt_type);
     }
 
+    /// Whether receipts for the user `uuid` are waiting to be sent
+    #[cfg(test)]
+    pub fn has_pending(&self, uuid: Uuid) -> bool {
+        self.receipt_set
+            .get(&uuid)
+            .is_some_and(|receipts| !receipts.is_empty())
+    }
+
     // Dictates whether receipts should be sent on the current tick
     // Not used for now as
     fn do_tick(&mut self) -> bool {
