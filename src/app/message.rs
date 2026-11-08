@@ -708,6 +708,11 @@ impl App {
     }
 
     fn update_channel_expire_timer(&mut self, channel_id: ChannelId, expire_timer: Option<u32>) {
+        if let ChannelId::Group(_) = channel_id {
+            // the timer of a group is part of the group state (see ensure_group_channel_exists);
+            // the timer in a group message is not authoritative
+            return;
+        }
         let new_timer = expire_timer.filter(|&t| t > 0);
         self.channels
             .modify_channel_by_id(&mut *self.storage, channel_id, |channel| {
