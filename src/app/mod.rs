@@ -715,6 +715,47 @@ pub(crate) mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn test_message_does_not_replace_other_authors_message() {
+        use presage::libsignal_service::content::{Content, ContentBody, Metadata};
+        use presage::libsignal_service::protocol::{DeviceId, ServiceId};
+        use presage::proto::DataMessage;
+
+        let (mut app, _events, _sent_messages) = test_app().await;
+        let channel_id = app.channels().first().unwrap().id;
+        let ChannelId::User(contact) = channel_id else {
+            panic!("test channel is a user channel");
+        };
+        // the fixture's message at 0 is from the user
+        let now = chrono::Utc::now();
+        let content = Content {
+            metadata: Metadata {
+                sender: ServiceId::Aci(contact.into()),
+                destination: ServiceId::Aci(app.user_id.into()),
+                sender_device: DeviceId::new(1).unwrap(),
+                pni_verified: None,
+                client_timestamp: now,
+                server_timestamp: now,
+                needs_receipt: false,
+                unidentified_sender: false,
+                was_plaintext: false,
+                server_guid: None,
+            },
+            body: ContentBody::DataMessage(DataMessage {
+                body: Some("replaced".to_string()),
+                timestamp: Some(0),
+                profile_key: Some(vec![0; 32]),
+                ..Default::default()
+            }),
+        };
+
+        app.on_message(Box::new(content)).await.unwrap();
+
+        let message = app.storage.message(MessageId::new(channel_id, 0)).unwrap();
+        assert_eq!(message.from_id, app.user_id);
+        assert_eq!(message.message.as_deref(), Some("First message"));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_ensure_user_is_known_resolves_in_background() {
         let (mut app, mut events, _sent_messages) = test_app().await;
         let uuid = Uuid::new_v4();
