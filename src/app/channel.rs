@@ -169,6 +169,7 @@ impl App {
                     name,
                     group_data,
                     profile_keys,
+                    expire_timer,
                 } = self.signal_manager.resolve_group(master_key).await?;
 
                 self.ensure_users_are_known(group_data.members.iter().copied().zip(profile_keys))
@@ -178,6 +179,7 @@ impl App {
                     .modify_channel_by_id(&mut *self.storage, channel_id, |channel| {
                         channel.name = name;
                         channel.group_data = Some(group_data);
+                        channel.expire_timer = expire_timer;
                         true
                     });
             }
@@ -188,6 +190,7 @@ impl App {
                 name,
                 group_data,
                 profile_keys,
+                expire_timer,
             } = self.signal_manager.resolve_group(master_key).await?;
 
             self.ensure_users_are_known(group_data.members.iter().copied().zip(profile_keys))
@@ -200,7 +203,7 @@ impl App {
                 unread_messages: 0,
                 muted: false,
                 typing: TypingSet::GroupTyping(Default::default()),
-                expire_timer: None,
+                expire_timer,
             };
             self.store_channel(channel);
 

@@ -58,6 +58,7 @@ impl SignalManager for SignalManagerMock {
                 revision: 0,
             },
             profile_keys: Default::default(),
+            expire_timer: None,
         })
     }
 
