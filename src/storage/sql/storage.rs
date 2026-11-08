@@ -386,7 +386,7 @@ impl Storage for SqliteStorage {
 
     fn messages_before(&self, channel_id: ChannelId, anchor: u64, limit: usize) -> Vec<Message> {
         let channel_id = &channel_id;
-        let anchor = i64::try_from(anchor).expect("u64 overflow");
+        let anchor = i64::try_from(anchor).unwrap_or(i64::MAX);
         let limit = i64::try_from(limit).expect("usize overflow");
         let sql_messages = block_async_in_place(
             query_as!(
@@ -436,7 +436,7 @@ impl Storage for SqliteStorage {
 
     fn messages_after(&self, channel_id: ChannelId, anchor: u64, limit: usize) -> Vec<Message> {
         let channel_id = &channel_id;
-        let anchor = i64::try_from(anchor).expect("u64 overflow");
+        let anchor = i64::try_from(anchor).unwrap_or(i64::MAX);
         let limit = i64::try_from(limit).expect("usize overflow");
         let sql_messages = block_async_in_place(
             query_as!(
@@ -625,7 +625,7 @@ impl Storage for SqliteStorage {
 
     fn messages_count_after(&self, channel_id: ChannelId, arrived_at: u64) -> usize {
         let channel_id = &channel_id;
-        let arrived_at = i64::try_from(arrived_at).expect("u64 overflow");
+        let arrived_at = i64::try_from(arrived_at).unwrap_or(i64::MAX);
         block_async_in_place(
             query_scalar!(
                 "
@@ -678,12 +678,15 @@ impl Storage for SqliteStorage {
 
     fn store_message(&mut self, channel_id: ChannelId, message: &Message) {
         let channel_id = &channel_id;
-        let arrived_at: i64 = message
+        // the timestamp is chosen by the sender and might not fit into an SQLite integer
+        let Some(arrived_at): Option<i64> = message
             .arrived_at
             .try_into()
             .map_err(|_| MessageConvertError::InvalidTimestamp)
             .ok_logged()
-            .unwrap();
+        else {
+            return;
+        };
         let from_id = &message.from_id;
         let message_msg = message.message.as_deref();
         let quote: Option<i64> = message.quote.as_ref().and_then(|quote| {
@@ -1475,6 +1478,33 @@ mod tests {
 
         assert_eq!(storage.message(MessageId::new(missing, 123)), None);
         assert_eq!(storage.messages(missing).count(), 0);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sqlite_storage_out_of_range_timestamp() {
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+        let (mut storage, channel_id) = windowed_fixtures().await;
+        let from_id = uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a");
+        let count = storage.messages(channel_id).count();
+
+        // not representable as an SQLite integer: dropped, not stored
+        let timestamp = u64::MAX;
+        storage.store_message(
+            channel_id,
+            &Message::text(from_id, timestamp, "far future".to_owned()),
+        );
+        assert_eq!(storage.message(MessageId::new(channel_id, timestamp)), None);
+        assert_eq!(storage.messages(channel_id).count(), count);
+
+        // queries anchored at such a timestamp are clamped
+        assert_eq!(storage.messages_count_after(channel_id, timestamp), 0);
+        assert!(storage.messages_after(channel_id, timestamp, 10).is_empty());
+        assert_eq!(
+            storage.messages_before(channel_id, timestamp, 100).len(),
+            storage
+                .messages_before(channel_id, i64::MAX as u64, 100)
+                .len()
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
