@@ -865,6 +865,11 @@ impl App {
             bell,
         }: HandleReactionOptions,
     ) -> Option<()> {
+        // the reaction is drawn next to the message, so it must be a single emoji, not text
+        if !remove && emojis::get(&emoji).is_none() {
+            warn!(%sender_uuid, "ignoring reaction that is not an emoji");
+            return None;
+        }
         let mut message = self
             .storage
             .message(MessageId::new(channel_id, target_sent_timestamp))?;

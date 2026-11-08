@@ -664,6 +664,49 @@ pub(crate) mod tests {
         assert!(reactions.is_empty());
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_handle_reaction_requires_emoji() {
+        let (mut app, _events, _sent_messages) = test_app().await;
+        let channel_id = app.channels().first().unwrap().id;
+        let arrived_at = app.storage.messages_tail(channel_id, 1)[0].arrived_at;
+        let sender = Uuid::new_v4();
+
+        for not_emoji in ["", "a", "] fake [", "\u{1F44D}\u{1F44D}"] {
+            let handled = app
+                .handle_reaction(
+                    channel_id,
+                    arrived_at,
+                    sender,
+                    not_emoji.to_string(),
+                    HandleReactionOptions::new(),
+                )
+                .await;
+            assert_eq!(handled, None, "{not_emoji:?}");
+        }
+        let message = app
+            .storage
+            .message(MessageId::new(channel_id, arrived_at))
+            .unwrap();
+        assert!(message.reactions.is_empty());
+
+        for emoji in ["\u{1F44D}", "\u{1F44D}\u{1F3FD}", "\u{2764}\u{FE0F}"] {
+            app.handle_reaction(
+                channel_id,
+                arrived_at,
+                sender,
+                emoji.to_string(),
+                HandleReactionOptions::new(),
+            )
+            .await
+            .unwrap();
+            let message = app
+                .storage
+                .message(MessageId::new(channel_id, arrived_at))
+                .unwrap();
+            assert_eq!(message.reactions, [(sender, emoji.to_string())]);
+        }
+    }
+
     #[test]
     fn test_to_emoji() {
         assert_eq!(to_emoji("\u{1F680}"), Some("\u{1F680}"));
