@@ -77,6 +77,8 @@ pub struct ResolvedGroup {
     pub name: String,
     pub group_data: GroupData,
     pub profile_keys: Vec<ProfileKeyBytes>,
+    /// Disappearing messages timer of the group in seconds
+    pub expire_timer: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

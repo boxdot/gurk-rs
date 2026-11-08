@@ -737,4 +737,118 @@ pub(crate) mod tests {
         assert_eq!(app.name_by_id(uuid).await, "ellie");
         assert_eq!(app.channel(channel_id).unwrap().name, "ellie");
     }
+
+    mod expire_timer {
+        use presage::libsignal_service::content::{Content, ContentBody, Metadata};
+        use presage::libsignal_service::protocol::{DeviceId, ServiceId};
+        use presage::proto::{DataMessage, GroupContextV2};
+
+        use super::*;
+
+        const MASTER_KEY: GroupMasterKeyBytes = [7; 32];
+
+        fn content_from(sender: Uuid, data_message: DataMessage) -> Box<Content> {
+            let now = chrono::Utc::now();
+            Box::new(Content {
+                metadata: Metadata {
+                    sender: ServiceId::Aci(sender.into()),
+                    destination: ServiceId::Aci(Uuid::nil().into()),
+                    sender_device: DeviceId::new(1).unwrap(),
+                    pni_verified: None,
+                    client_timestamp: now,
+                    server_timestamp: now,
+                    needs_receipt: false,
+                    unidentified_sender: false,
+                    was_plaintext: false,
+                    server_guid: None,
+                },
+                body: ContentBody::DataMessage(data_message),
+            })
+        }
+
+        fn group_message(revision: u32, expire_timer: Option<u32>) -> DataMessage {
+            DataMessage {
+                body: Some("hi".to_string()),
+                timestamp: Some(1000),
+                expire_timer,
+                group_v2: Some(GroupContextV2 {
+                    master_key: Some(MASTER_KEY.to_vec()),
+                    revision: Some(revision),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }
+        }
+
+        fn add_group(app: &mut App, member: Uuid, revision: u32) -> ChannelId {
+            let channel_id = ChannelId::from_master_key_bytes(MASTER_KEY).unwrap();
+            let members = vec![app.user_id, member];
+            app.store_channel(Channel {
+                id: channel_id,
+                name: "group".to_string(),
+                group_data: Some(GroupData {
+                    master_key_bytes: MASTER_KEY,
+                    members,
+                    revision,
+                }),
+                unread_messages: 0,
+                muted: false,
+                typing: TypingSet::GroupTyping(Default::default()),
+                expire_timer: Some(3600),
+            });
+            channel_id
+        }
+
+        #[tokio::test(flavor = "multi_thread")]
+        async fn test_group_message_does_not_change_expire_timer() {
+            let (mut app, _events, _sent_messages) = test_app().await;
+            let member = Uuid::new_v4();
+            // same revision as returned by SignalManagerMock::resolve_group: not refreshed
+            let channel_id = add_group(&mut app, member, 0);
+
+            app.on_message(content_from(member, group_message(0, None)))
+                .await
+                .unwrap();
+            assert_eq!(app.channel(channel_id).unwrap().expire_timer, Some(3600));
+
+            app.on_message(content_from(member, group_message(0, Some(5))))
+                .await
+                .unwrap();
+            assert_eq!(app.channel(channel_id).unwrap().expire_timer, Some(3600));
+        }
+
+        #[tokio::test(flavor = "multi_thread")]
+        async fn test_group_expire_timer_follows_group_state() {
+            let (mut app, _events, _sent_messages) = test_app().await;
+            let member = Uuid::new_v4();
+            // stale revision: refreshed from the group state, which has no timer in the mock
+            let channel_id = add_group(&mut app, member, 1);
+
+            app.on_message(content_from(member, group_message(0, Some(3600))))
+                .await
+                .unwrap();
+            assert_eq!(app.channel(channel_id).unwrap().expire_timer, None);
+        }
+
+        #[tokio::test(flavor = "multi_thread")]
+        async fn test_direct_message_changes_expire_timer() {
+            let (mut app, _events, _sent_messages) = test_app().await;
+            let channel_id = app.channels().first().unwrap().id;
+            let ChannelId::User(contact) = channel_id else {
+                panic!("test channel is a user channel");
+            };
+
+            let message = DataMessage {
+                body: Some("hi".to_string()),
+                timestamp: Some(1000),
+                expire_timer: Some(60),
+                profile_key: Some(vec![0; 32]),
+                ..Default::default()
+            };
+            app.on_message(content_from(contact, message))
+                .await
+                .unwrap();
+            assert_eq!(app.channel(channel_id).unwrap().expire_timer, Some(60));
+        }
+    }
 }
