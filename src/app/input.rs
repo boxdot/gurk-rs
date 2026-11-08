@@ -316,7 +316,7 @@ impl App {
         if let Some(message) = self.selected_message()
             && let Some(text) = message.message.as_ref()
         {
-            let text = text.clone();
+            let text = clipboard_text(text);
             if let Some(clipboard) = self.clipboard.as_mut() {
                 if let Err(error) = clipboard.set_text(text) {
                     error!(%error, "failed to copy text to clipboard");
@@ -509,5 +509,47 @@ impl App {
         let clean_input = clean_input.trim().to_string();
 
         (clean_input, attachments)
+    }
+}
+
+/// Text of a message as it is copied to the clipboard
+///
+/// The message view does not show escape sequences, control characters or bidirectional text
+/// controls, so they are removed here as well. Otherwise text that looks harmless in gurk could
+/// paste as something else, e.g. into a terminal.
+fn clipboard_text(text: &str) -> String {
+    text.split('\t')
+        // strip_str also drops tabs
+        .map(strip_ansi_escapes::strip_str)
+        .collect::<Vec<_>>()
+        .join("\t")
+        .chars()
+        .filter(|&c| {
+            !(c.is_control() && c != '\n' && c != '\t')
+                && !matches!(
+                    c,
+                    '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
+                )
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod clipboard_tests {
+    use super::*;
+
+    #[test]
+    fn test_clipboard_text() {
+        assert_eq!(
+            clipboard_text("hello\n\tworld \u{1F44B}"),
+            "hello\n\tworld \u{1F44B}"
+        );
+        // escape sequences, e.g. the end of a bracketed paste
+        assert_eq!(clipboard_text("ls\x1b[201~; rm -rf ~"), "ls; rm -rf ~");
+        assert_eq!(clipboard_text("\x1b[31mred\x1b[0m"), "red");
+        // other control characters
+        assert_eq!(clipboard_text("a\rb\x07c\u{85}d"), "abcd");
+        // bidirectional text controls
+        assert_eq!(clipboard_text("abc\u{202E}fed\u{2066}x\u{2069}"), "abcfedx");
     }
 }
