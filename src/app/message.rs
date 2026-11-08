@@ -822,16 +822,13 @@ impl App {
         let mut messages_to_store = Vec::new();
 
         'outer: for channel_id in sender_channels {
-            let mut messages = self.storage.messages(channel_id).rev();
             for &ts in &timestamps {
-                // Note: `&mut` is needed to advance the iterator `messages` with each `ts`.
-                // Since these are sorted in reverse order, we can continue advancing messages
-                // without consuming them.
-                if let Some(msg) = (&mut messages)
-                    .take_while(|msg| msg.arrived_at >= ts)
-                    .find(|msg| msg.arrived_at == ts)
+                // look up each message directly instead of scanning the channel's history
+                if let Some(mut msg) = self
+                    .storage
+                    .message(MessageId::new(channel_id, ts))
+                    .filter(|msg| msg.edit.is_none())
                 {
-                    let mut msg = msg;
                     if msg.receipt < receipt {
                         msg.receipt = msg.receipt.max(receipt);
                         messages_to_store.push(msg);

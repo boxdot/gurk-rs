@@ -642,6 +642,58 @@ pub(crate) mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn test_read_receipt_updates_sent_messages() {
+        use presage::libsignal_service::content::{Content, ContentBody, Metadata};
+        use presage::libsignal_service::protocol::{DeviceId, ServiceId};
+        use presage::proto::{ReceiptMessage, receipt_message};
+
+        use crate::receipt::Receipt;
+
+        let (mut app, _events, _sent_messages) = test_app().await;
+        let channel_id = app.channels().first().unwrap().id;
+        let ChannelId::User(contact) = channel_id else {
+            panic!("test channel is a user channel");
+        };
+        for arrived_at in [10, 20, 30] {
+            let mut message = Message::text(app.user_id, arrived_at, "sent".to_string());
+            message.receipt = Receipt::Sent;
+            app.storage.store_message(channel_id, &message);
+        }
+
+        let now = chrono::Utc::now();
+        let content = Content {
+            metadata: Metadata {
+                sender: ServiceId::Aci(contact.into()),
+                destination: ServiceId::Aci(app.user_id.into()),
+                sender_device: DeviceId::new(1).unwrap(),
+                pni_verified: None,
+                client_timestamp: now,
+                server_timestamp: now,
+                needs_receipt: false,
+                unidentified_sender: false,
+                was_plaintext: false,
+                server_guid: None,
+            },
+            body: ContentBody::ReceiptMessage(ReceiptMessage {
+                r#type: Some(receipt_message::Type::Read.into()),
+                // unordered, with a timestamp that matches no message
+                timestamp: vec![20, 999, 30],
+            }),
+        };
+        app.on_message(Box::new(content)).await.unwrap();
+
+        let receipt = |arrived_at| {
+            app.storage
+                .message(MessageId::new(channel_id, arrived_at))
+                .unwrap()
+                .receipt
+        };
+        assert_eq!(receipt(10), Receipt::Sent);
+        assert_eq!(receipt(20), Receipt::Read);
+        assert_eq!(receipt(30), Receipt::Read);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_add_invalid_reaction() {
         let (mut app, _events, _sent_messages) = test_app().await;
 
