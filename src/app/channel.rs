@@ -279,6 +279,24 @@ impl App {
         channel_id
     }
 
+    /// Whether delivery and read receipts are sent in the channel
+    ///
+    /// Like message requests in the official clients, a direct chat is only accepted once the user
+    /// has written in it, so that strangers don't learn when the user is online or reading.
+    pub(crate) fn sends_receipts(&self, channel_id: ChannelId) -> bool {
+        match channel_id {
+            ChannelId::Group(_) => true,
+            ChannelId::User(uuid) => {
+                uuid == self.user_id
+                    || self
+                        .storage
+                        .messages(channel_id)
+                        .rev()
+                        .any(|message| message.from_id == self.user_id)
+            }
+        }
+    }
+
     pub(crate) async fn ensure_contact_channel_exists(
         &mut self,
         uuid: Uuid,

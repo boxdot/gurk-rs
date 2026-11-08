@@ -615,6 +615,57 @@ pub(crate) mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn test_delivered_receipts_only_after_user_wrote() {
+        use presage::libsignal_service::content::{Content, ContentBody, Metadata};
+        use presage::libsignal_service::protocol::{DeviceId, ServiceId};
+        use presage::proto::DataMessage;
+
+        fn direct_message(sender: Uuid, user_id: Uuid) -> Box<Content> {
+            let now = chrono::Utc::now();
+            Box::new(Content {
+                metadata: Metadata {
+                    sender: ServiceId::Aci(sender.into()),
+                    destination: ServiceId::Aci(user_id.into()),
+                    sender_device: DeviceId::new(1).unwrap(),
+                    pni_verified: None,
+                    client_timestamp: now,
+                    server_timestamp: now,
+                    needs_receipt: false,
+                    unidentified_sender: false,
+                    was_plaintext: false,
+                    server_guid: None,
+                },
+                body: ContentBody::DataMessage(DataMessage {
+                    body: Some("hi".to_string()),
+                    timestamp: Some(1000),
+                    profile_key: Some(vec![0; 32]),
+                    ..Default::default()
+                }),
+            })
+        }
+
+        let (mut app, _events, _sent_messages) = test_app().await;
+        let user_id = app.user_id;
+        // the fixture's contact: the user wrote the message at 0
+        let ChannelId::User(contact) = app.channels().first().unwrap().id else {
+            panic!("test channel is a user channel");
+        };
+
+        // a stranger: the user never wrote in this chat
+        let stranger = Uuid::new_v4();
+        app.on_message(direct_message(stranger, user_id))
+            .await
+            .unwrap();
+        assert!(app.channel(ChannelId::User(stranger)).is_some());
+        assert!(!app.receipt_handler.has_pending(stranger));
+
+        app.on_message(direct_message(contact, user_id))
+            .await
+            .unwrap();
+        assert!(app.receipt_handler.has_pending(contact));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_remove_reaction() {
         let (mut app, _events, _sent_messages) = test_app().await;
 

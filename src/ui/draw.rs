@@ -259,11 +259,14 @@ fn prepare_receipts(app: &mut App) {
         })
         .collect();
 
+    let sends_receipts = !read_messages.is_empty() && app.sends_receipts(channel_id);
     for message in read_messages {
         let from_id = message.from_id;
         let arrived_at = message.arrived_at;
         app.store_message(channel_id, message);
-        app.add_receipt_event(ReceiptEvent::new(from_id, arrived_at, Receipt::Read));
+        if sends_receipts {
+            app.add_receipt_event(ReceiptEvent::new(from_id, arrived_at, Receipt::Read));
+        }
     }
 }
 

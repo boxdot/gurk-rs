@@ -501,11 +501,13 @@ impl App {
                 }
 
                 // Send "Delivered" receipt
-                self.add_receipt_event(ReceiptEvent::new(
-                    sender.raw_uuid(),
-                    timestamp,
-                    Receipt::Delivered,
-                ));
+                if self.sends_receipts(channel_id) {
+                    self.add_receipt_event(ReceiptEvent::new(
+                        sender.raw_uuid(),
+                        timestamp,
+                        Receipt::Delivered,
+                    ));
+                }
 
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
