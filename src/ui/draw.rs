@@ -1394,4 +1394,11 @@ mod tests {
         ]));
         assert_eq!(rendered, Some(expected));
     }
+
+    #[test]
+    fn test_out_of_range_timestamp_does_not_panic() {
+        assert_eq!(display_time(u64::MAX), display_time(0));
+        assert!(display_date_line(u64::MAX, Some(0), WIDTH).is_none());
+        assert!(display_date_line(u64::MAX, None, WIDTH).is_some());
+    }
 }
