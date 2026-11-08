@@ -412,13 +412,23 @@ impl App {
                 };
 
                 let message_id = MessageId::new(channel_id, target_sent_timestamp);
-                if self.storage.delete_message(message_id) {
-                    info!(target_sent_timestamp, "message deleted remotely");
-                } else {
-                    warn!(
-                        target_sent_timestamp,
-                        "received remote delete for unknown message"
-                    );
+                match self.storage.message(message_id) {
+                    Some(message) if message.from_id == sender.raw_uuid() => {
+                        self.storage.delete_message(message_id);
+                        info!(target_sent_timestamp, "message deleted remotely");
+                    }
+                    Some(_) => {
+                        warn!(
+                            target_sent_timestamp,
+                            "ignoring remote delete of a message from another author"
+                        );
+                    }
+                    None => {
+                        warn!(
+                            target_sent_timestamp,
+                            "received remote delete for unknown message"
+                        );
+                    }
                 }
                 return Ok(());
             }
@@ -1104,6 +1114,133 @@ mod tests {
     use crate::data::Channel;
 
     use super::*;
+
+    fn content_from(sender: Uuid, body: ContentBody) -> Box<Content> {
+        use presage::libsignal_service::protocol::DeviceId;
+        let now = chrono::Utc::now();
+        Box::new(Content {
+            metadata: Metadata {
+                sender: ServiceId::Aci(sender.into()),
+                destination: ServiceId::Aci(Uuid::nil().into()),
+                sender_device: DeviceId::new(1).unwrap(),
+                pni_verified: None,
+                client_timestamp: now,
+                server_timestamp: now,
+                needs_receipt: false,
+                unidentified_sender: false,
+                was_plaintext: false,
+                server_guid: None,
+            },
+            body,
+        })
+    }
+
+    const MASTER_KEY: crate::signal::GroupMasterKeyBytes = [7; 32];
+
+    /// Group context of the channel created by [`add_group`]
+    fn group_v2() -> Option<GroupContextV2> {
+        Some(GroupContextV2 {
+            master_key: Some(MASTER_KEY.to_vec()),
+            // revision returned by SignalManagerMock::resolve_group
+            revision: Some(0),
+            ..Default::default()
+        })
+    }
+
+    fn add_group(app: &mut App, members: Vec<Uuid>) -> ChannelId {
+        let channel_id = ChannelId::from_master_key_bytes(MASTER_KEY).unwrap();
+        app.store_channel(Channel {
+            id: channel_id,
+            name: "group".to_string(),
+            group_data: Some(crate::data::GroupData {
+                master_key_bytes: MASTER_KEY,
+                members,
+                revision: 0,
+            }),
+            unread_messages: 0,
+            muted: false,
+            typing: TypingSet::GroupTyping(Default::default()),
+            expire_timer: None,
+        });
+        channel_id
+    }
+
+    fn remote_delete(
+        sender: Uuid,
+        target_sent_timestamp: u64,
+        group_v2: Option<GroupContextV2>,
+    ) -> Box<Content> {
+        content_from(
+            sender,
+            ContentBody::DataMessage(DataMessage {
+                delete: Some(Delete {
+                    target_sent_timestamp: Some(target_sent_timestamp),
+                }),
+                group_v2,
+                ..Default::default()
+            }),
+        )
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_remote_delete_by_author() {
+        let (mut app, _events, _sent_messages) = test_app().await;
+        let (alice, bob) = (Uuid::new_v4(), Uuid::new_v4());
+        let members = vec![app.user_id, alice, bob];
+        let channel_id = add_group(&mut app, members);
+        app.storage
+            .store_message(channel_id, &Message::text(alice, 1000, "hello".into()));
+
+        app.on_message(remote_delete(alice, 1000, group_v2()))
+            .await
+            .unwrap();
+
+        let message = app
+            .storage
+            .message(MessageId::new(channel_id, 1000))
+            .unwrap();
+        assert!(message.deleted);
+        assert_eq!(message.message, None);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_remote_delete_by_other_group_member_is_ignored() {
+        let (mut app, _events, _sent_messages) = test_app().await;
+        let (alice, bob) = (Uuid::new_v4(), Uuid::new_v4());
+        let members = vec![app.user_id, alice, bob];
+        let channel_id = add_group(&mut app, members);
+        app.storage
+            .store_message(channel_id, &Message::text(alice, 1000, "hello".into()));
+
+        app.on_message(remote_delete(bob, 1000, group_v2()))
+            .await
+            .unwrap();
+
+        let message = app
+            .storage
+            .message(MessageId::new(channel_id, 1000))
+            .unwrap();
+        assert!(!message.deleted);
+        assert_eq!(message.message.as_deref(), Some("hello"));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_remote_delete_of_own_message_by_contact_is_ignored() {
+        let (mut app, _events, _sent_messages) = test_app().await;
+        let channel_id = app.channels().first().unwrap().id;
+        let ChannelId::User(contact) = channel_id else {
+            panic!("test channel is a user channel");
+        };
+        // the fixture's message at 0 is from the user
+
+        app.on_message(remote_delete(contact, 0, None))
+            .await
+            .unwrap();
+
+        let message = app.storage.message(MessageId::new(channel_id, 0)).unwrap();
+        assert!(!message.deleted);
+        assert_eq!(message.message.as_deref(), Some("First message"));
+    }
 
     /// Overwrites the unread counter of the given channel in memory and storage.
     fn set_unread(app: &mut App, channel_id: ChannelId, unread_messages: u32) {
