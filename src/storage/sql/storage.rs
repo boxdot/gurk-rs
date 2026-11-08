@@ -1100,6 +1100,51 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn test_sqlite_storage_edit_by_other_author_is_ignored() {
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+        let (mut storage, channel_id) = windowed_fixtures().await;
+        let author = uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a");
+        let other = uuid!("91a6315b-027c-44ce-bacb-4d5cf012ba8c");
+
+        // edit of the original message
+        assert!(
+            storage
+                .store_edited_message(
+                    channel_id,
+                    50,
+                    Message::text(other, 95, "not yours".to_owned()),
+                )
+                .is_none()
+        );
+        // the author's edit still applies
+        assert!(
+            storage
+                .store_edited_message(
+                    channel_id,
+                    50,
+                    Message::text(author, 96, "edited".to_owned()),
+                )
+                .is_some()
+        );
+        // edit of the author's edit
+        assert!(
+            storage
+                .store_edited_message(
+                    channel_id,
+                    96,
+                    Message::text(other, 97, "not yours".to_owned()),
+                )
+                .is_none()
+        );
+
+        let original = storage.message(MessageId::new(channel_id, 50)).unwrap();
+        assert_eq!(original.from_id, author);
+        assert_eq!(original.message.as_deref(), Some("edited"));
+        assert_eq!(storage.message(MessageId::new(channel_id, 95)), None);
+        assert_eq!(storage.message(MessageId::new(channel_id, 97)), None);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_sqlite_storage_windowed_messages_resolve_quotes() {
         let _ = tracing_subscriber::fmt().with_test_writer().try_init();
         let (mut storage, channel_id) = windowed_fixtures().await;

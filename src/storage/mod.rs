@@ -62,7 +62,7 @@ pub trait Storage {
     fn store_message(&mut self, channel_id: ChannelId, message: &Message);
 
     /// Applies an edit and returns the updated original message, or `None` if the message pointed
-    /// to by `target_sent_timestamp` does not exist.
+    /// to by `target_sent_timestamp` does not exist or is not from the author of the edit.
     fn store_edited_message(
         &mut self,
         channel_id: ChannelId,
@@ -71,11 +71,19 @@ pub trait Storage {
     ) -> Option<Message> {
         // Note: target_sent_timestamp points to the previous edit or the original message
         let prev_edited = self.message(MessageId::new(channel_id, target_sent_timestampt))?;
+        // only the author can edit a message
+        if prev_edited.from_id != message.from_id {
+            return None;
+        }
 
         // get original message
         let mut original = if let Some(arrived_at) = prev_edited.edit {
             // previous edit => get original message
-            self.message(MessageId::new(channel_id, arrived_at))?
+            let original = self.message(MessageId::new(channel_id, arrived_at))?;
+            if original.from_id != message.from_id {
+                return None;
+            }
+            original
         } else {
             // original message => first edit
             let original = prev_edited;

@@ -626,7 +626,7 @@ impl App {
                 } else {
                     warn!(
                         target_sent_timestamp,
-                        "could not find original message to apply edit"
+                        "could not find original message from the sender to apply edit"
                     );
                 }
                 return Ok(());
