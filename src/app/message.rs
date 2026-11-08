@@ -639,6 +639,17 @@ impl App {
         };
 
         let message_id = MessageId::new(channel_id, message.arrived_at);
+        // messages are stored by channel and timestamp; don't let a message replace another
+        // author's message with the same timestamp
+        if let Some(existing) = self.storage.message(message_id)
+            && existing.from_id != message.from_id
+        {
+            warn!(
+                arrived_at = message.arrived_at,
+                "dropping message with the timestamp of a message from another author"
+            );
+            return Ok(());
+        }
         self.add_message_to_channel(channel_id, message);
         if !attachment_pointers.is_empty() {
             self.save_attachments(message_id, attachment_pointers);

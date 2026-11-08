@@ -1227,6 +1227,48 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn test_sqlite_storage_edit_does_not_overwrite_other_author() {
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+        let (mut storage, channel_id) = windowed_fixtures().await;
+        let author = uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a");
+        let other = uuid!("91a6315b-027c-44ce-bacb-4d5cf012ba8c");
+        storage.store_message(
+            channel_id,
+            &Message::text(other, 85, "other at 85".to_owned()),
+        );
+        storage.store_message(
+            channel_id,
+            &Message::text(other, 61, "other at 61".to_owned()),
+        );
+
+        // edit stored at the timestamp of another author's message
+        assert!(
+            storage
+                .store_edited_message(channel_id, 50, Message::text(author, 85, "edit".to_owned()))
+                .is_none()
+        );
+        // preserved original stored right after it, at another author's message
+        assert!(
+            storage
+                .store_edited_message(channel_id, 60, Message::text(author, 95, "edit".to_owned()))
+                .is_none()
+        );
+
+        let message = storage.message(MessageId::new(channel_id, 85)).unwrap();
+        assert_eq!((message.from_id, message.edit), (other, None));
+        let message = storage.message(MessageId::new(channel_id, 61)).unwrap();
+        assert_eq!(message.message.as_deref(), Some("other at 61"));
+        let message = storage.message(MessageId::new(channel_id, 50)).unwrap();
+        assert_eq!(message.message.as_deref(), Some("message 50"));
+        // edits that don't collide still apply
+        assert!(
+            storage
+                .store_edited_message(channel_id, 50, Message::text(author, 96, "edit".to_owned()))
+                .is_some()
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_sqlite_storage_last_message() {
         let _ = tracing_subscriber::fmt().with_test_writer().try_init();
         let (storage, channel_id) = windowed_fixtures().await;
