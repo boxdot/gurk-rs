@@ -62,7 +62,8 @@ pub trait Storage {
     fn store_message(&mut self, channel_id: ChannelId, message: &Message);
 
     /// Applies an edit and returns the updated original message, or `None` if the message pointed
-    /// to by `target_sent_timestamp` does not exist or is not from the author of the edit.
+    /// to by `target_sent_timestamp` does not exist, is not from the author of the edit, or if
+    /// storing the edit would overwrite a message from another author.
     fn store_edited_message(
         &mut self,
         channel_id: ChannelId,
@@ -73,6 +74,13 @@ pub trait Storage {
         let prev_edited = self.message(MessageId::new(channel_id, target_sent_timestampt))?;
         // only the author can edit a message
         if prev_edited.from_id != message.from_id {
+            return None;
+        }
+        // the edit is stored at its own timestamp, which must not hold another author's message
+        if self
+            .message(MessageId::new(channel_id, message.arrived_at))
+            .is_some_and(|existing| existing.from_id != message.from_id)
+        {
             return None;
         }
 
@@ -87,6 +95,14 @@ pub trait Storage {
         } else {
             // original message => first edit
             let original = prev_edited;
+            // the preserved body is stored right after the original, which must not hold another
+            // author's message
+            if self
+                .message(MessageId::new(channel_id, original.arrived_at + 1))
+                .is_some_and(|existing| existing.from_id != original.from_id)
+            {
+                return None;
+            }
 
             // preserve body of the original message; it is replaced below
             let mut preserved = original.clone();
