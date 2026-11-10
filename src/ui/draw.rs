@@ -1,6 +1,7 @@
 //! Draw the UI
 
 use std::fmt;
+use std::path::PathBuf;
 
 use chrono::Datelike;
 use itertools::Itertools;
@@ -48,18 +49,15 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
     let chunks = if app.is_channel_list_shown() {
         Layout::default()
-            .constraints(
-                [
-                    Constraint::Ratio(1, CHANNEL_VIEW_RATIO),
-                    Constraint::Ratio(3, CHANNEL_VIEW_RATIO),
-                ]
-                .as_ref(),
-            )
+            .constraints([
+                Constraint::Ratio(1, CHANNEL_VIEW_RATIO),
+                Constraint::Ratio(3, CHANNEL_VIEW_RATIO),
+            ])
             .direction(Direction::Horizontal)
             .split(f.area())
     } else {
         Layout::default()
-            .constraints([Constraint::Percentage(100)].as_ref())
+            .constraints([Constraint::Percentage(100)])
             .direction(Direction::Horizontal)
             .split(f.area())
     };
@@ -79,7 +77,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 fn draw_select_channel_popup(f: &mut Frame, select_channel: &mut SelectChannel) {
     let area = centered_rect(60, 60, f.area());
     let chunks = Layout::default()
-        .constraints([Constraint::Length(1 + 2), Constraint::Min(0)].as_ref())
+        .constraints([Constraint::Length(1 + 2), Constraint::Min(0)])
         .direction(Direction::Vertical)
         .split(area);
     f.render_widget(Clear, area);
@@ -206,13 +204,10 @@ fn draw_chat(f: &mut Frame, app: &mut App, area: Rect) {
         wrap(&app.input.data, app.input.cursor.clone(), text_width);
 
     let chunks = Layout::default()
-        .constraints(
-            [
-                Constraint::Min(0),
-                Constraint::Length(num_input_lines as u16 + 2),
-            ]
-            .as_ref(),
-        )
+        .constraints([
+            Constraint::Min(0),
+            Constraint::Length(num_input_lines as u16 + 2),
+        ])
         .direction(Direction::Vertical)
         .split(area);
 
@@ -328,7 +323,7 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     }
 
     // build candidates and fit them into the viewport
-    let (items, ats, heights) = build_candidates(app, bottom, width, height, pos.selected);
+    let (items, ats, heights, images) = build_candidates(app, bottom, width, height, pos.selected);
     let selected_pos = selected.and_then(|s| ats.iter().position(|&at| at == s));
     let (start, end) = fit_window(&heights, height, selected_pos);
 
@@ -340,6 +335,29 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     let mut state = ListState::default();
     state.select(selected_pos.map(|s| s - start));
     f.render_stateful_widget(list, area, &mut state);
+
+    // draw inline images over their reserved rows; the list is laid out bottom to top
+    let inner_bottom = area.y + 1 + height as u16;
+    let mut item_bottom = inner_bottom;
+    for (item_height, placements) in heights[start..end].iter().zip(&images[start..end]) {
+        let item_top = item_bottom.saturating_sub(*item_height as u16);
+        for placement in placements {
+            let y = item_top + placement.row as u16;
+            if y < area.y + 1 || inner_bottom < y + placement.size.height {
+                continue; // not fully visible
+            }
+            let image_area = Rect::new(
+                area.x + 1 + placement.column,
+                y,
+                placement.size.width,
+                placement.size.height,
+            );
+            app.images
+                .render(f, &placement.path, placement.size, image_area);
+        }
+        item_bottom = item_top;
+    }
+    app.images.finish_frame();
 
     // update the bottom anchor but only when we are not sticking to the bottom
     let new_bottom = ats[start];
@@ -354,7 +372,12 @@ fn build_candidates(
     width: usize,
     height: usize,
     until: Option<u64>,
-) -> (Vec<ListItem<'static>>, Vec<u64>, Vec<usize>) {
+) -> (
+    Vec<ListItem<'static>>,
+    Vec<u64>,
+    Vec<usize>,
+    Vec<Vec<ImagePlacement>>,
+) {
     let Some(window) = app.window.as_ref() else {
         return Default::default();
     };
@@ -398,6 +421,7 @@ fn build_candidates(
     let mut items: Vec<ListItem<'static>> = Vec::new();
     let mut items_ats: Vec<u64> = Vec::new();
     let mut heights: Vec<usize> = Vec::new();
+    let mut images: Vec<Vec<ImagePlacement>> = Vec::new();
 
     let mut candidates = candidates.iter().enumerate().peekable();
     while let Some((idx, msg)) = candidates.next() {
@@ -417,7 +441,7 @@ fn build_candidates(
             });
         let show_receipt = ShowReceipt::from_msg(msg, app.user_id, app.config.show_receipts);
 
-        if let Some(item) = display_message(
+        if let Some(mut lines) = message_lines(
             &names,
             msg,
             &prefix,
@@ -428,14 +452,61 @@ fn build_candidates(
             new_messages_division,
             app.config.colored_messages,
         ) {
-            let h = item.height();
-            items.push(item);
+            let placements = add_image_rows(app, msg, prefix_width, width, height, &mut lines);
+            heights.push(lines.len());
+            items.push(ListItem::new(Text::from(lines)));
             items_ats.push(msg.arrived_at);
-            heights.push(h);
+            images.push(placements);
         }
     }
 
-    (items, items_ats, heights)
+    (items, items_ats, heights, images)
+}
+
+/// Inline image of a message: the image is drawn below the text over reserved empty rows
+struct ImagePlacement {
+    path: PathBuf,
+    /// Row of the image relative to the top of the message
+    row: usize,
+    /// Column of the image relative to the left of the messages view, where the text starts
+    column: u16,
+    size: ratatui::layout::Size,
+}
+
+/// Appends empty rows for the inline images of the message's image attachments
+fn add_image_rows(
+    app: &App,
+    msg: &Message,
+    prefix_width: usize,
+    width: usize,
+    height: usize,
+    lines: &mut Vec<Line<'static>>,
+) -> Vec<ImagePlacement> {
+    let mut placements = Vec::new();
+    if msg.deleted || !app.images.is_enabled() {
+        return placements;
+    }
+    let max_width = width.saturating_sub(prefix_width) as u16;
+    for attachment in &msg.attachments {
+        if !attachment.content_type.starts_with("image/") {
+            continue;
+        }
+        let available_height = height.saturating_sub(lines.len()) as u16;
+        let Some(size) = app
+            .images
+            .size(&attachment.filename, max_width, available_height)
+        else {
+            continue;
+        };
+        placements.push(ImagePlacement {
+            path: attachment.filename.clone(),
+            row: lines.len(),
+            column: prefix_width as u16,
+            size,
+        });
+        lines.extend((0..size.height).map(|_| Line::from("")));
+    }
+    placements
 }
 
 fn fit_window(heights: &[usize], height: usize, selected: Option<usize>) -> (usize, usize) {
@@ -517,6 +588,7 @@ fn display_receipt(receipt: Receipt, show: ShowReceipt) -> &'static str {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 fn display_message(
     names: &NameResolver,
     msg: &Message,
@@ -528,6 +600,32 @@ fn display_message(
     unread_messages_division: Option<String>,
     colored_messages: bool,
 ) -> Option<ListItem<'static>> {
+    message_lines(
+        names,
+        msg,
+        prefix,
+        width,
+        height,
+        show_receipt,
+        date_division,
+        unread_messages_division,
+        colored_messages,
+    )
+    .map(|lines| ListItem::new(Text::from(lines)))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn message_lines(
+    names: &NameResolver,
+    msg: &Message,
+    prefix: &str,
+    width: usize,
+    height: usize,
+    show_receipt: ShowReceipt,
+    date_division: Option<String>,
+    unread_messages_division: Option<String>,
+    colored_messages: bool,
+) -> Option<Vec<Line<'static>>> {
     let receipt = Span::styled(
         display_receipt(msg.receipt, show_receipt),
         Style::default().fg(Color::Yellow),
@@ -653,7 +751,7 @@ fn display_message(
         spans.resize(height - 1, Line::from(""));
         spans.push(Line::from(format!("{prefix}[...]")));
     }
-    Some(ListItem::new(Text::from(spans)))
+    Some(spans)
 }
 
 fn replace_mentions(msg: &Message, names: &NameResolver, text: String) -> String {
@@ -898,26 +996,20 @@ fn displayed_quote(names: &NameResolver, quote: &Message) -> Option<String> {
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Percentage((100 - percent_y) / 2),
-                Constraint::Percentage(percent_y),
-                Constraint::Percentage((100 - percent_y) / 2),
-            ]
-            .as_ref(),
-        )
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
         .split(r);
 
     Layout::default()
         .direction(Direction::Horizontal)
-        .constraints(
-            [
-                Constraint::Percentage((100 - percent_x) / 2),
-                Constraint::Percentage(percent_x),
-                Constraint::Percentage((100 - percent_x) / 2),
-            ]
-            .as_ref(),
-        )
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
         .split(popup_layout[1])[1]
 }
 
@@ -1393,5 +1485,80 @@ mod tests {
             ]),
         ]));
         assert_eq!(rendered, Some(expected));
+    }
+}
+
+#[cfg(test)]
+mod image_tests {
+    use image::{Rgb, RgbImage};
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+    use ratatui_image::picker::Picker;
+
+    use crate::app::tests::test_app;
+    use crate::event::Event;
+    use crate::signal::Attachment;
+
+    use super::*;
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_inline_image_below_message_text() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("photo.png");
+        RgbImage::from_pixel(400, 200, Rgb([255, 0, 0]))
+            .save(&path)
+            .unwrap();
+
+        let (mut app, mut events, _sent_messages) = test_app().await;
+        app.set_image_picker(Picker::halfblocks());
+        let channel_id = app.channels().first().unwrap().id;
+        let message = Message {
+            attachments: vec![Attachment {
+                id: "1".to_string(),
+                content_type: "image/png".to_string(),
+                filename: path.clone(),
+                size: 42,
+            }],
+            ..Message::new(app.user_id, Some("look".to_string()), [], 1000, Vec::new())
+        };
+        app.store_message(channel_id, message);
+
+        let row_text = |buffer: &ratatui::buffer::Buffer, y: u16| {
+            (0..100)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect::<String>()
+        };
+        let find_row = |buffer: &ratatui::buffer::Buffer, text: &str| {
+            (0..30).find(|&y| row_text(buffer, y).contains(text))
+        };
+
+        // the rows of the image are reserved before it is loaded, so the layout does not jump
+        let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
+        terminal.draw(|f| draw(f, &mut app)).unwrap();
+        let buffer = terminal.backend().buffer().clone();
+        let path_row = find_row(&buffer, "photo.png").expect("attachment path shown");
+        assert_eq!(find_row(&buffer, "loading image"), Some(path_row + 1));
+
+        assert!(matches!(events.recv().await, Some(Event::ImageLoaded)));
+        terminal.draw(|f| draw(f, &mut app)).unwrap();
+        let buffer = terminal.backend().buffer().clone();
+        let red = Color::Rgb(255, 0, 0);
+        assert_eq!(find_row(&buffer, "photo.png"), Some(path_row), "no jump");
+        let red_cells: Vec<(u16, u16)> = (0..30)
+            .flat_map(|y| (0..100).map(move |x| (x, y)))
+            .filter(|&(x, y)| buffer[(x, y)].bg == red)
+            .collect();
+
+        // 400x200px with a 10x20px font: 40x10 cells, exactly the 10 lines limit
+        assert_eq!(red_cells.len(), 40 * 10);
+        let (left, top) = red_cells[0];
+        assert_eq!(top, path_row + 1, "image starts right below the text");
+        // aligned with the text of the message, after the time and receipt prefix
+        let text_column = (0..100)
+            .find(|&x| buffer[(x, path_row)].symbol() == "<")
+            .unwrap();
+        assert_eq!(left, text_column);
+        let input_row = find_row(&buffer, "Input").unwrap();
+        assert!(top + 10 < input_row, "image above the input box");
     }
 }

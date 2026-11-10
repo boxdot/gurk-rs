@@ -54,6 +54,9 @@ pub struct Config {
     /// If set, the full message text will be colored, not only the author name
     #[serde(default)]
     pub colored_messages: bool,
+    /// Maximum height in lines of inline image previews; 0 disables them
+    #[serde(default = "default_image_height")]
+    pub image_height: u16,
     #[serde(default)]
     /// Keymaps
     pub keybindings: ModeKeybindingConfig,
@@ -205,6 +208,7 @@ impl Config {
             sqlite: Default::default(),
             passphrase: None,
             colored_messages: false,
+            image_height: default_image_height(),
             default_keybindings: true,
             keybindings: ModeKeybindingConfig::default(),
         }
@@ -423,6 +427,10 @@ fn default_data_dir() -> PathBuf {
 
 fn is_default_data_dir(path: &Path) -> bool {
     path == default_data_dir()
+}
+
+fn default_image_height() -> u16 {
+    10
 }
 
 fn default_true() -> bool {
