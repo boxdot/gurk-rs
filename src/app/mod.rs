@@ -322,6 +322,11 @@ impl App {
         self.images.clear_encoded();
     }
 
+    /// Escape sequences deleting the images dropped from the cache from the terminal
+    pub fn take_image_commands(&mut self) -> String {
+        self.images.take_terminal_commands()
+    }
+
     pub fn toggle_channel_list(&mut self) {
         self.show_channel_list = !self.show_channel_list;
     }

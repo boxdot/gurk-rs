@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use std::fs;
+use std::io::Write as _;
 
 use anyhow::{Context, anyhow};
 use chrono::{DateTime, Utc};
@@ -237,9 +238,13 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
     terminal.clear()?;
 
     // Detect the terminal graphics protocol; this also reads the reply from stdin, so it must happen
-    // before spawning the event reader.
+    // before spawning the event reader. The query blocks for up to 2s, so it runs off the runtime.
+    //
+    // A terminal that does not answer is not an error: the picker falls back to halfblocks, and
+    // only I/O errors disable images. On such a terminal, ratatui-image (11.1) leaves its query
+    // thread blocked reading stdin, which swallows the first key press.
     if app.is_images_enabled() {
-        match ratatui_image::picker::Picker::from_query_stdio() {
+        match tokio::task::spawn_blocking(ratatui_image::picker::Picker::from_query_stdio).await? {
             Ok(picker) => app.set_image_picker(picker),
             Err(error) => warn!(%error, "inline images disabled: failed to query terminal"),
         }
@@ -317,6 +322,12 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
                 app.reset_images();
             }
             terminal.draw(|f| ui::draw(f, &mut app))?;
+            let image_commands = app.take_image_commands();
+            if !image_commands.is_empty() {
+                let backend = terminal.backend_mut();
+                backend.write_all(image_commands.as_bytes())?;
+                std::io::Write::flush(backend)?;
+            }
             last_render_at = Instant::now();
         }
 

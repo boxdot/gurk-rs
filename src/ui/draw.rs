@@ -337,12 +337,6 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
     f.render_stateful_widget(list, area, &mut state);
 
     // draw inline images over their reserved rows; the list is laid out bottom to top
-    let prefix_width = TIME_WIDTH
-        + if app.config.show_receipts {
-            RECEIPT_WIDTH
-        } else {
-            0
-        };
     let inner_bottom = area.y + 1 + height as u16;
     let mut item_bottom = inner_bottom;
     for (item_height, placements) in heights[start..end].iter().zip(&images[start..end]) {
@@ -353,21 +347,17 @@ fn draw_messages(f: &mut Frame, app: &mut App, area: Rect) {
                 continue; // not fully visible
             }
             let image_area = Rect::new(
-                area.x + 1 + prefix_width as u16,
+                area.x + 1 + placement.column,
                 y,
                 placement.size.width,
                 placement.size.height,
             );
-            app.images.render(
-                f,
-                &placement.path,
-                placement.max_width,
-                placement.available_height,
-                image_area,
-            );
+            app.images
+                .render(f, &placement.path, placement.size, image_area);
         }
         item_bottom = item_top;
     }
+    app.images.finish_frame();
 
     // update the bottom anchor but only when we are not sticking to the bottom
     let new_bottom = ats[start];
@@ -420,6 +410,7 @@ fn build_candidates(
     );
 
     // message display options
+    const TIME_WIDTH: usize = 6; // width of "00:00 "
     let mut prefix_width = TIME_WIDTH;
     if app.config.show_receipts {
         prefix_width += RECEIPT_WIDTH;
@@ -477,9 +468,9 @@ struct ImagePlacement {
     path: PathBuf,
     /// Row of the image relative to the top of the message
     row: usize,
+    /// Column of the image relative to the left of the messages view, where the text starts
+    column: u16,
     size: ratatui::layout::Size,
-    max_width: u16,
-    available_height: u16,
 }
 
 /// Appends empty rows for the inline images of the message's image attachments
@@ -510,9 +501,8 @@ fn add_image_rows(
         placements.push(ImagePlacement {
             path: attachment.filename.clone(),
             row: lines.len(),
+            column: prefix_width as u16,
             size,
-            max_width,
-            available_height,
         });
         lines.extend((0..size.height).map(|_| Line::from("")));
     }
@@ -552,8 +542,6 @@ fn fit_window(heights: &[usize], height: usize, selected: Option<usize>) -> (usi
         _ => (0, end),
     }
 }
-
-const TIME_WIDTH: usize = 6; // width of "00:00 "
 
 fn display_time(timestamp: u64) -> String {
     utc_timestamp_msec_to_local(timestamp)
@@ -1535,21 +1523,27 @@ mod image_tests {
         };
         app.store_message(channel_id, message);
 
-        let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
-        terminal.draw(|f| draw(f, &mut app)).unwrap();
-        assert!(matches!(events.recv().await, Some(Event::ImageLoaded)));
-        terminal.draw(|f| draw(f, &mut app)).unwrap();
-
-        let buffer = terminal.backend().buffer().clone();
-        let red = Color::Rgb(255, 0, 0);
-        let row_text = |y: u16| {
+        let row_text = |buffer: &ratatui::buffer::Buffer, y: u16| {
             (0..100)
                 .map(|x| buffer[(x, y)].symbol())
                 .collect::<String>()
         };
-        let path_row = (0..30)
-            .find(|&y| row_text(y).contains("photo.png"))
-            .expect("attachment path shown");
+        let find_row = |buffer: &ratatui::buffer::Buffer, text: &str| {
+            (0..30).find(|&y| row_text(buffer, y).contains(text))
+        };
+
+        // the rows of the image are reserved before it is loaded, so the layout does not jump
+        let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
+        terminal.draw(|f| draw(f, &mut app)).unwrap();
+        let buffer = terminal.backend().buffer().clone();
+        let path_row = find_row(&buffer, "photo.png").expect("attachment path shown");
+        assert_eq!(find_row(&buffer, "loading image"), Some(path_row + 1));
+
+        assert!(matches!(events.recv().await, Some(Event::ImageLoaded)));
+        terminal.draw(|f| draw(f, &mut app)).unwrap();
+        let buffer = terminal.backend().buffer().clone();
+        let red = Color::Rgb(255, 0, 0);
+        assert_eq!(find_row(&buffer, "photo.png"), Some(path_row), "no jump");
         let red_cells: Vec<(u16, u16)> = (0..30)
             .flat_map(|y| (0..100).map(move |x| (x, y)))
             .filter(|&(x, y)| buffer[(x, y)].bg == red)
@@ -1559,9 +1553,12 @@ mod image_tests {
         assert_eq!(red_cells.len(), 40 * 10);
         let (left, top) = red_cells[0];
         assert_eq!(top, path_row + 1, "image starts right below the text");
-        // messages view starts at 1/4 of the width, +1 border, +time and receipt prefix
-        assert_eq!(left, 25 + 1 + (TIME_WIDTH + RECEIPT_WIDTH) as u16);
-        let input_row = (0..30).find(|&y| row_text(y).contains("Input")).unwrap();
+        // aligned with the text of the message, after the time and receipt prefix
+        let text_column = (0..100)
+            .find(|&x| buffer[(x, path_row)].symbol() == "<")
+            .unwrap();
+        assert_eq!(left, text_column);
+        let input_row = find_row(&buffer, "Input").unwrap();
         assert!(top + 10 < input_row, "image above the input box");
     }
 }
