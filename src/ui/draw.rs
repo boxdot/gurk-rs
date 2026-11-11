@@ -427,6 +427,7 @@ fn build_candidates(
             date_division,
             new_messages_division,
             app.config.colored_messages,
+            app.config.replace_emoji_with_names
         ) {
             let h = item.height();
             items.push(item);
@@ -527,6 +528,7 @@ fn display_message(
     date_division: Option<String>,
     unread_messages_division: Option<String>,
     colored_messages: bool,
+    replace_emoji_with_names: bool,
 ) -> Option<ListItem<'static>> {
     let receipt = Span::styled(
         display_receipt(msg.receipt, show_receipt),
@@ -548,8 +550,11 @@ fn display_message(
     let mut text = if msg.deleted {
         String::from("[message deleted]")
     } else {
-        let text = strip_ansi_escapes::strip_str(msg.message.as_deref().unwrap_or_default());
-        let mut text = replace_mentions(msg, names, text);
+        let mut text = strip_ansi_escapes::strip_str(msg.message.as_deref().unwrap_or_default());
+        if replace_emoji_with_names {
+            text = emoji_names::replace_emoji(&text.to_string(), "en", "[", "]")?;
+        }
+        text = replace_mentions(msg, names, text);
         add_attachments(msg, &mut text);
         if text.is_empty() {
             return None; // no text => nothing to render
@@ -994,6 +999,7 @@ mod tests {
             None,
             None,
             false,
+            false,
         );
 
         let expected = ListItem::new(Text::from(vec![
@@ -1031,6 +1037,7 @@ mod tests {
             ShowReceipt::Never,
             None,
             None,
+            false,
             false,
         );
 
@@ -1071,6 +1078,7 @@ mod tests {
             ShowReceipt::Never,
             None,
             None,
+            false,
             false,
         );
 
@@ -1114,6 +1122,7 @@ mod tests {
             None,
             None,
             false,
+            false,
         );
 
         let expected = ListItem::new(Text::from(vec![Line::from(vec![
@@ -1147,6 +1156,7 @@ mod tests {
             show_receipt,
             None,
             None,
+            false,
             false,
         );
 
@@ -1182,6 +1192,7 @@ mod tests {
             None,
             None,
             false,
+            false,
         );
 
         let expected = ListItem::new(Text::from(vec![Line::from(vec![
@@ -1215,6 +1226,7 @@ mod tests {
             show_receipt,
             None,
             None,
+            false,
             false,
         );
 
@@ -1251,6 +1263,7 @@ mod tests {
             show_receipt,
             None,
             None,
+            false,
             false,
         );
 
@@ -1300,6 +1313,7 @@ mod tests {
             None,
             None,
             false,
+            false,
         );
 
         let expected = ListItem::new(Text::from(vec![
@@ -1337,6 +1351,7 @@ mod tests {
             ShowReceipt::Never,
             None,
             None,
+            false,
             false,
         );
 
@@ -1376,6 +1391,7 @@ mod tests {
             ShowReceipt::Never,
             None,
             Some(division.clone()),
+            false,
             false,
         );
 
