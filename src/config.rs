@@ -60,6 +60,9 @@ pub struct Config {
     /// Whether to enable the default keybindings
     #[serde(default = "default_true")]
     pub default_keybindings: bool,
+    // Whether to replace emojis with their CLDR short names in the message text
+    #[serde(default)]
+    pub replace_emoji_with_names: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -207,6 +210,7 @@ impl Config {
             colored_messages: false,
             default_keybindings: true,
             keybindings: ModeKeybindingConfig::default(),
+            replace_emoji_with_names: false,
         }
     }
 
