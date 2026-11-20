@@ -883,10 +883,15 @@ fn draw_help(f: &mut Frame, app: &mut App, area: Rect) {
     let mut command_bindings = help_commands();
     command_bindings.extend(help_indicators());
     command_bindings.extend(bindings(app));
+    let line_count = command_bindings.len() as u16;
     let command_bindings = Paragraph::new(Text::from(command_bindings))
         .block(Block::bordered().title("Available commands and configured shortcuts"))
         .scroll(app.help_scroll);
     f.render_widget(command_bindings, area);
+    // ponytail: clamp scroll after render so next frame is bounded
+    let visible_height = area.height.saturating_sub(2);
+    let max_scroll = line_count.saturating_sub(visible_height);
+    app.help_scroll.0 = app.help_scroll.0.min(max_scroll);
 }
 
 fn displayed_quote(names: &NameResolver, quote: &Message) -> Option<String> {
