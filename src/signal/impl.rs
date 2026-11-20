@@ -101,12 +101,21 @@ impl SignalManager for PresageManager {
         })
     }
 
-    async fn save_attachment(
-        &mut self,
+    fn save_attachment(
+        &self,
         attachment_pointer: AttachmentPointer,
-    ) -> anyhow::Result<Attachment> {
-        let attachment_data = self.manager.get_attachment(&attachment_pointer).await?;
-        attachment::save(&self.data_dir, attachment_pointer, &attachment_data)
+    ) -> oneshot::Receiver<anyhow::Result<Attachment>> {
+        let (tx, rx) = oneshot::channel();
+        let manager = self.manager.clone();
+        let data_dir = self.data_dir.clone();
+        self.local_pool.spawn(move || async move {
+            let attachment = match manager.get_attachment(&attachment_pointer).await {
+                Ok(data) => attachment::save(&data_dir, attachment_pointer, &data),
+                Err(error) => Err(error.into()),
+            };
+            let _ = tx.send(attachment);
+        });
+        rx
     }
 
     fn send_receipt(&self, sender_uuid: Uuid, timestamps: Vec<u64>, receipt: Receipt) {
@@ -270,6 +279,7 @@ impl SignalManager for PresageManager {
             receipt: Receipt::Sent,
             body_ranges: Default::default(),
             send_failed: Default::default(),
+            attachment_downloads: Default::default(),
             edit: edit_message_timestamp,
             edited: edit_message_timestamp.is_some(),
             deleted: Default::default(),
@@ -426,22 +436,27 @@ impl SignalManager for PresageManager {
         });
     }
 
-    async fn resolve_profile_name(
-        &mut self,
+    fn resolve_profile_name(
+        &self,
         id: Uuid,
         profile_key: ProfileKeyBytes,
-    ) -> Option<String> {
-        match self
-            .manager
-            .retrieve_profile_by_uuid(id, ProfileKey::create(profile_key))
-            .await
-        {
-            Ok(profile) => Some(profile.name?.given_name),
-            Err(e) => {
-                error!("failed to retrieve user profile: {}", e);
-                None
-            }
-        }
+    ) -> oneshot::Receiver<Option<String>> {
+        let (tx, rx) = oneshot::channel();
+        let mut manager = self.manager.clone();
+        self.local_pool.spawn(move || async move {
+            let name = match manager
+                .retrieve_profile_by_uuid(id, ProfileKey::create(profile_key))
+                .await
+            {
+                Ok(profile) => profile.name.map(|name| name.given_name),
+                Err(error) => {
+                    error!(%error, "failed to retrieve user profile");
+                    None
+                }
+            };
+            let _ = tx.send(name);
+        });
+        rx
     }
 
     async fn profile_name(&self, id: Uuid) -> Option<String> {

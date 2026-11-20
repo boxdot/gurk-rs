@@ -61,20 +61,22 @@ impl SignalManager for SignalManagerMock {
         })
     }
 
-    async fn save_attachment(
-        &mut self,
+    fn save_attachment(
+        &self,
         attachment_pointer: AttachmentPointer,
-    ) -> anyhow::Result<Attachment> {
+    ) -> oneshot::Receiver<anyhow::Result<Attachment>> {
         let id = match attachment_pointer.attachment_identifier.unwrap() {
             AttachmentIdentifier::CdnId(id) => id.to_string(),
             AttachmentIdentifier::CdnKey(id) => id,
         };
-        Ok(Attachment {
+        let (tx, rx) = oneshot::channel();
+        let _ = tx.send(Ok(Attachment {
             id,
             content_type: attachment_pointer.content_type.unwrap(),
             filename: "somefile".to_string().into(),
             size: attachment_pointer.size.unwrap(),
-        })
+        }));
+        rx
     }
 
     fn send_receipt(&self, _: Uuid, _: Vec<u64>, _: Receipt) {}
@@ -106,6 +108,7 @@ impl SignalManager for SignalManagerMock {
             receipt: Receipt::Sent,
             body_ranges: Default::default(),
             send_failed: Default::default(),
+            attachment_downloads: Default::default(),
             edit: Default::default(),
             edited: Default::default(),
             deleted: Default::default(),
@@ -125,12 +128,14 @@ impl SignalManager for SignalManagerMock {
 
     fn send_delete_for_me(&self, _channel: &Channel, _message: &Message) {}
 
-    async fn resolve_profile_name(
-        &mut self,
+    fn resolve_profile_name(
+        &self,
         _id: Uuid,
         _profile_key: ProfileKeyBytes,
-    ) -> Option<String> {
-        None
+    ) -> oneshot::Receiver<Option<String>> {
+        let (tx, rx) = oneshot::channel();
+        let _ = tx.send(None);
+        rx
     }
 
     async fn profile_name(&self, _id: Uuid) -> Option<String> {
