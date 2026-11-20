@@ -15,7 +15,8 @@ use ratatui::{
     style::{Color, Modifier, Style},
     widgets::Wrap,
 };
-use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 use uuid::Uuid;
 
 use crate::app::App;
@@ -160,9 +161,12 @@ fn wrap(text: &str, mut cursor: Cursor, width: usize) -> (String, Cursor, usize)
     let mut line = 0;
     let mut col = 0;
 
-    for c in text.chars() {
+    // ponytail: iterate by grapheme to handle ZWJ emoji correctly
+    for grapheme in text.graphemes(true) {
+        let grapheme_width = grapheme.width();
+
         // current line too long => wrap
-        if col > 0 && col % width == 0 {
+        if col > 0 && col >= width {
             res.push('\n');
 
             // adjust cursor
@@ -179,13 +183,13 @@ fn wrap(text: &str, mut cursor: Cursor, width: usize) -> (String, Cursor, usize)
             col = 0;
         }
 
-        if c == '\n' {
+        if grapheme == "\n" {
             line += 1;
             col = 0;
         } else {
-            col += c.width().unwrap_or(0);
+            col += grapheme_width;
         }
-        res.push(c);
+        res.push_str(grapheme);
     }
 
     // special case: cursor is at the end of the text and overflows `width`
