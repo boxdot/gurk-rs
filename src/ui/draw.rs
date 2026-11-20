@@ -781,7 +781,7 @@ fn add_expire_countdown(msg: &Message, out: &mut dyn fmt::Write) {
     }
 }
 
-fn help_commands<'a>() -> Vec<Line<'a>> {
+fn help_commands() -> Vec<Line<'static>> {
     let commands = <Command as strum::IntoEnumIterator>::iter()
         .map(|cmd| {
             (
@@ -806,7 +806,7 @@ fn help_commands<'a>() -> Vec<Line<'a>> {
     v
 }
 
-fn bindings(app: &App) -> Vec<Line<'_>> {
+fn bindings(app: &App) -> Vec<Line<'static>> {
     [
         WindowMode::Normal,
         WindowMode::Anywhere,
@@ -820,7 +820,7 @@ fn bindings(app: &App) -> Vec<Line<'_>> {
     .concat()
 }
 
-fn bindings_mode<'a>(app: &App, mode: &WindowMode) -> Vec<Line<'a>> {
+fn bindings_mode(app: &App, mode: &WindowMode) -> Vec<Line<'static>> {
     let bindings = if let Some(kb) = app.mode_keybindings.get(mode) {
         kb.iter()
             .map(|(kc, cmd)| {
@@ -857,7 +857,7 @@ fn bindings_mode<'a>(app: &App, mode: &WindowMode) -> Vec<Line<'a>> {
     v
 }
 
-fn help_indicators<'a>() -> Vec<Line<'a>> {
+fn help_indicators() -> Vec<Line<'static>> {
     let indicators: &[(&str, &str)] = &[
         ("(N)", "N unread messages in channel"),
         ("[M]", "Channel is muted (notifications silenced)"),
@@ -883,15 +883,19 @@ fn draw_help(f: &mut Frame, app: &mut App, area: Rect) {
     let mut command_bindings = help_commands();
     command_bindings.extend(help_indicators());
     command_bindings.extend(bindings(app));
+
+    // ponytail: clamp scroll before render to avoid one-frame flash
     let line_count = command_bindings.len() as u16;
-    let command_bindings = Paragraph::new(Text::from(command_bindings))
-        .block(Block::bordered().title("Available commands and configured shortcuts"))
-        .scroll(app.help_scroll);
-    f.render_widget(command_bindings, area);
-    // ponytail: clamp scroll after render so next frame is bounded
     let visible_height = area.height.saturating_sub(2);
     let max_scroll = line_count.saturating_sub(visible_height);
     app.help_scroll.0 = app.help_scroll.0.min(max_scroll);
+
+    // Build Text first to release the borrow from bindings(app)
+    let text = Text::from(command_bindings);
+    let command_bindings = Paragraph::new(text)
+        .block(Block::bordered().title("Available commands and configured shortcuts"))
+        .scroll(app.help_scroll);
+    f.render_widget(command_bindings, area);
 }
 
 fn displayed_quote(names: &NameResolver, quote: &Message) -> Option<String> {
