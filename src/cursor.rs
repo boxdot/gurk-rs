@@ -90,7 +90,7 @@ impl Cursor {
                     .map(|g| g.width())
                     .sum();
             } else {
-                self.col -= g.width();
+                self.col = self.col.saturating_sub(g.width());
             }
             self.idx = idx;
             self.col_wanted = None;
@@ -148,10 +148,16 @@ impl Cursor {
     }
 
     pub fn delete_line_backward(&mut self, text: &mut String) {
-        // Delete graphemes until we hit start of line
-        while self.col > 0 {
-            self.delete_backward(text);
-        }
+        // Find start of current line and delete in one operation (O(n) not O(n^2))
+        let line_start = text[..self.idx]
+            .grapheme_indices(true)
+            .rev()
+            .find(|(_, g)| *g == "\n")
+            .map(|(idx, g)| idx + g.len())
+            .unwrap_or(0);
+        text.replace_range(line_start..self.idx, "");
+        self.idx = line_start;
+        self.col = 0;
     }
 
     pub fn delete_word_backward(&mut self, text: &mut String) {
@@ -199,7 +205,7 @@ impl Cursor {
             }
         } else {
             // No newline found, move to end of text
-            self.col = text[..text.len()]
+            self.col = text
                 .graphemes(true)
                 .rev()
                 .take_while(|&g| g != "\n")
