@@ -1,7 +1,7 @@
 [package]
 name = "gurk"
 description = "Signal messenger client for terminal"
-version = "0.10.1"
+version = "0.10.2"
 authors = ["boxdot <d@zerovolt.org>"]
 edition = "2024"
 keywords = ["signal", "tui"]
@@ -37,8 +37,8 @@ debug = true
 dev = ["prost", "base64", "serde_json"]
 
 [dependencies]
-presage = { git = "https://github.com/whisperfish/presage", rev = "f74b96e0fb9099ce8be2b28b7ca9d11f78a6faea", default-features = false }
-presage-store-sqlite = { git = "https://github.com/whisperfish/presage", rev = "f74b96e0fb9099ce8be2b28b7ca9d11f78a6faea", default-features = false }
+presage = { git = "https://github.com/whisperfish/presage", rev = "94b3978f5456469cfd4d9f72351a5eff93715f81", default-features = false }
+presage-store-sqlite = { git = "https://github.com/whisperfish/presage", rev = "94b3978f5456469cfd4d9f72351a5eff93715f81", default-features = false }
 
 # dev feature dependenciestoml
 prost = { version = "0.14.4", optional = true }

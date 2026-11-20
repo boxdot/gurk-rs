@@ -1,5 +1,6 @@
 use uuid::Uuid;
 
+use crate::event::Event;
 use crate::util;
 use crate::{
     app::window::MessageWindow,
@@ -189,52 +190,72 @@ impl App {
         }
     }
 
+    /// Makes sure that the name of the user is known.
+    ///
+    /// If the name has to be fetched from the Signal server, this is done in the background, and
+    /// the user id is used as name in the meantime.
     pub(super) async fn ensure_user_is_known(
         &mut self,
         uuid: Uuid,
         profile_key: Option<ProfileKeyBytes>,
     ) {
-        // is_known <=>
-        //   * in names, and
-        //   * is not empty
-        //   * is not a phone numbers, and
-        //   * is not their uuid
-        let is_known = self
-            .storage
-            .name(uuid)
-            .filter(|name| {
-                !name.is_empty()
-                    && !util::is_phone_number(name)
-                    && Uuid::parse_str(name) != Ok(uuid)
-            })
-            .is_some();
-        if !is_known {
-            let name = if let Some(name) = self.signal_manager.profile_name(uuid).await {
-                name
-            } else {
-                match profile_key {
-                    Some(profile_key) => {
-                        // try to resolve from signal service via their profile
-                        self.signal_manager
-                            .resolve_profile_name(uuid, profile_key)
-                            .await
-                            .unwrap_or_else(|| uuid.to_string())
-                    }
-                    None => {
-                        // cannot be resolved
-                        uuid.to_string()
-                    }
-                }
-            };
-            self.storage.store_name(uuid, &name);
+        let stored_name = self.storage.name(uuid);
+        let is_known = stored_name
+            .as_deref()
+            .is_some_and(|name| !is_placeholder_name(uuid, name));
+        if is_known {
+            return;
         }
+        if let Some(name) = self.signal_manager.profile_name(uuid).await {
+            self.storage.store_name(uuid, &name);
+            return;
+        }
+        if stored_name.is_none() {
+            self.storage.store_name(uuid, &uuid.to_string());
+        }
+        if let Some(profile_key) = profile_key
+            && self.resolving_profile_names.insert(uuid)
+        {
+            let response = self.signal_manager.resolve_profile_name(uuid, profile_key);
+            let tx = self.event_tx.clone();
+            tokio::spawn(async move {
+                let name = response.await.unwrap_or_default();
+                let _ = tx.send(Event::ProfileNameResolved {
+                    user_id: uuid,
+                    name,
+                });
+            });
+        }
+    }
+
+    /// Stores the name resolved from the user's profile and replaces placeholder names.
+    pub(super) fn on_profile_name_resolved(&mut self, uuid: Uuid, name: String) {
+        self.storage.store_name(uuid, &name);
+
+        let mut cache = self.names_cache.take().unwrap_or_default();
+        if cache
+            .get(&uuid)
+            .is_none_or(|cached| is_placeholder_name(uuid, cached))
+        {
+            cache.insert(uuid, name.clone());
+        }
+        self.names_cache.replace(Some(cache));
+
+        self.channels
+            .modify_channel_by_id(&mut *self.storage, ChannelId::User(uuid), |channel| {
+                if is_placeholder_name(uuid, &channel.name) {
+                    channel.name = name;
+                    true
+                } else {
+                    false
+                }
+            });
     }
 
     async fn ensure_users_are_known(
         &mut self,
         users_with_keys: impl Iterator<Item = (Uuid, ProfileKeyBytes)>,
     ) {
-        // TODO: Run in parallel
         for (uuid, profile_key) in users_with_keys {
             self.ensure_user_is_known(uuid, Some(profile_key)).await;
         }
@@ -466,4 +487,9 @@ impl App {
 
         self.next_expiring_at = self.storage.next_expiring_at();
     }
+}
+
+/// Whether the name is empty, a phone number or the user id itself
+fn is_placeholder_name(uuid: Uuid, name: &str) -> bool {
+    name.is_empty() || util::is_phone_number(name) || Uuid::parse_str(name) == Ok(uuid)
 }
