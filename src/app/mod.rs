@@ -376,25 +376,38 @@ pub fn to_emoji(s: &str) -> Option<&str> {
 
 pub(super) fn open_url(message: &Message, url_regex: &Regex) -> Option<()> {
     let text = message.message.as_ref()?;
-    let m = url_regex.find(text)?;
-    let url = m.as_str();
-    let result = if let Some(path) = url.strip_prefix("file://") {
-        opener::open(Path::new(path))
-    } else {
-        opener::open(url)
-    };
-    if let Err(error) = result {
-        error!(url, %error, "failed to open");
+    // ponytail: open up to 5 URLs, shortest first (main links tend to be shorter than trackers)
+    let mut urls: Vec<_> = url_regex.find_iter(text).map(|m| m.as_str()).collect();
+    if urls.is_empty() {
+        return None;
+    }
+    urls.sort_by_key(|u| u.len());
+    for url in urls.into_iter().take(5) {
+        let result = if let Some(path) = url.strip_prefix("file://") {
+            opener::open(Path::new(path))
+        } else {
+            opener::open(url)
+        };
+        if let Err(error) = result {
+            error!(url, %error, "failed to open");
+        }
     }
     Some(())
 }
 
 pub(super) fn open_file(message: &Message) -> Option<()> {
-    let attachment = message.attachments.first()?;
-    let file: &Path = attachment.filename.as_ref();
-    if let Err(error) = opener::open(file) {
-        let path = file.display().to_string();
-        error!(path, %error, "failed to open");
+    if message.attachments.is_empty() {
+        return None;
+    }
+    // ponytail: open up to 5 files, largest first
+    let mut attachments: Vec<_> = message.attachments.iter().collect();
+    attachments.sort_by(|a, b| b.size.cmp(&a.size));
+    for attachment in attachments.into_iter().take(5) {
+        let file: &Path = attachment.filename.as_ref();
+        if let Err(error) = opener::open(file) {
+            let path = file.display().to_string();
+            error!(path, %error, "failed to open");
+        }
     }
     Some(())
 }
