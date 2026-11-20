@@ -1892,7 +1892,7 @@ checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 
 [[package]]
 name = "gurk"
-version = "0.10.1"
+version = "0.10.2"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -2871,7 +2871,7 @@ dependencies = [
 [[package]]
 name = "libsignal-service"
 version = "0.1.0"
-source = "git+https://github.com/whisperfish/libsignal-service-rs?rev=bb43e8125e0c9e7a1ce20d57fb330f6fbd9257eb#bb43e8125e0c9e7a1ce20d57fb330f6fbd9257eb"
+source = "git+https://github.com/whisperfish/libsignal-service-rs?rev=fb92b13c82fde40ba4d10696cf79aa4f36ce25f1#fb92b13c82fde40ba4d10696cf79aa4f36ce25f1"
 dependencies = [
  "aes 0.9.3",
  "aes-gcm",
@@ -3882,7 +3882,7 @@ dependencies = [
 [[package]]
 name = "presage"
 version = "0.8.0-dev"
-source = "git+https://github.com/whisperfish/presage?rev=f74b96e0fb9099ce8be2b28b7ca9d11f78a6faea#f74b96e0fb9099ce8be2b28b7ca9d11f78a6faea"
+source = "git+https://github.com/whisperfish/presage?rev=94b3978f5456469cfd4d9f72351a5eff93715f81#94b3978f5456469cfd4d9f72351a5eff93715f81"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -3904,7 +3904,7 @@ dependencies = [
 [[package]]
 name = "presage-store-sqlite"
 version = "0.8.0-dev"
-source = "git+https://github.com/whisperfish/presage?rev=f74b96e0fb9099ce8be2b28b7ca9d11f78a6faea#f74b96e0fb9099ce8be2b28b7ca9d11f78a6faea"
+source = "git+https://github.com/whisperfish/presage?rev=94b3978f5456469cfd4d9f72351a5eff93715f81#94b3978f5456469cfd4d9f72351a5eff93715f81"
 dependencies = [
  "async-trait",
  "bytes",

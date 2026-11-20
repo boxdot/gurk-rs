@@ -200,6 +200,23 @@ impl TypingAction {
     }
 }
 
+/// State of attachments which are downloaded in the background
+///
+/// Not persisted.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct AttachmentDownloads {
+    /// Number of attachments which are still being downloaded
+    pub(crate) pending: usize,
+    /// Number of attachments which failed to download
+    pub(crate) failed: usize,
+}
+
+impl AttachmentDownloads {
+    pub(crate) fn pending(pending: usize) -> Self {
+        Self { pending, failed: 0 }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Message {
     pub from_id: Uuid,
@@ -217,6 +234,8 @@ pub struct Message {
     pub(crate) body_ranges: Vec<BodyRange>,
     #[serde(skip)]
     pub(crate) send_failed: Option<String>,
+    #[serde(skip)]
+    pub(crate) attachment_downloads: AttachmentDownloads,
     /// Arrived at of the originally edited message
     ///
     /// When several edits are done, this is the arrived_at of the very first original message.
@@ -345,6 +364,7 @@ impl Message {
             receipt: Receipt::Sent,
             body_ranges: body_ranges.into_iter().collect(),
             send_failed: Default::default(),
+            attachment_downloads: Default::default(),
             edit: Default::default(),
             edited: Default::default(),
             deleted: Default::default(),
@@ -364,6 +384,7 @@ impl Message {
             receipt: Default::default(),
             body_ranges: Default::default(),
             send_failed: Default::default(),
+            attachment_downloads: Default::default(),
             edit: Default::default(),
             edited: Default::default(),
             deleted: Default::default(),
@@ -390,6 +411,7 @@ impl Message {
                 .filter_map(BodyRange::from_proto)
                 .collect(),
             send_failed: Default::default(),
+            attachment_downloads: Default::default(),
             edit: Default::default(),
             edited: Default::default(),
             deleted: Default::default(),
@@ -401,6 +423,7 @@ impl Message {
     pub fn is_empty(&self) -> bool {
         self.message.is_none()
             && self.attachments.is_empty()
+            && self.attachment_downloads.pending == 0
             && self.reactions.is_empty()
             && self.quote.is_none()
     }
