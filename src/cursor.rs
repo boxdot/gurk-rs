@@ -54,14 +54,18 @@ impl Cursor {
 
     pub fn put(&mut self, c: char, text: &mut String) {
         text.insert(self.idx, c);
+        self.idx += c.len_utf8();
         if c == '\n' {
             self.line += 1;
             self.col = 0;
-            self.idx += 1;
         } else {
-            let s = &text[self.idx..self.idx + c.len_utf8()];
-            self.col += s.width();
-            self.idx += c.len_utf8();
+            // Recalculate col from line start - inserting a char can change grapheme boundaries
+            self.col = text[..self.idx]
+                .graphemes(true)
+                .rev()
+                .take_while(|g| *g != "\n")
+                .map(|g| g.width())
+                .sum();
         }
         self.col_wanted = None;
     }
@@ -246,41 +250,89 @@ impl Cursor {
     }
 
     pub fn move_word_left(&mut self, text: &str) {
+        // Collect graphemes before cursor once to avoid O(n^2)
+        let graphemes: Vec<_> = text[..self.idx].grapheme_indices(true).collect();
+        let start_i = graphemes.len();
+        let mut i = start_i;
+
         // Skip whitespace
-        while self.idx > 0 {
-            let prev = text[..self.idx].graphemes(true).next_back();
-            match prev {
-                Some(g) if g.chars().all(|c| c.is_whitespace()) => self.move_left(text),
-                _ => break,
+        while i > 0 {
+            let (_, g) = graphemes[i - 1];
+            if !g.chars().all(|c| c.is_whitespace()) {
+                break;
             }
+            i -= 1;
         }
         // Skip non-whitespace
-        while self.idx > 0 {
-            let prev = text[..self.idx].graphemes(true).next_back();
-            match prev {
-                Some(g) if !g.chars().all(|c| c.is_whitespace()) => self.move_left(text),
-                _ => break,
+        while i > 0 {
+            let (_, g) = graphemes[i - 1];
+            if g.chars().all(|c| c.is_whitespace()) {
+                break;
             }
+            i -= 1;
         }
+
+        // Count newlines crossed (going backwards)
+        let newlines_crossed = graphemes[i..start_i].iter().filter(|(_, g)| *g == "\n").count();
+        self.line -= newlines_crossed;
+
+        // Jump to target position
+        if i == 0 {
+            self.idx = 0;
+            self.col = 0;
+        } else {
+            let (target_idx, _) = graphemes[i];
+            self.idx = target_idx;
+            self.col = graphemes[..i]
+                .iter()
+                .rev()
+                .take_while(|(_, g)| *g != "\n")
+                .map(|(_, g)| g.width())
+                .sum();
+        }
+        self.col_wanted = None;
     }
 
     pub fn move_word_right(&mut self, text: &str) {
+        // Collect graphemes after cursor once to avoid O(n^2)
+        let graphemes: Vec<_> = text[self.idx..].grapheme_indices(true).collect();
+        let mut i = 0;
+
         // Skip non-whitespace
-        while self.idx < text.len() {
-            let next = text[self.idx..].graphemes(true).next();
-            match next {
-                Some(g) if !g.chars().all(|c| c.is_whitespace()) => self.move_right(text),
-                _ => break,
+        while i < graphemes.len() {
+            let (_, g) = graphemes[i];
+            if g.chars().all(|c| c.is_whitespace()) {
+                break;
             }
+            i += 1;
         }
         // Skip whitespace
-        while self.idx < text.len() {
-            let next = text[self.idx..].graphemes(true).next();
-            match next {
-                Some(g) if g.chars().all(|c| c.is_whitespace()) => self.move_right(text),
-                _ => break,
+        while i < graphemes.len() {
+            let (_, g) = graphemes[i];
+            if !g.chars().all(|c| c.is_whitespace()) {
+                break;
             }
+            i += 1;
         }
+
+        // Count newlines crossed
+        let newlines_crossed = graphemes[..i].iter().filter(|(_, g)| *g == "\n").count();
+        self.line += newlines_crossed;
+
+        // Jump to target position
+        if i >= graphemes.len() {
+            self.idx = text.len();
+        } else {
+            self.idx = self.idx + graphemes[i].0;
+        }
+        // Recalculate col from line start
+        self.col = text[..self.idx]
+            .graphemes(true)
+            .rev()
+            .take_while(|g| *g != "\n")
+            .map(|g| g.width())
+            .sum();
+        self.col_wanted = None;
     }
 
     pub fn start_of_line(&mut self, text: &str) {
