@@ -103,7 +103,6 @@ impl App {
                 }
             }
             Command::Scroll(Widget::Help, DirectionVertical::Down, MoveAmountVisual::Entry) => {
-                // TODO: prevent overscrolling
                 self.help_scroll.0 += 1
             }
             Command::ToggleMuteChannel => self.toggle_mute_channel(),
