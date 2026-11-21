@@ -91,6 +91,7 @@ toml = "1.1.3"
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+unicode-segmentation = "1.12"
 unicode-width = "0.2.0"
 uuid = { version = "1.11", features = ["v4"] }
 url = "2.5.4"
