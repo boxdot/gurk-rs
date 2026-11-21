@@ -1510,7 +1510,10 @@ mod tests {
         assert_eq!(before.len(), count + 1);
         assert_eq!(before.last().unwrap().arrived_at, max);
         let before = storage.messages_before(channel_id, timestamp, 2);
-        assert_eq!(before.iter().map(|m| m.arrived_at).collect::<Vec<_>>(), [90, max]);
+        assert_eq!(
+            before.iter().map(|m| m.arrived_at).collect::<Vec<_>>(),
+            [90, max]
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
