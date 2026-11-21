@@ -77,7 +77,7 @@ async fn relink_device(
     store: SqliteStore,
 ) -> anyhow::Result<Box<dyn SignalManager + Send>> {
     // explicit relink => link device
-    let device_name = config.device_name.clone().unwrap_or_else(|| {
+    let device_name = config.device_name.clone().map(String::from).unwrap_or_else(|| {
         let at_hostname = hostname::get()
             .ok()
             .and_then(|hostname| {
