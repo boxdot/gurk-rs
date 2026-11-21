@@ -15,7 +15,8 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::data::{
-    AttachmentDownloads, BodyRange, ChannelId, Message, TypingAction, TypingSet, parse_uuid,
+    AttachmentDownloads, BodyRange, ChannelId, LinkPreview, Message, TypingAction, TypingSet,
+    parse_uuid,
 };
 use crate::event::Event;
 use crate::receipt::{Receipt, ReceiptEvent};
@@ -28,7 +29,16 @@ use super::{
 
 impl App {
     /// Stores the `message` in the storage and updates the message window if the channel matches.
+    ///
+    /// Messages with a timestamp that does not fit into an `i64` are dropped.
     pub(crate) fn store_message(&mut self, channel_id: ChannelId, message: Message) {
+        if i64::try_from(message.arrived_at).is_err() {
+            warn!(
+                message.arrived_at,
+                "dropping message with out-of-range timestamp"
+            );
+            return;
+        }
         self.storage.store_message(channel_id, &message);
         if let Some(window) = self.window.as_mut()
             && window.channel_id() == channel_id
@@ -154,6 +164,7 @@ impl App {
                                     body_ranges,
                                     reaction: None,
                                     expire_timer,
+                                    preview,
                                     ..
                                 }),
                             ..
@@ -168,11 +179,13 @@ impl App {
 
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
+                let link_previews = preview.iter().map(LinkPreview::from_proto).collect();
 
                 let message = Message {
                     quote,
                     expire_timer,
                     attachment_downloads: AttachmentDownloads::pending(attachment_pointers.len()),
+                    link_previews,
                     ..Message::new(user_id, body, body_ranges, timestamp, Vec::new())
                 };
                 (channel_id, message, attachment_pointers)
@@ -325,6 +338,7 @@ impl App {
                                     body_ranges,
                                     reaction: None,
                                     expire_timer,
+                                    preview,
                                     ..
                                 }),
                             ..
@@ -369,11 +383,13 @@ impl App {
 
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
+                let link_previews = preview.iter().map(LinkPreview::from_proto).collect();
 
                 let message = Message {
                     quote,
                     expire_timer,
                     attachment_downloads: AttachmentDownloads::pending(attachment_pointers.len()),
+                    link_previews,
                     ..Message::new(user_id, body, body_ranges, timestamp, Vec::new())
                 };
 
@@ -438,6 +454,7 @@ impl App {
                     sticker,
                     body_ranges,
                     expire_timer,
+                    preview,
                     ..
                 }),
             ) => {
@@ -512,10 +529,12 @@ impl App {
 
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
+                let link_previews = preview.iter().map(LinkPreview::from_proto).collect();
                 let message = Message {
                     quote,
                     expire_timer,
                     attachment_downloads: AttachmentDownloads::pending(attachment_pointers.len()),
+                    link_previews,
                     ..Message::new(sender.raw_uuid(), body, body_ranges, timestamp, Vec::new())
                 };
 
@@ -1169,6 +1188,25 @@ mod tests {
                 channel.unread_messages = unread_messages;
                 true
             });
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_store_message_out_of_range_timestamp() {
+        let (mut app, _events, _sent_messages) = test_app().await;
+        let channel_id = app.channels().first().unwrap().id;
+        app.on_channel_changed();
+
+        let timestamp = u64::MAX;
+        app.store_message(
+            channel_id,
+            Message::text(app.user_id, timestamp, "far future".to_string()),
+        );
+
+        assert_eq!(
+            app.storage.message(MessageId::new(channel_id, timestamp)),
+            None
+        );
+        assert!(app.window.as_ref().unwrap().get(timestamp).is_none());
     }
 
     #[tokio::test(flavor = "multi_thread")]

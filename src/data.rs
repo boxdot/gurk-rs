@@ -217,6 +217,28 @@ impl AttachmentDownloads {
     }
 }
 
+/// Link preview metadata (title, description, URL) from Signal messages
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct LinkPreview {
+    pub url: Option<String>,
+    pub title: Option<String>,
+    pub description: Option<String>,
+}
+
+impl LinkPreview {
+    pub fn from_proto(preview: &proto::Preview) -> Self {
+        Self {
+            url: preview.url.clone(),
+            title: preview.title.clone(),
+            description: preview.description.clone(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.url.is_none() && self.title.is_none() && self.description.is_none()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Message {
     pub from_id: Uuid,
@@ -253,6 +275,9 @@ pub struct Message {
     /// UTC millisecond timestamp when this message expires (set when first viewed)
     #[serde(default)]
     pub(crate) expires_at: Option<u64>,
+    /// Link previews attached to this message
+    #[serde(default)]
+    pub link_previews: Vec<LinkPreview>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -370,6 +395,7 @@ impl Message {
             deleted: Default::default(),
             expire_timer: None,
             expires_at: None,
+            link_previews: Default::default(),
         }
     }
 
@@ -390,6 +416,7 @@ impl Message {
             deleted: Default::default(),
             expire_timer: None,
             expires_at: None,
+            link_previews: Default::default(),
         }
     }
 
@@ -417,6 +444,7 @@ impl Message {
             deleted: Default::default(),
             expire_timer: None,
             expires_at: None,
+            link_previews: Default::default(),
         })
     }
 
