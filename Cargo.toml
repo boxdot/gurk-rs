@@ -56,7 +56,12 @@ emojis = "0.9.0"
 futures-channel = "0.3.31"
 hex = "0.4.3"
 hostname = "0.4.0"
-image = { version = "0.25.5", default-features = false, features = ["png"] }
+image = { version = "0.25.5", default-features = false, features = [
+    "gif",
+    "jpeg",
+    "png",
+    "webp",
+] }
 itertools = "0.15.0"
 libsqlite3-sys = { version = "0.36.0", features = [
     "bundled-sqlcipher-custom-crypto",
@@ -68,6 +73,9 @@ opener = "0.8.2"
 phonenumber = "0.3.6"
 postcard = { version = "1.1.1", features = ["alloc"] }
 ratatui = "0.30.0"
+ratatui-image = { version = "11.1.0", default-features = false, features = [
+    "crossterm",
+] }
 regex = "1.11.1"
 scopeguard = "1.2.0"
 serde = { version = "1.0.216", features = ["derive"] }
