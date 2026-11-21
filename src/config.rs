@@ -479,7 +479,10 @@ mod tests {
         const BASE: &str = "[user]\ndisplay_name = \"a\"";
 
         let config = parse("device_name = \"laptop\"").unwrap();
-        assert_eq!(config.device_name.map(String::from).as_deref(), Some("laptop"));
+        assert_eq!(
+            config.device_name.map(String::from).as_deref(),
+            Some("laptop")
+        );
         assert_eq!(parse("").unwrap().device_name, None);
         assert!(parse("device_name = \"\"").is_err());
         assert!(parse("device_name = \"  \"").is_err());

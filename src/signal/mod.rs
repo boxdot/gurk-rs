@@ -77,19 +77,23 @@ async fn relink_device(
     store: SqliteStore,
 ) -> anyhow::Result<Box<dyn SignalManager + Send>> {
     // explicit relink => link device
-    let device_name = config.device_name.clone().map(String::from).unwrap_or_else(|| {
-        let at_hostname = hostname::get()
-            .ok()
-            .and_then(|hostname| {
-                hostname
-                    .to_string_lossy()
-                    .split('.')
-                    .find(|s| !s.is_empty())
-                    .map(|s| format!("@{s}"))
-            })
-            .unwrap_or_default();
-        format!("gurk{at_hostname}")
-    });
+    let device_name = config
+        .device_name
+        .clone()
+        .map(String::from)
+        .unwrap_or_else(|| {
+            let at_hostname = hostname::get()
+                .ok()
+                .and_then(|hostname| {
+                    hostname
+                        .to_string_lossy()
+                        .split('.')
+                        .find(|s| !s.is_empty())
+                        .map(|s| format!("@{s}"))
+                })
+                .unwrap_or_default();
+            format!("gurk{at_hostname}")
+        });
     println!("Linking new device with device name: {device_name}");
 
     let (tx, rx) = oneshot::channel();
