@@ -26,7 +26,8 @@ use crate::command::{Command, WindowMode};
 use crate::cursor::Cursor;
 use crate::data::{AssociatedValue, Message};
 use crate::receipt::{Receipt, ReceiptEvent};
-use crate::storage::MessageId;
+use crate::search::SearchMessages;
+use crate::storage::{MessageId, Storage};
 use crate::util::utc_timestamp_msec_to_local;
 
 use super::CHANNEL_VIEW_RATIO;
@@ -73,6 +74,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     if app.select_channel.is_shown {
         draw_select_channel_popup(f, &mut app.select_channel);
     }
+    if app.search_messages.is_shown {
+        draw_search_popup(f, &mut app.search_messages, &*app.storage);
+    }
 }
 
 fn draw_select_channel_popup(f: &mut Frame, select_channel: &mut SelectChannel) {
@@ -107,6 +111,61 @@ fn draw_select_channel_popup(f: &mut Frame, select_channel: &mut SelectChannel) 
         .block(Block::default().borders(Borders::ALL))
         .highlight_style(Style::default().reversed());
     f.render_stateful_widget(list, chunks[1], &mut select_channel.state);
+}
+
+fn draw_search_popup(f: &mut Frame, search: &mut SearchMessages, storage: &dyn Storage) {
+    let area = centered_rect(70, 70, f.area());
+    let chunks = Layout::default()
+        .constraints([Constraint::Length(1 + 2), Constraint::Min(0)].as_ref())
+        .direction(Direction::Vertical)
+        .split(area);
+    f.render_widget(Clear, area);
+    let title = if search.results.is_empty() {
+        "Search (Enter to search)"
+    } else {
+        "Search (Enter to jump)"
+    };
+    let input = Paragraph::new(Text::from(search.input.data.clone())).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(title),
+    );
+    f.render_widget(input, chunks[0]);
+    let cursor = &search.input.cursor;
+    f.set_cursor_position((
+        chunks[0].x + cursor.col as u16 + 1,
+        chunks[0].y + cursor.line as u16 + 1,
+    ));
+    let items: Vec<_> = search
+        .results
+        .iter()
+        .map(|msg| {
+            let from_name = storage
+                .name(msg.from_id)
+                .unwrap_or_else(|| "Unknown".to_string());
+            let preview = msg
+                .message
+                .as_deref()
+                .unwrap_or("[attachment]")
+                .chars()
+                .take(50)
+                .collect::<String>();
+            ListItem::new(format!("{}: {}", from_name, preview))
+        })
+        .collect();
+    match search.state.selected() {
+        Some(idx) if items.len() <= idx => {
+            search.state.select(items.len().checked_sub(1));
+        }
+        None if !items.is_empty() => {
+            search.state.select(Some(0));
+        }
+        _ => (),
+    }
+    let list = List::new(items)
+        .block(Block::default().borders(Borders::ALL))
+        .highlight_style(Style::default().reversed());
+    f.render_stateful_widget(list, chunks[1], &mut search.state);
 }
 
 fn draw_channels(f: &mut Frame, app: &mut App, area: Rect) {
