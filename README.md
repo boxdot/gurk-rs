@@ -211,6 +211,9 @@ toggle_mute_channel
 
 ### Example configuration
 ```toml
+[user]
+display_name = "Your name"
+
 default_keybindings = true
 
 [keybindings.anywhere]

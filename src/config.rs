@@ -63,6 +63,32 @@ pub struct Config {
     /// Whether to enable the default keybindings
     #[serde(default = "default_true")]
     pub default_keybindings: bool,
+    /// Custom device name for Signal linking (defaults to "gurk@{hostname}")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_name: Option<NonEmptyString>,
+}
+
+/// String that is not empty and not whitespace only
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct NonEmptyString(String);
+
+impl TryFrom<String> for NonEmptyString {
+    type Error = &'static str;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        if s.trim().is_empty() {
+            Err("must not be empty")
+        } else {
+            Ok(Self(s))
+        }
+    }
+}
+
+impl From<NonEmptyString> for String {
+    fn from(s: NonEmptyString) -> Self {
+        s.0
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -211,6 +237,7 @@ impl Config {
             image_height: default_image_height(),
             default_keybindings: true,
             keybindings: ModeKeybindingConfig::default(),
+            device_name: None,
         }
     }
 
@@ -452,6 +479,21 @@ mod tests {
                 display_name: "Tyler Durden".to_string(),
             })
         }
+    }
+
+    #[test]
+    fn test_device_name_non_empty() {
+        let parse = |s: &str| toml::from_str::<Config>(&format!("{s}\n{BASE}"));
+        const BASE: &str = "[user]\ndisplay_name = \"a\"";
+
+        let config = parse("device_name = \"laptop\"").unwrap();
+        assert_eq!(
+            config.device_name.map(String::from).as_deref(),
+            Some("laptop")
+        );
+        assert_eq!(parse("").unwrap().device_name, None);
+        assert!(parse("device_name = \"\"").is_err());
+        assert!(parse("device_name = \"  \"").is_err());
     }
 
     #[test]
