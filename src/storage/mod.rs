@@ -50,6 +50,14 @@ pub trait Storage {
         self.messages_tail(channel_id, 1).pop()
     }
 
+    /// Search messages in a channel by text content
+    fn search_messages(
+        &self,
+        channel_id: ChannelId,
+        query: &str,
+        limit: usize,
+    ) -> Vec<Message>;
+
     fn messages_count_after(&self, channel_id: ChannelId, arrived_at: u64) -> usize;
 
     fn remove_expired(&self, now_ms: u64) -> Vec<MessageId>;

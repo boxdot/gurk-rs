@@ -71,6 +71,18 @@ impl App {
                 }
                 self.select_channel.is_shown = !self.select_channel.is_shown;
             }
+            Command::ToggleSearchModal => {
+                if self.search_messages.is_shown {
+                    self.search_messages.reset();
+                }
+                self.search_messages.is_shown = !self.search_messages.is_shown;
+            }
+            Command::SelectSearchModal(MoveDirection::Previous) => {
+                self.search_messages.prev();
+            }
+            Command::SelectSearchModal(MoveDirection::Next) => {
+                self.search_messages.next();
+            }
             Command::ToggleMultiline => {
                 self.is_multiline_input = !self.is_multiline_input;
             }
@@ -119,6 +131,7 @@ impl App {
     pub async fn on_key(&mut self, key: KeyEvent) -> anyhow::Result<()> {
         if key.code == KeyCode::Tab
             && !self.select_channel.is_shown
+            && !self.search_messages.is_shown
             && self.input.try_complete_emoji()
         {
             return Ok(());
@@ -132,7 +145,19 @@ impl App {
             match key.code {
                 KeyCode::Char('\r') => self.get_input().put_char('\n'),
                 KeyCode::Enter => {
-                    if !self.select_channel.is_shown {
+                    if self.search_messages.is_shown {
+                        if self.search_messages.results.is_empty()
+                            || self.search_messages.query_changed()
+                        {
+                            self.execute_search();
+                        } else if let Some(msg) = self.search_messages.selected_message()
+                            && let Some(channel_id) = self.search_messages.channel_id
+                        {
+                            self.jump_to_message(channel_id, msg.arrived_at);
+                            self.search_messages.reset();
+                            self.search_messages.is_shown = false;
+                        }
+                    } else if !self.select_channel.is_shown {
                         if self.is_multiline_input {
                             self.get_input().new_line();
                         } else if !self.input.data.is_empty() {
@@ -390,6 +415,30 @@ impl App {
         Some(())
     }
 
+    fn execute_search(&mut self) {
+        let Some(channel_id) = self.selected_channel_id() else {
+            return;
+        };
+        let query = self.search_messages.input.data.clone();
+        if query.is_empty() {
+            return;
+        }
+        self.search_messages.last_query = query.clone();
+        self.search_messages.channel_id = Some(channel_id);
+        self.search_messages.results = self.storage.search_messages(channel_id, &query, 50);
+        self.search_messages.state = Default::default();
+        if !self.search_messages.results.is_empty() {
+            self.search_messages.state.select(Some(0));
+        }
+    }
+
+    fn jump_to_message(&mut self, channel_id: ChannelId, arrived_at: u64) {
+        if let Some(window) = self.window.as_mut() {
+            window.load_around(&*self.storage, arrived_at, 64);
+        }
+        self.positions.entry(channel_id).or_default().selected = Some(arrived_at);
+    }
+
     pub fn event_to_command<'r>(&'r self, event: &KeyEvent) -> Option<&'r Command> {
         let mut combiner = Combiner::default();
         let keys_pressed = combiner.transform(*event)?;
@@ -397,6 +446,8 @@ impl App {
             vec![WindowMode::Anywhere, WindowMode::Help]
         } else if self.is_select_channel_shown() {
             vec![WindowMode::Anywhere, WindowMode::ChannelModal]
+        } else if self.search_messages.is_shown {
+            vec![WindowMode::Anywhere, WindowMode::SearchModal]
         } else if self.is_multiline_input {
             vec![
                 WindowMode::Anywhere,
