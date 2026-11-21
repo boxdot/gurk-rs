@@ -30,6 +30,15 @@ impl Storage for ForgetfulStorage {
         Vec::new()
     }
 
+    fn search_messages(
+        &self,
+        _channel_id: ChannelId,
+        _query: &str,
+        _limit: usize,
+    ) -> Vec<Message> {
+        Vec::new()
+    }
+
     fn messages(
         &self,
         _channel_id: ChannelId,

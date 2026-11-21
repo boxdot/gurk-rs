@@ -134,6 +134,7 @@ pub enum WindowMode {
     Anywhere,
     Help,
     ChannelModal,
+    SearchModal,
     Multiline,
     MessageSelected,
     Normal,
@@ -160,6 +161,8 @@ pub enum Command {
     Quit,
     #[strum(props(desc = "Open pop-up for selecting a channel"))]
     ToggleChannelModal,
+    #[strum(props(desc = "Open pop-up for searching messages in current channel"))]
+    ToggleSearchModal,
     #[strum(props(desc = "Switch between single-line and multi-line modes."))]
     ToggleMultiline,
     #[strum(props(desc = "Sends emoji from input line as reaction on selected message."))]
@@ -189,6 +192,15 @@ pub enum Command {
         to_string = "select_channel_modal {0}"
     )]
     SelectChannelModal(MoveDirection),
+    #[strum(props(
+        desc = "Select next/previous result in search modal",
+        usage = "select_search_modal previous|next"
+    ))]
+    #[strum(
+        serialize = "select_search_modal",
+        to_string = "select_search_modal {0}"
+    )]
+    SelectSearchModal(MoveDirection),
     #[strum(props(
         desc = "Select next/previous message",
         usage = "select_message previous|next entry"
@@ -384,6 +396,18 @@ fn parse(input: &str) -> Result<Command, CommandParseError> {
             Ok(Command::SelectChannelModal(direction))
             // Ok(Command::SelectChannelModal(MoveDirection::from_str(args.first().unwrap_or(&""))?))
         }
+        Command::SelectSearchModal(_) => {
+            let direction = args.first().ok_or_else(|| E::InsufficientArgs {
+                cmd: cmd_str.to_string(),
+                hint: Some(MoveDirection::VARIANTS.join("|")),
+            })?;
+            let direction = MoveDirection::from_str(direction).map_err(|_e| E::BadEnumArg {
+                arg: direction.to_string(),
+                accept: MoveDirection::VARIANTS,
+                optional: false,
+            })?;
+            Ok(Command::SelectSearchModal(direction))
+        }
         Command::SelectMessage(_, _) => {
             let direction = args.first().ok_or_else(|| {
                 E::InsufficientArgs {
@@ -466,6 +490,7 @@ ctrl-l = "redraw"
 
 [normal]
 ctrl-p = "toggle_channel_modal"
+ctrl-s = "toggle_search_modal"
 alt-enter = "toggle_multiline"
 ctrl-left = "move_text previous character"
 ctrl-right = "move_text next character"
@@ -540,6 +565,33 @@ down = "move_text next line"
 up = "move_text previous line"
 ctrl-j = "move_text next line"
 ctrl-k = "move_text previous line"
+
+[search_modal]
+esc = "toggle_search_modal"
+ctrl-s = "toggle_search_modal"
+down = "select_search_modal next"
+up = "select_search_modal previous"
+ctrl-j = "select_search_modal next"
+ctrl-k = "select_search_modal previous"
+ctrl-left = "move_text previous character"
+ctrl-right = "move_text next character"
+left = "move_text previous character"
+right = "move_text next character"
+alt-left = "move_text previous word"
+alt-right = "move_text next word"
+alt-f = "move_text next word"
+ctrl-f = "move_text next character"
+alt-b = "move_text previous word"
+ctrl-b = "move_text previous character"
+ctrl-u = "kill_backward_line"
+ctrl-w = "kill_word"
+alt-backspace = "kill_word"
+home = "beginning_of_line"
+ctrl-a = "beginning_of_line"
+end = "end_of_line"
+ctrl-e = "end_of_line"
+backspace = "delete_character previous"
+delete = "delete_character next"
 
 [help]
 esc = "help"

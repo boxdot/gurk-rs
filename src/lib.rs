@@ -15,6 +15,7 @@ pub mod input;
 pub mod onboarding;
 pub mod passphrase;
 pub mod receipt;
+mod search;
 pub mod shortcuts;
 pub mod signal;
 pub mod storage;

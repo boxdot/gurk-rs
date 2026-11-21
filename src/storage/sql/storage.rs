@@ -483,6 +483,62 @@ impl Storage for SqliteStorage {
             .collect()
     }
 
+    fn search_messages(
+        &self,
+        channel_id: ChannelId,
+        query: &str,
+        limit: usize,
+    ) -> Vec<Message> {
+        let channel_id = &channel_id;
+        let limit = i64::try_from(limit).expect("usize overflow");
+        // Escape SQL LIKE metacharacters
+        let escaped = query.replace('%', "\\%").replace('_', "\\_");
+        let pattern = format!("%{}%", escaped);
+        let sql_messages = block_async_in_place(
+            query_as!(
+                SqlMessage,
+                r#"
+                    SELECT
+                        m.arrived_at AS "arrived_at!",
+                        m.from_id AS "from_id: _",
+                        m.message,
+                        m.receipt AS "receipt: _",
+                        m.body_ranges AS "body_ranges: _",
+                        m.attachments AS "attachments: _",
+                        m.reactions AS "reactions: _",
+                        q.arrived_at AS "quote_arrived_at: _",
+                        q.from_id AS "quote_from_id: _",
+                        q.message AS quote_message,
+                        q.attachments AS "quote_attachments: _",
+                        q.body_ranges AS "quote_body_ranges: _",
+                        q.receipt AS "quote_receipt: _",
+                        NULL AS "edit: _",
+                        m.edited AS "edited: _",
+                        m.deleted AS "deleted: _",
+                        m.expire_timer AS "expire_timer: _",
+                        m.expires_at AS "expires_at: _"
+                    FROM messages AS m
+                    LEFT JOIN messages AS q ON q.channel_id = ?1 AND q.arrived_at = m.quote
+                    WHERE m.channel_id = ?1 AND m.edit IS NULL AND m.message LIKE ?2 ESCAPE '\'
+                    ORDER BY m.arrived_at DESC
+                    LIMIT ?3
+                "#,
+                channel_id,
+                pattern,
+                limit,
+            )
+            .fetch_all(&self.pool),
+        )
+        .ok_logged()
+        .unwrap_or_default();
+
+        sql_messages
+            .into_iter()
+            .map(SqlMessage::convert)
+            .filter_map(|message| message.ok_logged())
+            .collect()
+    }
+
     fn messages(&self, channel_id: ChannelId) -> Box<dyn DoubleEndedIterator<Item = Message> + '_> {
         let channel_id = &channel_id;
         let messages = block_async_in_place(

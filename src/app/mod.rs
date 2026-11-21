@@ -22,7 +22,7 @@ use crate::{
     app::channel::ChannelPosition,
     command::{ModeKeybinding, get_keybindings},
 };
-use crate::{app::window::MessageWindow, channels::SelectChannel};
+use crate::{app::window::MessageWindow, channels::SelectChannel, search::SearchMessages};
 
 use presage::proto::data_message::Sticker;
 
@@ -55,6 +55,7 @@ pub struct App {
     pub is_multiline_input: bool,
     editing: Option<MessageId>,
     pub(crate) select_channel: SelectChannel,
+    pub(crate) search_messages: SearchMessages,
     clipboard: Option<arboard::Clipboard>,
     event_tx: mpsc::UnboundedSender<Event>,
     // It is expensive to hit the signal manager contacts storage, so we cache it
@@ -120,6 +121,7 @@ impl App {
             is_multiline_input: false,
             editing: None,
             select_channel: Default::default(),
+            search_messages: Default::default(),
             clipboard,
             event_tx,
             names_cache: Default::default(),
@@ -156,6 +158,8 @@ impl App {
     pub fn get_input(&mut self) -> &mut Input {
         if self.select_channel.is_shown {
             &mut self.select_channel.input
+        } else if self.search_messages.is_shown {
+            &mut self.search_messages.input
         } else {
             &mut self.input
         }
