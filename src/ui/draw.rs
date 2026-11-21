@@ -1678,8 +1678,10 @@ mod image_tests {
         let (left, top) = red_cells[0];
         assert_eq!(top, path_row + 1, "image starts right below the text");
         // aligned with the text of the message, after the time and receipt prefix
+        // (the path may wrap, e.g. with long temp dirs on macOS)
+        let link_row = find_row(&buffer, "<file://").unwrap();
         let text_column = (0..100)
-            .find(|&x| buffer[(x, path_row)].symbol() == "<")
+            .find(|&x| buffer[(x, link_row)].symbol() == "<")
             .unwrap();
         assert_eq!(left, text_column);
         let input_row = find_row(&buffer, "Input").unwrap();
