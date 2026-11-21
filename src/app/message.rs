@@ -15,7 +15,8 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::data::{
-    AttachmentDownloads, BodyRange, ChannelId, LinkPreview, Message, TypingAction, TypingSet, parse_uuid,
+    AttachmentDownloads, BodyRange, ChannelId, LinkPreview, Message, TypingAction, TypingSet,
+    parse_uuid,
 };
 use crate::event::Event;
 use crate::receipt::{Receipt, ReceiptEvent};
