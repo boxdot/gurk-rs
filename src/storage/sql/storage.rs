@@ -12,7 +12,7 @@ use crate::receipt::Receipt;
 use crate::signal::Attachment;
 use crate::storage::{MessageId, Metadata, Storage};
 use crate::{
-    data::{BodyRange, Channel, ChannelId, GroupData, Message, TypingSet},
+    data::{BodyRange, Channel, ChannelId, GroupData, LinkPreview, Message, TypingSet},
     passphrase::Passphrase,
 };
 
@@ -138,6 +138,7 @@ struct SqlMessage {
     deleted: bool,
     expire_timer: Option<i64>,
     expires_at: Option<i64>,
+    link_previews: Option<BlobData<Vec<LinkPreview>>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -167,6 +168,7 @@ impl SqlMessage {
             deleted,
             expire_timer,
             expires_at,
+            link_previews,
         } = self;
 
         let quote = quote_arrived_at
@@ -212,6 +214,7 @@ impl SqlMessage {
             deleted,
             expire_timer: expire_timer.and_then(|t| u32::try_from(t).ok()),
             expires_at: expires_at.and_then(|t| u64::try_from(t).ok()),
+            link_previews: link_previews.map(BlobData::into_inner).unwrap_or_default(),
         })
     }
 }
@@ -361,7 +364,8 @@ impl Storage for SqliteStorage {
                         m.edited AS "edited: _",
                         m.deleted AS "deleted: _",
                         m.expire_timer AS "expire_timer: _",
-                        m.expires_at AS "expires_at: _"
+                        m.expires_at AS "expires_at: _",
+                        m.link_previews AS "link_previews: _"
                     FROM messages AS m
                     LEFT JOIN messages AS q ON q.channel_id = ?1 AND q.arrived_at = m.quote
                     WHERE m.channel_id = ?1 AND m.edit IS NULL
@@ -413,7 +417,8 @@ impl Storage for SqliteStorage {
                         m.edited AS "edited: _",
                         m.deleted AS "deleted: _",
                         m.expire_timer AS "expire_timer: _",
-                        m.expires_at AS "expires_at: _"
+                        m.expires_at AS "expires_at: _",
+                        m.link_previews AS "link_previews: _"
                     FROM messages AS m
                     LEFT JOIN messages AS q ON q.channel_id = ?1 AND q.arrived_at = m.quote
                     WHERE m.channel_id = ?1 AND m.arrived_at < ?2 AND m.edit IS NULL
@@ -463,7 +468,8 @@ impl Storage for SqliteStorage {
                         m.edited AS "edited: _",
                         m.deleted AS "deleted: _",
                         m.expire_timer AS "expire_timer: _",
-                        m.expires_at AS "expires_at: _"
+                        m.expires_at AS "expires_at: _",
+                        m.link_previews AS "link_previews: _"
                     FROM messages AS m
                     LEFT JOIN messages AS q ON q.channel_id = ?1 AND q.arrived_at = m.quote
                     WHERE m.channel_id = ?1 AND m.arrived_at > ?2 AND m.edit IS NULL
@@ -510,7 +516,8 @@ impl Storage for SqliteStorage {
                         m.edited AS "edited: _",
                         m.deleted AS "deleted: _",
                         m.expire_timer AS "expire_timer: _",
-                        m.expires_at AS "expires_at: _"
+                        m.expires_at AS "expires_at: _",
+                        m.link_previews AS "link_previews: _"
                     FROM messages AS m
                     LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1
                     WHERE m.channel_id = ?1 AND m.edit IS NULL
@@ -558,7 +565,8 @@ impl Storage for SqliteStorage {
                         m.edited as "edited: _",
                         m.deleted as "deleted: _",
                         m.expire_timer as "expire_timer: _",
-                        m.expires_at as "expires_at: _"
+                        m.expires_at as "expires_at: _",
+                        m.link_previews as "link_previews: _"
                     FROM messages AS m
                     LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1
                     WHERE m.channel_id = ?1 AND m.arrived_at = ?2
@@ -606,7 +614,8 @@ impl Storage for SqliteStorage {
                         m.edited AS "edited: _",
                         m.deleted AS "deleted: _",
                         m.expire_timer AS "expire_timer: _",
-                        m.expires_at AS "expires_at: _"
+                        m.expires_at AS "expires_at: _",
+                        m.link_previews AS "link_previews: _"
                     FROM messages AS m
                     LEFT JOIN messages AS q ON q.arrived_at = m.quote AND q.channel_id = ?1
                     WHERE m.channel_id = ?1 AND m.edit == ?2
@@ -712,6 +721,7 @@ impl Storage for SqliteStorage {
         let deleted: bool = message.deleted;
         let expire_timer: Option<i64> = message.expire_timer.map(|t| t as i64);
         let expires_at: Option<i64> = message.expires_at.and_then(|t| i64::try_from(t).ok());
+        let link_previews = BlobData(&message.link_previews);
         let inserted = block_async_in_place(
             query!(
                 "
@@ -729,9 +739,10 @@ impl Storage for SqliteStorage {
                         edited,
                         deleted,
                         expire_timer,
-                        expires_at
+                        expires_at,
+                        link_previews
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(channel_id, arrived_at) DO UPDATE SET
                         from_id = excluded.from_id,
                         message = excluded.message,
@@ -744,7 +755,8 @@ impl Storage for SqliteStorage {
                         edited = excluded.edited,
                         deleted = excluded.deleted,
                         expire_timer = excluded.expire_timer,
-                        expires_at = excluded.expires_at
+                        expires_at = excluded.expires_at,
+                        link_previews = excluded.link_previews
                 ",
                 arrived_at,
                 channel_id,
@@ -759,7 +771,8 @@ impl Storage for SqliteStorage {
                 edited,
                 deleted,
                 expire_timer,
-                expires_at
+                expires_at,
+                link_previews
             )
             .execute(&self.pool),
         );
@@ -918,6 +931,7 @@ mod tests {
                 deleted: Default::default(),
                 expire_timer: None,
                 expires_at: None,
+                link_previews: Default::default(),
             },
         );
 
@@ -952,6 +966,7 @@ mod tests {
                 deleted: Default::default(),
                 expire_timer: None,
                 expires_at: None,
+                link_previews: Default::default(),
             },
         );
 
@@ -1384,6 +1399,7 @@ mod tests {
                 deleted: Default::default(),
                 expire_timer: None,
                 expires_at: None,
+                link_previews: Default::default(),
             },
         );
 
