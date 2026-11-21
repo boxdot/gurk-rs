@@ -28,7 +28,16 @@ use super::{
 
 impl App {
     /// Stores the `message` in the storage and updates the message window if the channel matches.
+    ///
+    /// Messages with a timestamp that does not fit into an `i64` are dropped.
     pub(crate) fn store_message(&mut self, channel_id: ChannelId, message: Message) {
+        if i64::try_from(message.arrived_at).is_err() {
+            warn!(
+                message.arrived_at,
+                "dropping message with out-of-range timestamp"
+            );
+            return;
+        }
         self.storage.store_message(channel_id, &message);
         if let Some(window) = self.window.as_mut()
             && window.channel_id() == channel_id
@@ -1112,6 +1121,25 @@ mod tests {
                 channel.unread_messages = unread_messages;
                 true
             });
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_store_message_out_of_range_timestamp() {
+        let (mut app, _events, _sent_messages) = test_app().await;
+        let channel_id = app.channels().first().unwrap().id;
+        app.on_channel_changed();
+
+        let timestamp = u64::MAX;
+        app.store_message(
+            channel_id,
+            Message::text(app.user_id, timestamp, "far future".to_string()),
+        );
+
+        assert_eq!(
+            app.storage.message(MessageId::new(channel_id, timestamp)),
+            None
+        );
+        assert!(app.window.as_ref().unwrap().get(timestamp).is_none());
     }
 
     #[tokio::test(flavor = "multi_thread")]

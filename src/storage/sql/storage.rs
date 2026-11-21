@@ -385,8 +385,11 @@ impl Storage for SqliteStorage {
     }
 
     fn messages_before(&self, channel_id: ChannelId, anchor: u64, limit: usize) -> Vec<Message> {
+        // anchor is above any storable timestamp => everything is before it
+        let Ok(anchor) = i64::try_from(anchor) else {
+            return self.messages_tail(channel_id, limit);
+        };
         let channel_id = &channel_id;
-        let anchor = i64::try_from(anchor).unwrap_or(i64::MAX);
         let limit = i64::try_from(limit).expect("usize overflow");
         let sql_messages = block_async_in_place(
             query_as!(
@@ -1496,15 +1499,18 @@ mod tests {
         assert_eq!(storage.message(MessageId::new(channel_id, timestamp)), None);
         assert_eq!(storage.messages(channel_id).count(), count);
 
-        // queries anchored at such a timestamp are clamped
+        // the largest storable timestamp
+        let max = i64::MAX as u64;
+        storage.store_message(channel_id, &Message::text(from_id, max, "max".to_owned()));
+
+        // queries anchored above any storable timestamp
         assert_eq!(storage.messages_count_after(channel_id, timestamp), 0);
         assert!(storage.messages_after(channel_id, timestamp, 10).is_empty());
-        assert_eq!(
-            storage.messages_before(channel_id, timestamp, 100).len(),
-            storage
-                .messages_before(channel_id, i64::MAX as u64, 100)
-                .len()
-        );
+        let before = storage.messages_before(channel_id, timestamp, 100);
+        assert_eq!(before.len(), count + 1);
+        assert_eq!(before.last().unwrap().arrived_at, max);
+        let before = storage.messages_before(channel_id, timestamp, 2);
+        assert_eq!(before.iter().map(|m| m.arrived_at).collect::<Vec<_>>(), [90, max]);
     }
 
     #[tokio::test(flavor = "multi_thread")]
