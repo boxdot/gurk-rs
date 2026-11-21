@@ -6,7 +6,7 @@ use anyhow::{Context as _, anyhow};
 use itertools::Itertools;
 use presage::libsignal_service::content::{Content, ContentBody, Metadata};
 use presage::libsignal_service::protocol::ServiceId;
-use presage::proto::sync_message::{Read, Sent};
+use presage::proto::sync_message::{Content as SyncContent, Read, Sent};
 use presage::proto::{
     AttachmentPointer, DataMessage, EditMessage, ReceiptMessage, SyncMessage, TypingMessage,
 };
@@ -14,7 +14,11 @@ use presage::proto::{GroupContextV2, data_message::Delete, data_message::Reactio
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use crate::data::{BodyRange, ChannelId, Message, TypingAction, TypingSet, parse_uuid};
+use crate::data::{
+    AttachmentDownloads, BodyRange, ChannelId, LinkPreview, Message, TypingAction, TypingSet,
+    parse_uuid,
+};
+use crate::event::Event;
 use crate::receipt::{Receipt, ReceiptEvent};
 use crate::signal::{Attachment, GroupIdentifierBytes};
 use crate::storage::MessageId;
@@ -71,14 +75,14 @@ impl App {
             self.handle_read(read);
         }
 
-        let (channel_id, message) = match (content.metadata, content.body) {
+        let (channel_id, message, attachment_pointers) = match (content.metadata, content.body) {
             // Sync delete: we deleted a message from another device (any channel type)
             (
                 _,
                 ContentBody::SynchronizeMessage(
                     sync_message @ SyncMessage {
-                        sent:
-                            Some(Sent {
+                        content:
+                            Some(SyncContent::Sent(Sent {
                                 message:
                                     Some(DataMessage {
                                         delete:
@@ -88,7 +92,7 @@ impl App {
                                         ..
                                     }),
                                 ..
-                            }),
+                            })),
                         ..
                     },
                 ),
@@ -109,7 +113,7 @@ impl App {
             (
                 _,
                 ContentBody::SynchronizeMessage(SyncMessage {
-                    delete_for_me: Some(delete_for_me),
+                    content: Some(SyncContent::DeleteForMe(delete_for_me)),
                     ..
                 }),
             ) => {
@@ -137,49 +141,52 @@ impl App {
             (
                 _,
                 ContentBody::SynchronizeMessage(SyncMessage {
-                    sent:
-                        Some(Sent {
+                    content:
+                        Some(SyncContent::Sent(Sent {
                             destination_service_id: ref dest_str,
                             destination_service_id_binary: ref dest_binary,
                             timestamp: Some(timestamp),
                             message:
                                 Some(DataMessage {
                                     mut body,
-                                    attachments: attachment_pointers,
                                     quote,
+                                    attachments: attachment_pointers,
                                     sticker,
                                     body_ranges,
                                     reaction: None,
                                     expire_timer,
+                                    preview,
                                     ..
                                 }),
                             ..
-                        }),
+                        })),
                     ..
                 }),
             ) if parse_uuid(dest_str.as_deref(), dest_binary.as_deref()) == Some(user_id) => {
                 let channel_id = self.ensure_own_channel_exists();
                 self.update_channel_expire_timer(channel_id, expire_timer);
 
-                let attachments = self.save_attachments(attachment_pointers).await;
                 add_emoji_from_sticker(&mut body, sticker);
 
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
+                let link_previews = preview.iter().map(LinkPreview::from_proto).collect();
 
                 let message = Message {
                     quote,
                     expire_timer,
-                    ..Message::new(user_id, body, body_ranges, timestamp, attachments)
+                    attachment_downloads: AttachmentDownloads::pending(attachment_pointers.len()),
+                    link_previews,
+                    ..Message::new(user_id, body, body_ranges, timestamp, Vec::new())
                 };
-                (channel_id, message)
+                (channel_id, message, attachment_pointers)
             }
             // reactions
             (
                 Metadata { sender, .. },
                 ContentBody::SynchronizeMessage(SyncMessage {
-                    sent:
-                        Some(Sent {
+                    content:
+                        Some(SyncContent::Sent(Sent {
                             destination_service_id: ref dest_str,
                             destination_service_id_binary: ref dest_binary,
                             message:
@@ -198,7 +205,7 @@ impl App {
                                     ..
                                 }),
                             ..
-                        }),
+                        })),
                     read,
                     ..
                 }),
@@ -303,8 +310,8 @@ impl App {
             (
                 Metadata { sender, .. },
                 ContentBody::SynchronizeMessage(SyncMessage {
-                    sent:
-                        Some(Sent {
+                    content:
+                        Some(SyncContent::Sent(Sent {
                             destination_service_id: ref dest_str,
                             destination_service_id_binary: ref dest_binary,
                             timestamp: Some(timestamp),
@@ -319,10 +326,11 @@ impl App {
                                     body_ranges,
                                     reaction: None,
                                     expire_timer,
+                                    preview,
                                     ..
                                 }),
                             ..
-                        }),
+                        })),
                     ..
                 }),
             ) if sender.raw_uuid() == user_id => {
@@ -362,13 +370,15 @@ impl App {
                 self.update_channel_expire_timer(channel_id, expire_timer);
 
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
-                let attachments = self.save_attachments(attachment_pointers).await;
                 let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
+                let link_previews = preview.iter().map(LinkPreview::from_proto).collect();
 
                 let message = Message {
                     quote,
                     expire_timer,
-                    ..Message::new(user_id, body, body_ranges, timestamp, attachments)
+                    attachment_downloads: AttachmentDownloads::pending(attachment_pointers.len()),
+                    link_previews,
+                    ..Message::new(user_id, body, body_ranges, timestamp, Vec::new())
                 };
 
                 if message.is_empty() {
@@ -376,7 +386,7 @@ impl App {
                     return Ok(());
                 }
 
-                (channel_id, message)
+                (channel_id, message, attachment_pointers)
             }
             // Incoming remote delete (delete for everyone)
             (
@@ -432,6 +442,7 @@ impl App {
                     sticker,
                     body_ranges,
                     expire_timer,
+                    preview,
                     ..
                 }),
             ) => {
@@ -493,9 +504,8 @@ impl App {
                 // Update channel's expire timer if it changed
                 self.update_channel_expire_timer(channel_id, expire_timer);
 
-                let attachments = self.save_attachments(attachment_pointers).await;
                 if !channel_muted {
-                    self.notify_about_message(&from, body.as_deref(), &attachments);
+                    self.notify_about_message(&from, body.as_deref(), attachment_pointers.len());
                 }
 
                 // Send "Delivered" receipt
@@ -507,17 +517,20 @@ impl App {
 
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
+                let link_previews = preview.iter().map(LinkPreview::from_proto).collect();
                 let message = Message {
                     quote,
                     expire_timer,
-                    ..Message::new(sender.raw_uuid(), body, body_ranges, timestamp, attachments)
+                    attachment_downloads: AttachmentDownloads::pending(attachment_pointers.len()),
+                    link_previews,
+                    ..Message::new(sender.raw_uuid(), body, body_ranges, timestamp, Vec::new())
                 };
 
                 if message.is_empty() {
                     return Ok(());
                 }
 
-                (channel_id, message)
+                (channel_id, message, attachment_pointers)
             }
             (metadata, ContentBody::SynchronizeMessage(sync_message)) => {
                 return self.handle_sync_message(metadata, sync_message);
@@ -635,13 +648,65 @@ impl App {
             }
         };
 
+        let message_id = MessageId::new(channel_id, message.arrived_at);
         self.add_message_to_channel(channel_id, message);
+        if !attachment_pointers.is_empty() {
+            self.save_attachments(message_id, attachment_pointers);
+        }
 
         Ok(())
     }
 
-    fn notify_about_message(&mut self, from: &str, body: Option<&str>, attachments: &[Attachment]) {
-        let attachments_text = notification_text_for_attachments(attachments);
+    /// Downloads attachments in the background and adds each one to the message when done.
+    fn save_attachments(&self, message_id: MessageId, attachment_pointers: Vec<AttachmentPointer>) {
+        for attachment_pointer in attachment_pointers {
+            let response = self.signal_manager.save_attachment(attachment_pointer);
+            let tx = self.event_tx.clone();
+            tokio::spawn(async move {
+                let attachment = response
+                    .await
+                    .unwrap_or_else(|_| Err(anyhow!("response for saving attachment was lost")));
+                let _ = tx.send(Event::AttachmentSaved {
+                    message_id,
+                    attachment,
+                });
+            });
+        }
+    }
+
+    pub(super) fn on_attachment_saved(
+        &mut self,
+        message_id: MessageId,
+        attachment: anyhow::Result<Attachment>,
+    ) {
+        let Some(mut message) = self.storage.message(message_id) else {
+            debug!(?message_id, "dropping attachment of a removed message");
+            return;
+        };
+        if message.deleted {
+            return;
+        }
+        // download state is not persisted, only kept in the window
+        if let Some(window) = self.window.as_ref()
+            && window.channel_id() == message_id.channel_id
+            && let Some(window_message) = window.get(message_id.arrived_at)
+        {
+            message.attachment_downloads = window_message.attachment_downloads;
+        }
+        let downloads = &mut message.attachment_downloads;
+        downloads.pending = downloads.pending.saturating_sub(1);
+        match attachment {
+            Ok(attachment) => message.attachments.push(attachment),
+            Err(error) => {
+                error!(?message_id, %error, "failed to save attachment");
+                downloads.failed += 1;
+            }
+        }
+        self.store_message(message_id.channel_id, message);
+    }
+
+    fn notify_about_message(&mut self, from: &str, body: Option<&str>, num_attachments: usize) {
+        let attachments_text = notification_text_for_attachments(num_attachments);
         let notification = [body, attachments_text.as_deref()]
             .into_iter()
             .flatten()
@@ -867,41 +932,28 @@ impl App {
         Some(())
     }
 
-    async fn save_attachments(
-        &mut self,
-        attachment_pointers: Vec<AttachmentPointer>,
-    ) -> Vec<Attachment> {
-        let mut attachments = vec![];
-        for attachment_pointer in attachment_pointers {
-            match self
-                .signal_manager
-                .save_attachment(attachment_pointer)
-                .await
-            {
-                Ok(attachment) => attachments.push(attachment),
-                Err(e) => warn!("failed to save attachment: {}", e),
-            }
-        }
-        attachments
-    }
-
     fn notify(&self, summary: &str, text: &str) {
-        if self.config.notifications.enabled
-            && let Err(e) = notify_rust::Notification::new()
-                .summary(if self.config.notifications.show_message_chat {
-                    summary
-                } else {
-                    "gurk"
-                })
-                .body(if self.config.notifications.show_message_text {
-                    text
-                } else {
-                    "New message!"
-                })
-                .show()
-        {
-            error!("failed to send notification: {}", e);
+        if !self.config.notifications.enabled {
+            return;
         }
+        let mut notification = notify_rust::Notification::new();
+        notification
+            .summary(if self.config.notifications.show_message_chat {
+                summary
+            } else {
+                "gurk"
+            })
+            .body(if self.config.notifications.show_message_text {
+                text
+            } else {
+                "New message!"
+            });
+        // Showing a notification is a blocking call (e.g. D-Bus)
+        tokio::task::spawn_blocking(move || {
+            if let Err(e) = notification.show() {
+                error!("failed to send notification: {}", e);
+            }
+        });
     }
 
     fn bell(&self) {
@@ -923,7 +975,7 @@ impl App {
         };
 
         // edit message
-        if let Some(Sent {
+        if let Some(SyncContent::Sent(Sent {
             edit_message:
                 Some(EditMessage {
                     target_sent_timestamp: Some(target_sent_timestamp),
@@ -935,7 +987,7 @@ impl App {
                         }),
                 }),
             ..
-        }) = sync_message.sent
+        })) = sync_message.content
         {
             let from_id = metadata.sender.raw_uuid();
             self.store_edited_message(
@@ -999,7 +1051,9 @@ trait MessageExt {
 impl MessageExt for SyncMessage {
     fn channel_id(&self) -> Option<ChannelId> {
         // only sent sync message are attached to a conversation
-        let sent = self.sent.as_ref()?;
+        let Some(SyncContent::Sent(sent)) = &self.content else {
+            return None;
+        };
         if let Some(uuid) = sent.parse_destination_uuid() {
             Some(ChannelId::User(uuid))
         } else {
@@ -1054,6 +1108,8 @@ fn conversation_to_channel_id(conv: &presage::proto::ConversationIdentifier) -> 
 
 #[cfg(test)]
 mod tests {
+    use presage::libsignal_service::prelude::AttachmentIdentifier;
+
     use crate::app::tests::test_app;
     use crate::data::Channel;
 
@@ -1152,5 +1208,64 @@ mod tests {
 
         app.add_message_to_channel(channel_b, Message::text(other, 1001, "there".to_string()));
         assert_eq!(app.channel(channel_b).unwrap().unread_messages, 2);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_attachments_are_saved_in_background() {
+        let (mut app, mut events, _sent_messages) = test_app().await;
+        let channel_id = app.channels().first().unwrap().id;
+
+        let message = Message {
+            attachment_downloads: AttachmentDownloads::pending(2),
+            ..Message::new(app.user_id, None, [], 1000, Vec::new())
+        };
+        assert!(!message.is_empty());
+        let message_id = MessageId::new(channel_id, message.arrived_at);
+        app.add_message_to_channel(channel_id, message);
+
+        let pointer = AttachmentPointer {
+            attachment_identifier: Some(AttachmentIdentifier::CdnKey("key".to_string())),
+            content_type: Some("image/png".to_string()),
+            size: Some(42),
+            ..Default::default()
+        };
+        app.save_attachments(message_id, vec![pointer]);
+        let Some(Event::AttachmentSaved {
+            message_id: saved_id,
+            attachment,
+        }) = events.recv().await
+        else {
+            panic!("unexpected event");
+        };
+        assert_eq!(saved_id, message_id);
+
+        app.on_attachment_saved(message_id, attachment);
+        let downloads = |app: &App| {
+            app.window
+                .as_ref()
+                .unwrap()
+                .get(1000)
+                .unwrap()
+                .attachment_downloads
+        };
+        assert_eq!(
+            downloads(&app),
+            AttachmentDownloads {
+                pending: 1,
+                failed: 0
+            }
+        );
+
+        app.on_attachment_saved(message_id, Err(anyhow!("download failed")));
+        assert_eq!(
+            downloads(&app),
+            AttachmentDownloads {
+                pending: 0,
+                failed: 1
+            }
+        );
+        let message = app.storage.message(message_id).unwrap();
+        assert_eq!(message.attachments.len(), 1);
+        assert_eq!(message.attachments[0].id, "key");
     }
 }

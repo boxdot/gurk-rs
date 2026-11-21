@@ -200,6 +200,45 @@ impl TypingAction {
     }
 }
 
+/// State of attachments which are downloaded in the background
+///
+/// Not persisted.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct AttachmentDownloads {
+    /// Number of attachments which are still being downloaded
+    pub(crate) pending: usize,
+    /// Number of attachments which failed to download
+    pub(crate) failed: usize,
+}
+
+impl AttachmentDownloads {
+    pub(crate) fn pending(pending: usize) -> Self {
+        Self { pending, failed: 0 }
+    }
+}
+
+/// Link preview metadata (title, description, URL) from Signal messages
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct LinkPreview {
+    pub url: Option<String>,
+    pub title: Option<String>,
+    pub description: Option<String>,
+}
+
+impl LinkPreview {
+    pub fn from_proto(preview: &proto::Preview) -> Self {
+        Self {
+            url: preview.url.clone(),
+            title: preview.title.clone(),
+            description: preview.description.clone(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.url.is_none() && self.title.is_none() && self.description.is_none()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Message {
     pub from_id: Uuid,
@@ -217,6 +256,8 @@ pub struct Message {
     pub(crate) body_ranges: Vec<BodyRange>,
     #[serde(skip)]
     pub(crate) send_failed: Option<String>,
+    #[serde(skip)]
+    pub(crate) attachment_downloads: AttachmentDownloads,
     /// Arrived at of the originally edited message
     ///
     /// When several edits are done, this is the arrived_at of the very first original message.
@@ -234,6 +275,9 @@ pub struct Message {
     /// UTC millisecond timestamp when this message expires (set when first viewed)
     #[serde(default)]
     pub(crate) expires_at: Option<u64>,
+    /// Link previews attached to this message
+    #[serde(default)]
+    pub link_previews: Vec<LinkPreview>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -345,11 +389,13 @@ impl Message {
             receipt: Receipt::Sent,
             body_ranges: body_ranges.into_iter().collect(),
             send_failed: Default::default(),
+            attachment_downloads: Default::default(),
             edit: Default::default(),
             edited: Default::default(),
             deleted: Default::default(),
             expire_timer: None,
             expires_at: None,
+            link_previews: Default::default(),
         }
     }
 
@@ -364,11 +410,13 @@ impl Message {
             receipt: Default::default(),
             body_ranges: Default::default(),
             send_failed: Default::default(),
+            attachment_downloads: Default::default(),
             edit: Default::default(),
             edited: Default::default(),
             deleted: Default::default(),
             expire_timer: None,
             expires_at: None,
+            link_previews: Default::default(),
         }
     }
 
@@ -390,17 +438,20 @@ impl Message {
                 .filter_map(BodyRange::from_proto)
                 .collect(),
             send_failed: Default::default(),
+            attachment_downloads: Default::default(),
             edit: Default::default(),
             edited: Default::default(),
             deleted: Default::default(),
             expire_timer: None,
             expires_at: None,
+            link_previews: Default::default(),
         })
     }
 
     pub fn is_empty(&self) -> bool {
         self.message.is_none()
             && self.attachments.is_empty()
+            && self.attachment_downloads.pending == 0
             && self.reactions.is_empty()
             && self.quote.is_none()
     }
