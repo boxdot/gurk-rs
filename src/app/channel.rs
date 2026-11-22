@@ -135,6 +135,24 @@ impl App {
             });
     }
 
+    /// Returns an error if `sender` is not a member of the group channel `channel_id`
+    ///
+    /// Must be called after [`Self::ensure_group_channel_exists`], which refreshes the members when
+    /// the message is from a newer group revision.
+    pub(super) fn ensure_group_member(
+        &self,
+        channel_id: ChannelId,
+        sender: Uuid,
+    ) -> anyhow::Result<()> {
+        let is_member = sender == self.user_id
+            || self
+                .channel(channel_id)
+                .and_then(|channel| channel.group_data.as_ref())
+                .is_some_and(|group_data| group_data.members.contains(&sender));
+        anyhow::ensure!(is_member, "dropping group message from a non-member");
+        Ok(())
+    }
+
     pub(super) async fn ensure_group_channel_exists(
         &mut self,
         master_key: GroupMasterKeyBytes,
