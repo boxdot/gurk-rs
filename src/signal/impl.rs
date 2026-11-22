@@ -540,14 +540,10 @@ async fn upload_attachments(
     data_message: &mut DataMessage,
 ) -> anyhow::Result<()> {
     let attachment_pointers = manager.upload_attachments(attachments).await?;
+    // All or nothing: a message must not silently go out without its attachments.
     data_message.attachments = attachment_pointers
         .into_iter()
-        .filter_map(|res| {
-            if let Err(e) = res.as_ref() {
-                error!("failed to upload attachment: {}", e);
-            }
-            res.ok()
-        })
-        .collect();
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| anyhow::anyhow!("failed to upload attachment: {error}"))?;
     Ok(())
 }
