@@ -129,6 +129,13 @@ libraries that are not available on crates.io.
   * `file:///path/to/file` Upload File "file" at path "/path/to/"
   * `file://clip` Upload Content of Clipboard
 
+## Inline Images
+
+Image attachments are shown below their message in terminals supporting a graphics protocol (Kitty,
+Ghostty, WezTerm, iTerm2, Sixel), and as colored blocks elsewhere. The maximum height of an image in
+lines is configured with `image_height` in `gurk.toml` (default `10`); `image_height = 0` disables
+inline images.
+
 ## Configuration
 
 ### Command-line options
