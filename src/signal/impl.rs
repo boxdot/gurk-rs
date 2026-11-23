@@ -484,7 +484,7 @@ impl SignalManager for PresageManager {
             |received| match received {
                 Received::Content(content) => Some(content),
                 Received::QueueEmpty => None,
-                Received::Contacts => {
+                Received::Contacts { .. } => {
                     // TODO: <https://github.com/boxdot/gurk-rs/issues/349>
                     warn!("Received contacts, but not implemented yet");
                     None
