@@ -88,6 +88,10 @@ impl SignalManager for PresageManager {
         }
 
         let name = decrypted_group.title;
+        let expire_timer = decrypted_group
+            .disappearing_messages_timer
+            .map(|timer| timer.duration)
+            .filter(|&duration| duration > 0);
         let group_data = GroupData {
             master_key_bytes,
             members,
@@ -98,6 +102,7 @@ impl SignalManager for PresageManager {
             name,
             group_data,
             profile_keys,
+            expire_timer,
         })
     }
 
