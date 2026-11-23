@@ -161,7 +161,7 @@ fn wrap(text: &str, mut cursor: Cursor, width: usize) -> (String, Cursor, usize)
 
     for grapheme in text.graphemes(true) {
         // current line too long => wrap
-        if col > 0 && col % width == 0 {
+        if col > 0 && col >= width {
             res.push('\n');
 
             // adjust cursor
