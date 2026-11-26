@@ -661,7 +661,7 @@ fn message_lines(
         if text.is_empty() {
             return None; // no text => nothing to render
         }
-        add_reactions(msg, &mut text);
+        add_reactions(msg, replace_emoji_with_names, &mut text);
         add_edited(msg, &mut text);
         text
     };
@@ -867,17 +867,18 @@ fn add_link_previews(msg: &Message, out: &mut String) {
     }
 }
 
-fn add_reactions(msg: &Message, out: &mut dyn fmt::Write) {
-    if !msg.reactions.is_empty() {
-        fmt::write(
-            out,
-            format_args!(
-                " [{}]",
-                msg.reactions.iter().map(|(_, emoji)| emoji).format("")
-            ),
-        )
-        .expect("formatting reactions failed");
+fn add_reactions(msg: &Message, replace_emoji_with_names: bool, out: &mut dyn fmt::Write) {
+    if msg.reactions.is_empty() {
+        return;
     }
+    let reactions = msg.reactions.iter().map(|(_, emoji)| emoji.as_str());
+    let res = if replace_emoji_with_names {
+        let names = reactions.map(|emoji| emojis::get(emoji).map_or(emoji, |e| e.name()));
+        write!(out, " [{}]", names.format(", "))
+    } else {
+        write!(out, " [{}]", reactions.format(""))
+    };
+    res.expect("formatting reactions failed");
 }
 
 fn add_edited(msg: &Message, out: &mut dyn fmt::Write) {
@@ -1321,6 +1322,40 @@ mod tests {
                 "                  [preview url] https://x.co/a",
             )]),
         ]));
+        assert_eq!(rendered, Some(expected));
+    }
+
+    #[test]
+    fn test_display_message_with_emoji_names() {
+        let names = name_resolver();
+        let msg = Message {
+            message: Some("nice 👍".into()),
+            reactions: vec![(USER_ID, "🎉".into()), (USER_ID, "❤️".into())],
+            ..test_message()
+        };
+        let rendered = display_message(
+            &names,
+            &msg,
+            PREFIX,
+            WIDTH,
+            HEIGHT,
+            ShowReceipt::Never,
+            None,
+            None,
+            false,
+            true,
+        );
+
+        let expected = ListItem::new(Text::from(vec![Line::from(vec![
+            Span::styled("", Style::default().fg(Color::Yellow)),
+            Span::styled(
+                display_time(msg.arrived_at),
+                Style::default().fg(Color::Yellow),
+            ),
+            Span::styled("boxdot", Style::default().fg(Color::Green)),
+            Span::raw(": "),
+            Span::raw("nice [thumbs up] [party popper, red heart]"),
+        ])]));
         assert_eq!(rendered, Some(expected));
     }
 
