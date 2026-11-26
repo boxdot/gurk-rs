@@ -688,7 +688,7 @@ impl Storage for SqliteStorage {
         .ok_logged()??
     }
 
-    fn store_message(&mut self, channel_id: ChannelId, message: &Message) {
+    fn store_message(&mut self, channel_id: ChannelId, message: &Message) -> bool {
         let channel_id = &channel_id;
         // the timestamp is chosen by the sender and might not fit into an SQLite integer
         let Some(arrived_at): Option<i64> = message
@@ -697,7 +697,7 @@ impl Storage for SqliteStorage {
             .map_err(|_| MessageConvertError::InvalidTimestamp)
             .ok_logged()
         else {
-            return;
+            return false;
         };
         let from_id = &message.from_id;
         let message_msg = message.message.as_deref();
@@ -757,6 +757,7 @@ impl Storage for SqliteStorage {
                         expire_timer = excluded.expire_timer,
                         expires_at = excluded.expires_at,
                         link_previews = excluded.link_previews
+                    WHERE messages.from_id = excluded.from_id
                 ",
                 arrived_at,
                 channel_id,
@@ -776,8 +777,13 @@ impl Storage for SqliteStorage {
             )
             .execute(&self.pool),
         );
-        if let Err(error) = inserted {
-            error!(%error, ?channel_id, arrived_at, "failed to store message");
+        match inserted {
+            // no row is affected if a message from another author is stored at the timestamp
+            Ok(result) => result.rows_affected() > 0,
+            Err(error) => {
+                error!(%error, ?channel_id, arrived_at, "failed to store message");
+                false
+            }
         }
     }
 

@@ -30,21 +30,32 @@ use super::{
 impl App {
     /// Stores the `message` in the storage and updates the message window if the channel matches.
     ///
-    /// Messages with a timestamp that does not fit into an `i64` are dropped.
-    pub(crate) fn store_message(&mut self, channel_id: ChannelId, message: Message) {
+    /// Messages with a timestamp that does not fit into an `i64` are dropped, as are messages
+    /// with the timestamp of a stored message from another author.
+    ///
+    /// Returns `false` if the message was dropped.
+    pub(crate) fn store_message(&mut self, channel_id: ChannelId, message: Message) -> bool {
         if i64::try_from(message.arrived_at).is_err() {
             warn!(
                 message.arrived_at,
                 "dropping message with out-of-range timestamp"
             );
-            return;
+            return false;
         }
-        self.storage.store_message(channel_id, &message);
+        if !self.storage.store_message(channel_id, &message) {
+            warn!(
+                message.arrived_at,
+                "dropping message that was not stored, e.g. due to the timestamp of a message \
+                 from another author"
+            );
+            return false;
+        }
         if let Some(window) = self.window.as_mut()
             && window.channel_id() == channel_id
         {
             window.upsert(message);
         }
+        true
     }
 
     /// Applies an edit to a stored message and updates the message window with the edited
@@ -689,18 +700,9 @@ impl App {
         };
 
         let message_id = MessageId::new(channel_id, message.arrived_at);
-        // messages are stored by channel and timestamp; don't let a message replace another
-        // author's message with the same timestamp
-        if let Some(existing) = self.storage.message(message_id)
-            && existing.from_id != message.from_id
-        {
-            warn!(
-                arrived_at = message.arrived_at,
-                "dropping message with the timestamp of a message from another author"
-            );
+        if !self.add_message_to_channel(channel_id, message) {
             return Ok(());
         }
-        self.add_message_to_channel(channel_id, message);
         if !attachment_pointers.is_empty() {
             self.save_attachments(message_id, attachment_pointers);
         }
