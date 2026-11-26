@@ -66,6 +66,9 @@ pub struct Config {
     /// Custom device name for Signal linking (defaults to "gurk@{hostname}")
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub device_name: Option<NonEmptyString>,
+    /// Whether to replace emojis with their CLDR short names in the message text
+    #[serde(default)]
+    pub replace_emoji_with_names: bool,
 }
 
 /// String that is not empty and not whitespace only
@@ -238,6 +241,7 @@ impl Config {
             default_keybindings: true,
             keybindings: ModeKeybindingConfig::default(),
             device_name: None,
+            replace_emoji_with_names: false,
         }
     }
 

@@ -504,12 +504,11 @@ pub(crate) mod tests {
         let user = User {
             display_name: "Tyler Durden".to_string(),
         };
-        let (mut app, events) = App::try_new(
-            Config::with_user(user),
-            Box::new(signal_manager),
-            Box::new(storage),
-        )
-        .unwrap();
+        let mut config = Config::with_user(user);
+        // don't send real desktop notifications from tests
+        config.notifications.enabled = false;
+        let (mut app, events) =
+            App::try_new(config, Box::new(signal_manager), Box::new(storage)).unwrap();
         app.channels.state.select(Some(0));
 
         (app, events, sent_messages)
