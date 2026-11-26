@@ -652,10 +652,8 @@ fn message_lines(
         String::from("[message deleted]")
     } else {
         let mut text = strip_ansi_escapes::strip_str(msg.message.as_deref().unwrap_or_default());
-        if replace_emoji_with_names
-            && let Some(replaced) = emoji_names::replace_emoji(&text, "en", "[", "]")
-        {
-            text = replaced;
+        if replace_emoji_with_names {
+            text = crate::emoji::replace_emojis_with_names(&text).into_owned();
         }
         text = replace_mentions(msg, names, text);
         add_attachments(msg, &mut text);
