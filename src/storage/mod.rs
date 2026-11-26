@@ -60,14 +60,13 @@ pub trait Storage {
     ///
     /// The channel with the given `channel_id` must already exist.
     ///
-    /// Returns `false` if the message was not stored, in particular if a message from another
-    /// author is already stored at the same timestamp: messages are keyed by channel and timestamp,
-    /// so a message must not replace another author's message.
+    /// Returns `false` if the message was not stored, e.g. because another author's message has
+    /// the same timestamp.
     fn store_message(&mut self, channel_id: ChannelId, message: &Message) -> bool;
 
     /// Applies an edit and returns the updated original message, or `None` if the message pointed
     /// to by `target_sent_timestamp` does not exist, is not from the author of the edit, or if
-    /// storing the edit would overwrite a message from another author.
+    /// the edit would overwrite another author's message.
     fn store_edited_message(
         &mut self,
         channel_id: ChannelId,
@@ -92,10 +91,6 @@ pub trait Storage {
             // original message => first edit
             let original = prev_edited;
             // preserve body of the original message; it is replaced below
-            //
-            // Stored before the edit: if the edit is rejected afterwards, the preserved copy is
-            // left over, but it is overwritten by the next edit, since the original is not marked
-            // as edited. The other way around, the original body would be lost.
             let mut preserved = original.clone();
             preserved.arrived_at = original.arrived_at + 1;
             preserved.edit = Some(original.arrived_at);

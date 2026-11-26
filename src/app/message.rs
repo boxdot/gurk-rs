@@ -30,10 +30,8 @@ use super::{
 impl App {
     /// Stores the `message` in the storage and updates the message window if the channel matches.
     ///
-    /// Messages with a timestamp that does not fit into an `i64` are dropped, as are messages
-    /// with the timestamp of a stored message from another author.
-    ///
-    /// Returns `false` if the message was dropped.
+    /// Returns `false` if the message was dropped, e.g. because its timestamp does not fit into an
+    /// `i64` or another author's message has the same timestamp.
     pub(crate) fn store_message(&mut self, channel_id: ChannelId, message: Message) -> bool {
         if i64::try_from(message.arrived_at).is_err() {
             warn!(
@@ -43,11 +41,7 @@ impl App {
             return false;
         }
         if !self.storage.store_message(channel_id, &message) {
-            warn!(
-                message.arrived_at,
-                "dropping message that was not stored, e.g. due to the timestamp of a message \
-                 from another author"
-            );
+            warn!(message.arrived_at, "dropping message: not stored");
             return false;
         }
         if let Some(window) = self.window.as_mut()

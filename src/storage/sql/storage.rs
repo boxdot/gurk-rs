@@ -778,7 +778,6 @@ impl Storage for SqliteStorage {
             .execute(&self.pool),
         );
         match inserted {
-            // no row is affected if a message from another author is stored at the timestamp
             Ok(result) => result.rows_affected() > 0,
             Err(error) => {
                 error!(%error, ?channel_id, arrived_at, "failed to store message");
