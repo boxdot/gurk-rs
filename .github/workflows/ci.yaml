@@ -24,6 +24,33 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: crate-ci/typos@631208b7aac2daa8b707f55e7331f9112b0e062d # v1.44.0
 
+  no-ai-authors:
+    name: Check for AI authors
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Reject commits authored or co-authored by AI agents
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          pattern='anthropic|claude|openai|chatgpt|codex|copilot|cursor|gemini|jules|devin|aider|windsurf|codeium|\[bot\]'
+          allowed='dependabot\[bot\]|renovate\[bot\]'
+          failed=0
+          for sha in $(git rev-list "$BASE_SHA..$HEAD_SHA"); do
+            hits=$(git log -1 --format='%an <%ae>%n%(trailers:key=Co-authored-by,valueonly)' "$sha" \
+              | grep -iE "$pattern" | grep -viE "$allowed" || true)
+            if [ -n "$hits" ]; then
+              echo "::error::Agents are not authors (commit $sha: $hits)"
+              failed=1
+            fi
+          done
+          exit $failed
+
   rustfmt:
     runs-on: ubuntu-latest
     steps:
