@@ -1329,8 +1329,8 @@ mod tests {
     fn test_display_message_with_emoji_names() {
         let names = name_resolver();
         let msg = Message {
-            message: Some("nice 👍".into()),
-            reactions: vec![(USER_ID, "🎉".into()), (USER_ID, "❤️".into())],
+            message: Some("👍".into()),
+            reactions: vec![(USER_ID, "🔥".into()), (USER_ID, "❤️".into())],
             ..test_message()
         };
         let rendered = display_message(
@@ -1354,7 +1354,7 @@ mod tests {
             ),
             Span::styled("boxdot", Style::default().fg(Color::Green)),
             Span::raw(": "),
-            Span::raw("nice [thumbs up] [party popper, red heart]"),
+            Span::raw("[thumbs up] [fire, red heart]"),
         ])]));
         assert_eq!(rendered, Some(expected));
     }
