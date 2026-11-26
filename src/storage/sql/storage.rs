@@ -688,7 +688,7 @@ impl Storage for SqliteStorage {
         .ok_logged()??
     }
 
-    fn store_message(&mut self, channel_id: ChannelId, message: &Message) {
+    fn store_message(&mut self, channel_id: ChannelId, message: &Message) -> bool {
         let channel_id = &channel_id;
         // the timestamp is chosen by the sender and might not fit into an SQLite integer
         let Some(arrived_at): Option<i64> = message
@@ -697,7 +697,7 @@ impl Storage for SqliteStorage {
             .map_err(|_| MessageConvertError::InvalidTimestamp)
             .ok_logged()
         else {
-            return;
+            return false;
         };
         let from_id = &message.from_id;
         let message_msg = message.message.as_deref();
@@ -757,6 +757,7 @@ impl Storage for SqliteStorage {
                         expire_timer = excluded.expire_timer,
                         expires_at = excluded.expires_at,
                         link_previews = excluded.link_previews
+                    WHERE messages.from_id = excluded.from_id
                 ",
                 arrived_at,
                 channel_id,
@@ -776,8 +777,12 @@ impl Storage for SqliteStorage {
             )
             .execute(&self.pool),
         );
-        if let Err(error) = inserted {
-            error!(%error, ?channel_id, arrived_at, "failed to store message");
+        match inserted {
+            Ok(result) => result.rows_affected() > 0,
+            Err(error) => {
+                error!(%error, ?channel_id, arrived_at, "failed to store message");
+                false
+            }
         }
     }
 
@@ -1290,6 +1295,48 @@ mod tests {
         );
         assert_eq!(storage.messages_count_after(channel_id, 50), 4);
         assert_eq!(storage.messages_count_after(channel_id, 90), 0);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sqlite_storage_edit_does_not_overwrite_other_author() {
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+        let (mut storage, channel_id) = windowed_fixtures().await;
+        let author = uuid!("a955d20f-6b83-4e69-846e-a99b1779ff7a");
+        let other = uuid!("91a6315b-027c-44ce-bacb-4d5cf012ba8c");
+        storage.store_message(
+            channel_id,
+            &Message::text(other, 85, "other at 85".to_owned()),
+        );
+        storage.store_message(
+            channel_id,
+            &Message::text(other, 61, "other at 61".to_owned()),
+        );
+
+        // edit stored at the timestamp of another author's message
+        assert!(
+            storage
+                .store_edited_message(channel_id, 50, Message::text(author, 85, "edit".to_owned()))
+                .is_none()
+        );
+        // preserved original stored right after it, at another author's message
+        assert!(
+            storage
+                .store_edited_message(channel_id, 60, Message::text(author, 95, "edit".to_owned()))
+                .is_none()
+        );
+
+        let message = storage.message(MessageId::new(channel_id, 85)).unwrap();
+        assert_eq!((message.from_id, message.edit), (other, None));
+        let message = storage.message(MessageId::new(channel_id, 61)).unwrap();
+        assert_eq!(message.message.as_deref(), Some("other at 61"));
+        let message = storage.message(MessageId::new(channel_id, 50)).unwrap();
+        assert_eq!(message.message.as_deref(), Some("message 50"));
+        // edits that don't collide still apply
+        assert!(
+            storage
+                .store_edited_message(channel_id, 50, Message::text(author, 96, "edit".to_owned()))
+                .is_some()
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]

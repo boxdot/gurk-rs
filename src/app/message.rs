@@ -30,21 +30,26 @@ use super::{
 impl App {
     /// Stores the `message` in the storage and updates the message window if the channel matches.
     ///
-    /// Messages with a timestamp that does not fit into an `i64` are dropped.
-    pub(crate) fn store_message(&mut self, channel_id: ChannelId, message: Message) {
+    /// Returns `false` if the message was dropped, e.g. because its timestamp does not fit into an
+    /// `i64` or another author's message has the same timestamp.
+    pub(crate) fn store_message(&mut self, channel_id: ChannelId, message: Message) -> bool {
         if i64::try_from(message.arrived_at).is_err() {
             warn!(
                 message.arrived_at,
                 "dropping message with out-of-range timestamp"
             );
-            return;
+            return false;
         }
-        self.storage.store_message(channel_id, &message);
+        if !self.storage.store_message(channel_id, &message) {
+            warn!(message.arrived_at, "dropping message: not stored");
+            return false;
+        }
         if let Some(window) = self.window.as_mut()
             && window.channel_id() == channel_id
         {
             window.upsert(message);
         }
+        true
     }
 
     /// Applies an edit to a stored message and updates the message window with the edited
@@ -689,7 +694,9 @@ impl App {
         };
 
         let message_id = MessageId::new(channel_id, message.arrived_at);
-        self.add_message_to_channel(channel_id, message);
+        if !self.add_message_to_channel(channel_id, message) {
+            return Ok(());
+        }
         if !attachment_pointers.is_empty() {
             self.save_attachments(message_id, attachment_pointers);
         }
