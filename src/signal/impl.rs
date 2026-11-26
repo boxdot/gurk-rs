@@ -288,6 +288,7 @@ impl SignalManager for PresageManager {
                 .expire_timer
                 .filter(|&t| t > 0)
                 .map(|t| timestamp + u64::from(t) * 1000),
+            link_previews: Default::default(),
         };
         (message, response)
     }
@@ -483,7 +484,7 @@ impl SignalManager for PresageManager {
             |received| match received {
                 Received::Content(content) => Some(content),
                 Received::QueueEmpty => None,
-                Received::Contacts => {
+                Received::Contacts { .. } => {
                     // TODO: <https://github.com/boxdot/gurk-rs/issues/349>
                     warn!("Received contacts, but not implemented yet");
                     None
@@ -540,14 +541,10 @@ async fn upload_attachments(
     data_message: &mut DataMessage,
 ) -> anyhow::Result<()> {
     let attachment_pointers = manager.upload_attachments(attachments).await?;
+    // All or nothing: a message must not silently go out without its attachments.
     data_message.attachments = attachment_pointers
         .into_iter()
-        .filter_map(|res| {
-            if let Err(e) = res.as_ref() {
-                error!("failed to upload attachment: {}", e);
-            }
-            res.ok()
-        })
-        .collect();
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| anyhow::anyhow!("failed to upload attachment: {error}"))?;
     Ok(())
 }

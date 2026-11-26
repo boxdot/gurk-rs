@@ -15,7 +15,8 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::data::{
-    AttachmentDownloads, BodyRange, ChannelId, Message, TypingAction, TypingSet, parse_uuid,
+    AttachmentDownloads, BodyRange, ChannelId, LinkPreview, Message, TypingAction, TypingSet,
+    parse_uuid,
 };
 use crate::event::Event;
 use crate::receipt::{Receipt, ReceiptEvent};
@@ -28,13 +29,27 @@ use super::{
 
 impl App {
     /// Stores the `message` in the storage and updates the message window if the channel matches.
-    pub(crate) fn store_message(&mut self, channel_id: ChannelId, message: Message) {
-        self.storage.store_message(channel_id, &message);
+    ///
+    /// Returns `false` if the message was dropped, e.g. because its timestamp does not fit into an
+    /// `i64` or another author's message has the same timestamp.
+    pub(crate) fn store_message(&mut self, channel_id: ChannelId, message: Message) -> bool {
+        if i64::try_from(message.arrived_at).is_err() {
+            warn!(
+                message.arrived_at,
+                "dropping message with out-of-range timestamp"
+            );
+            return false;
+        }
+        if !self.storage.store_message(channel_id, &message) {
+            warn!(message.arrived_at, "dropping message: not stored");
+            return false;
+        }
         if let Some(window) = self.window.as_mut()
             && window.channel_id() == channel_id
         {
             window.upsert(message);
         }
+        true
     }
 
     /// Applies an edit to a stored message and updates the message window with the edited
@@ -154,6 +169,7 @@ impl App {
                                     body_ranges,
                                     reaction: None,
                                     expire_timer,
+                                    preview,
                                     ..
                                 }),
                             ..
@@ -168,11 +184,13 @@ impl App {
 
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
+                let link_previews = preview.iter().map(LinkPreview::from_proto).collect();
 
                 let message = Message {
                     quote,
                     expire_timer,
                     attachment_downloads: AttachmentDownloads::pending(attachment_pointers.len()),
+                    link_previews,
                     ..Message::new(user_id, body, body_ranges, timestamp, Vec::new())
                 };
                 (channel_id, message, attachment_pointers)
@@ -240,10 +258,13 @@ impl App {
                 )
                 .await;
                 read.into_iter().for_each(|r| {
+                    let Some(timestamp) = r.timestamp else {
+                        return;
+                    };
                     self.handle_receipt(
                         r.parse_sender_aci().map(Into::into).unwrap_or_default(),
                         Receipt::Read,
-                        vec![r.timestamp.unwrap()],
+                        vec![timestamp],
                     );
                 });
                 return Ok(());
@@ -267,10 +288,23 @@ impl App {
             ) => {
                 let channel_id = if let Some(GroupContextV2 {
                     master_key: Some(master_key),
+                    revision,
                     ..
                 }) = group_v2
                 {
-                    ChannelId::from_master_key_bytes(master_key)?
+                    let channel_id = match revision {
+                        Some(revision) => {
+                            let master_key = master_key
+                                .try_into()
+                                .map_err(|_| anyhow!("invalid group master key"))?;
+                            self.ensure_group_channel_exists(master_key, revision)
+                                .await
+                                .context("failed to create group channel")?
+                        }
+                        None => ChannelId::from_master_key_bytes(master_key)?,
+                    };
+                    self.ensure_group_member(channel_id, sender.raw_uuid())?;
+                    channel_id
                 } else if sender.raw_uuid() == self.user_id {
                     // reaction from us => target author is the user channel
                     let uuid = parse_uuid(
@@ -322,6 +356,7 @@ impl App {
                                     body_ranges,
                                     reaction: None,
                                     expire_timer,
+                                    preview,
                                     ..
                                 }),
                             ..
@@ -366,11 +401,13 @@ impl App {
 
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
+                let link_previews = preview.iter().map(LinkPreview::from_proto).collect();
 
                 let message = Message {
                     quote,
                     expire_timer,
                     attachment_downloads: AttachmentDownloads::pending(attachment_pointers.len()),
+                    link_previews,
                     ..Message::new(user_id, body, body_ranges, timestamp, Vec::new())
                 };
 
@@ -402,9 +439,12 @@ impl App {
                     let master_key = master_key
                         .try_into()
                         .map_err(|_| anyhow!("invalid group master key"))?;
-                    self.ensure_group_channel_exists(master_key, revision)
+                    let channel_id = self
+                        .ensure_group_channel_exists(master_key, revision)
                         .await
-                        .context("failed to create group channel")?
+                        .context("failed to create group channel")?;
+                    self.ensure_group_member(channel_id, sender.raw_uuid())?;
+                    channel_id
                 } else {
                     let name = self.name_by_id(sender.raw_uuid()).await;
                     self.ensure_contact_channel_exists(sender.raw_uuid(), &name)
@@ -412,13 +452,23 @@ impl App {
                 };
 
                 let message_id = MessageId::new(channel_id, target_sent_timestamp);
-                if self.storage.delete_message(message_id) {
-                    info!(target_sent_timestamp, "message deleted remotely");
-                } else {
-                    warn!(
-                        target_sent_timestamp,
-                        "received remote delete for unknown message"
-                    );
+                match self.storage.message(message_id) {
+                    Some(message) if message.from_id == sender.raw_uuid() => {
+                        self.storage.delete_message(message_id);
+                        info!(target_sent_timestamp, "message deleted remotely");
+                    }
+                    Some(_) => {
+                        warn!(
+                            target_sent_timestamp,
+                            "ignoring remote delete of a message from another author"
+                        );
+                    }
+                    None => {
+                        warn!(
+                            target_sent_timestamp,
+                            "received remote delete for unknown message"
+                        );
+                    }
                 }
                 return Ok(());
             }
@@ -435,6 +485,7 @@ impl App {
                     sticker,
                     body_ranges,
                     expire_timer,
+                    preview,
                     ..
                 }),
             ) => {
@@ -461,6 +512,7 @@ impl App {
                         .ensure_group_channel_exists(master_key, revision)
                         .await
                         .context("failed to create group channel")?;
+                    self.ensure_group_member(channel_id, sender.raw_uuid())?;
 
                     self.ensure_user_is_known(sender.raw_uuid(), profile_key)
                         .await;
@@ -509,10 +561,12 @@ impl App {
 
                 let quote = quote.and_then(Message::from_quote).map(Box::new);
                 let body_ranges = body_ranges.into_iter().filter_map(BodyRange::from_proto);
+                let link_previews = preview.iter().map(LinkPreview::from_proto).collect();
                 let message = Message {
                     quote,
                     expire_timer,
                     attachment_downloads: AttachmentDownloads::pending(attachment_pointers.len()),
+                    link_previews,
                     ..Message::new(sender.raw_uuid(), body, body_ranges, timestamp, Vec::new())
                 };
 
@@ -602,6 +656,7 @@ impl App {
                         .ensure_group_channel_exists(master_key, revision)
                         .await
                         .context("failed to create group channel")?;
+                    self.ensure_group_member(channel_id, sender.raw_uuid())?;
                     self.ensure_user_is_known(sender.raw_uuid(), profile_key)
                         .await;
                     channel_id
@@ -626,7 +681,7 @@ impl App {
                 } else {
                     warn!(
                         target_sent_timestamp,
-                        "could not find original message to apply edit"
+                        "could not find original message from the sender to apply edit"
                     );
                 }
                 return Ok(());
@@ -639,7 +694,9 @@ impl App {
         };
 
         let message_id = MessageId::new(channel_id, message.arrived_at);
-        self.add_message_to_channel(channel_id, message);
+        if !self.add_message_to_channel(channel_id, message) {
+            return Ok(());
+        }
         if !attachment_pointers.is_empty() {
             self.save_attachments(message_id, attachment_pointers);
         }
@@ -865,6 +922,11 @@ impl App {
             bell,
         }: HandleReactionOptions,
     ) -> Option<()> {
+        // the reaction is drawn next to the message, so it must be a single emoji, not text
+        if !remove && emojis::get(&emoji).is_none() {
+            warn!(%sender_uuid, "ignoring reaction that is not an emoji");
+            return None;
+        }
         let mut message = self
             .storage
             .message(MessageId::new(channel_id, target_sent_timestamp))?;
@@ -933,10 +995,10 @@ impl App {
             } else {
                 "gurk"
             })
-            .body(if self.config.notifications.show_message_text {
-                text
+            .body(&if self.config.notifications.show_message_text {
+                escape_notification_markup(text)
             } else {
-                "New message!"
+                "New message!".into()
             });
         // Showing a notification is a blocking call (e.g. D-Bus)
         tokio::task::spawn_blocking(move || {
@@ -1096,6 +1158,28 @@ fn conversation_to_channel_id(conv: &presage::proto::ConversationIdentifier) -> 
     }
 }
 
+/// Escapes text for the body of a desktop notification
+///
+/// On freedesktop.org notification servers the body may contain markup (e.g. `<b>`, `<a href>`,
+/// `<img src>`), so the message text has to be escaped to be shown as is. Other platforms show the
+/// body as plain text.
+fn escape_notification_markup(text: &str) -> Cow<'_, str> {
+    if cfg!(all(unix, not(target_os = "macos"))) && text.contains(['&', '<', '>']) {
+        let mut escaped = String::with_capacity(text.len());
+        for c in text.chars() {
+            match c {
+                '&' => escaped.push_str("&amp;"),
+                '<' => escaped.push_str("&lt;"),
+                '>' => escaped.push_str("&gt;"),
+                c => escaped.push(c),
+            }
+        }
+        Cow::Owned(escaped)
+    } else {
+        Cow::Borrowed(text)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use presage::libsignal_service::prelude::AttachmentIdentifier;
@@ -1105,6 +1189,200 @@ mod tests {
 
     use super::*;
 
+    fn content_from(sender: Uuid, body: ContentBody) -> Box<Content> {
+        use presage::libsignal_service::protocol::DeviceId;
+        let now = chrono::Utc::now();
+        Box::new(Content {
+            metadata: Metadata {
+                sender: ServiceId::Aci(sender.into()),
+                destination: ServiceId::Aci(Uuid::nil().into()),
+                sender_device: DeviceId::new(1).unwrap(),
+                pni_verified: None,
+                client_timestamp: now,
+                server_timestamp: now,
+                needs_receipt: false,
+                unidentified_sender: false,
+                was_plaintext: false,
+                server_guid: None,
+            },
+            body,
+        })
+    }
+
+    const MASTER_KEY: crate::signal::GroupMasterKeyBytes = [7; 32];
+
+    /// Group context of the channel created by [`add_group`]
+    fn group_v2() -> Option<GroupContextV2> {
+        Some(GroupContextV2 {
+            master_key: Some(MASTER_KEY.to_vec()),
+            // revision returned by SignalManagerMock::resolve_group
+            revision: Some(0),
+            ..Default::default()
+        })
+    }
+
+    fn add_group(app: &mut App, members: Vec<Uuid>) -> ChannelId {
+        let channel_id = ChannelId::from_master_key_bytes(MASTER_KEY).unwrap();
+        app.store_channel(Channel {
+            id: channel_id,
+            name: "group".to_string(),
+            group_data: Some(crate::data::GroupData {
+                master_key_bytes: MASTER_KEY,
+                members,
+                revision: 0,
+            }),
+            unread_messages: 0,
+            muted: false,
+            typing: TypingSet::GroupTyping(Default::default()),
+            expire_timer: None,
+        });
+        channel_id
+    }
+
+    fn remote_delete(
+        sender: Uuid,
+        target_sent_timestamp: u64,
+        group_v2: Option<GroupContextV2>,
+    ) -> Box<Content> {
+        content_from(
+            sender,
+            ContentBody::DataMessage(DataMessage {
+                delete: Some(Delete {
+                    target_sent_timestamp: Some(target_sent_timestamp),
+                }),
+                group_v2,
+                ..Default::default()
+            }),
+        )
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_remote_delete_by_author() {
+        let (mut app, _events, _sent_messages) = test_app().await;
+        let (alice, bob) = (Uuid::new_v4(), Uuid::new_v4());
+        let members = vec![app.user_id, alice, bob];
+        let channel_id = add_group(&mut app, members);
+        app.storage
+            .store_message(channel_id, &Message::text(alice, 1000, "hello".into()));
+
+        app.on_message(remote_delete(alice, 1000, group_v2()))
+            .await
+            .unwrap();
+
+        let message = app
+            .storage
+            .message(MessageId::new(channel_id, 1000))
+            .unwrap();
+        assert!(message.deleted);
+        assert_eq!(message.message, None);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_remote_delete_by_other_group_member_is_ignored() {
+        let (mut app, _events, _sent_messages) = test_app().await;
+        let (alice, bob) = (Uuid::new_v4(), Uuid::new_v4());
+        let members = vec![app.user_id, alice, bob];
+        let channel_id = add_group(&mut app, members);
+        app.storage
+            .store_message(channel_id, &Message::text(alice, 1000, "hello".into()));
+
+        app.on_message(remote_delete(bob, 1000, group_v2()))
+            .await
+            .unwrap();
+
+        let message = app
+            .storage
+            .message(MessageId::new(channel_id, 1000))
+            .unwrap();
+        assert!(!message.deleted);
+        assert_eq!(message.message.as_deref(), Some("hello"));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_remote_delete_of_own_message_by_contact_is_ignored() {
+        let (mut app, _events, _sent_messages) = test_app().await;
+        let channel_id = app.channels().first().unwrap().id;
+        let ChannelId::User(contact) = channel_id else {
+            panic!("test channel is a user channel");
+        };
+        // the fixture's message at 0 is from the user
+
+        app.on_message(remote_delete(contact, 0, None))
+            .await
+            .unwrap();
+
+        let message = app.storage.message(MessageId::new(channel_id, 0)).unwrap();
+        assert!(!message.deleted);
+        assert_eq!(message.message.as_deref(), Some("First message"));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sync_reaction_with_read_without_timestamp() {
+        use presage::libsignal_service::protocol::DeviceId;
+        use presage::proto::SyncMessage;
+
+        let (mut app, _events, _sent_messages) = test_app().await;
+        let channel_id = app.channels().first().unwrap().id;
+        let ChannelId::User(peer) = channel_id else {
+            panic!("test channel is a user channel");
+        };
+        let target_sent_timestamp = app.storage.messages_tail(channel_id, 1)[0].arrived_at;
+
+        let now = chrono::Utc::now();
+        let content = Content {
+            metadata: Metadata {
+                sender: ServiceId::Aci(app.user_id.into()),
+                destination: ServiceId::Aci(app.user_id.into()),
+                sender_device: DeviceId::new(2).unwrap(),
+                pni_verified: None,
+                client_timestamp: now,
+                server_timestamp: now,
+                needs_receipt: false,
+                unidentified_sender: false,
+                was_plaintext: false,
+                server_guid: None,
+            },
+            body: ContentBody::SynchronizeMessage(SyncMessage {
+                content: Some(SyncContent::Sent(Sent {
+                    destination_service_id: Some(peer.to_string()),
+                    message: Some(DataMessage {
+                        reaction: Some(Reaction {
+                            emoji: Some("\u{1F44D}".to_string()),
+                            target_author_aci: Some(app.user_id.to_string()),
+                            target_sent_timestamp: Some(target_sent_timestamp),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                })),
+                read: vec![Read::default()],
+                ..Default::default()
+            }),
+        };
+
+        app.on_message(Box::new(content)).await.unwrap();
+
+        let message = app
+            .storage
+            .message(MessageId::new(channel_id, target_sent_timestamp))
+            .unwrap();
+        assert_eq!(message.reactions.len(), 1);
+    }
+
+    #[test]
+    #[cfg(all(unix, not(target_os = "macos")))]
+    fn test_escape_notification_markup() {
+        assert!(matches!(
+            escape_notification_markup("hello"),
+            Cow::Borrowed("hello")
+        ));
+        assert_eq!(
+            escape_notification_markup("<b>a & b</b> <img src=\"file:///x\">"),
+            "&lt;b&gt;a &amp; b&lt;/b&gt; &lt;img src=\"file:///x\"&gt;"
+        );
+    }
+
     /// Overwrites the unread counter of the given channel in memory and storage.
     fn set_unread(app: &mut App, channel_id: ChannelId, unread_messages: u32) {
         app.channels
@@ -1112,6 +1390,25 @@ mod tests {
                 channel.unread_messages = unread_messages;
                 true
             });
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_store_message_out_of_range_timestamp() {
+        let (mut app, _events, _sent_messages) = test_app().await;
+        let channel_id = app.channels().first().unwrap().id;
+        app.on_channel_changed();
+
+        let timestamp = u64::MAX;
+        app.store_message(
+            channel_id,
+            Message::text(app.user_id, timestamp, "far future".to_string()),
+        );
+
+        assert_eq!(
+            app.storage.message(MessageId::new(channel_id, timestamp)),
+            None
+        );
+        assert!(app.window.as_ref().unwrap().get(timestamp).is_none());
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1257,5 +1554,158 @@ mod tests {
         let message = app.storage.message(message_id).unwrap();
         assert_eq!(message.attachments.len(), 1);
         assert_eq!(message.attachments[0].id, "key");
+    }
+}
+
+#[cfg(test)]
+mod group_member_tests {
+    use presage::libsignal_service::protocol::DeviceId;
+
+    use crate::app::tests::test_app;
+    use crate::data::{Channel, GroupData};
+    use crate::signal::GroupMasterKeyBytes;
+
+    use super::*;
+
+    const MASTER_KEY: GroupMasterKeyBytes = [7; 32];
+
+    fn group_content(sender: Uuid, data_message: DataMessage) -> Box<Content> {
+        let now = chrono::Utc::now();
+        Box::new(Content {
+            metadata: Metadata {
+                sender: ServiceId::Aci(sender.into()),
+                destination: ServiceId::Aci(Uuid::nil().into()),
+                sender_device: DeviceId::new(1).unwrap(),
+                pni_verified: None,
+                client_timestamp: now,
+                server_timestamp: now,
+                needs_receipt: false,
+                unidentified_sender: false,
+                was_plaintext: false,
+                server_guid: None,
+            },
+            body: ContentBody::DataMessage(DataMessage {
+                group_v2: Some(GroupContextV2 {
+                    master_key: Some(MASTER_KEY.to_vec()),
+                    // revision returned by SignalManagerMock::resolve_group
+                    revision: Some(0),
+                    ..Default::default()
+                }),
+                ..data_message
+            }),
+        })
+    }
+
+    /// Creates a group channel with the user and `member` as members
+    fn add_group(app: &mut App, member: Uuid) -> ChannelId {
+        let channel_id = ChannelId::from_master_key_bytes(MASTER_KEY).unwrap();
+        let members = vec![app.user_id, member];
+        app.store_channel(Channel {
+            id: channel_id,
+            name: "group".to_string(),
+            group_data: Some(GroupData {
+                master_key_bytes: MASTER_KEY,
+                members,
+                revision: 0,
+            }),
+            unread_messages: 0,
+            muted: false,
+            typing: TypingSet::GroupTyping(Default::default()),
+            expire_timer: None,
+        });
+        channel_id
+    }
+
+    fn text(body: &str, timestamp: u64) -> DataMessage {
+        DataMessage {
+            body: Some(body.to_string()),
+            timestamp: Some(timestamp),
+            ..Default::default()
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_group_message_from_member() {
+        let (mut app, _events, _sent_messages) = test_app().await;
+        let member = Uuid::new_v4();
+        let channel_id = add_group(&mut app, member);
+
+        app.on_message(group_content(member, text("hi", 1000)))
+            .await
+            .unwrap();
+
+        let message = app
+            .storage
+            .message(MessageId::new(channel_id, 1000))
+            .unwrap();
+        assert_eq!(message.from_id, member);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_group_message_from_non_member_is_dropped() {
+        let (mut app, _events, _sent_messages) = test_app().await;
+        let channel_id = add_group(&mut app, Uuid::new_v4());
+
+        let result = app
+            .on_message(group_content(Uuid::new_v4(), text("hi", 1000)))
+            .await;
+
+        assert!(result.is_err());
+        assert_eq!(app.storage.message(MessageId::new(channel_id, 1000)), None);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_group_reaction_from_non_member_is_dropped() {
+        let (mut app, _events, _sent_messages) = test_app().await;
+        let member = Uuid::new_v4();
+        let channel_id = add_group(&mut app, member);
+        app.storage
+            .store_message(channel_id, &Message::text(member, 1000, "hi".into()));
+
+        let reaction = DataMessage {
+            reaction: Some(Reaction {
+                emoji: Some("\u{1F44D}".to_string()),
+                target_author_aci: Some(member.to_string()),
+                target_sent_timestamp: Some(1000),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let result = app
+            .on_message(group_content(Uuid::new_v4(), reaction))
+            .await;
+
+        assert!(result.is_err());
+        let message = app
+            .storage
+            .message(MessageId::new(channel_id, 1000))
+            .unwrap();
+        assert!(message.reactions.is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_group_edit_from_non_member_is_dropped() {
+        let (mut app, _events, _sent_messages) = test_app().await;
+        let member = Uuid::new_v4();
+        let channel_id = add_group(&mut app, member);
+        app.storage
+            .store_message(channel_id, &Message::text(member, 1000, "hi".into()));
+
+        let mut content = group_content(Uuid::new_v4(), text("edited", 2000));
+        let ContentBody::DataMessage(data_message) = content.body else {
+            unreachable!()
+        };
+        content.body = ContentBody::EditMessage(EditMessage {
+            target_sent_timestamp: Some(1000),
+            data_message: Some(data_message),
+        });
+        let result = app.on_message(content).await;
+
+        assert!(result.is_err());
+        let message = app
+            .storage
+            .message(MessageId::new(channel_id, 1000))
+            .unwrap();
+        assert_eq!(message.message.as_deref(), Some("hi"));
     }
 }

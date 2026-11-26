@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                    INSERT INTO messages(\n                        arrived_at,\n                        channel_id,\n                        from_id,\n                        message,\n                        quote,\n                        receipt,\n                        body_ranges,\n                        attachments,\n                        reactions,\n                        edit,\n                        edited,\n                        deleted,\n                        expire_timer,\n                        expires_at,\n                        link_previews\n                    )\n                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n                    ON CONFLICT(channel_id, arrived_at) DO UPDATE SET\n                        from_id = excluded.from_id,\n                        message = excluded.message,\n                        quote = excluded.quote,\n                        receipt = excluded.receipt,\n                        body_ranges = excluded.body_ranges,\n                        attachments = excluded.attachments,\n                        reactions = excluded.reactions,\n                        edit = excluded.edit,\n                        edited = excluded.edited,\n                        deleted = excluded.deleted,\n                        expire_timer = excluded.expire_timer,\n                        expires_at = excluded.expires_at,\n                        link_previews = excluded.link_previews\n                    WHERE messages.from_id = excluded.from_id\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 15
+    },
+    "nullable": []
+  },
+  "hash": "94de52368e87c0e4878076809738b0ec78c32b766c8aa7f0df3b342fe2049b74"
+}

@@ -11,6 +11,7 @@ pub mod data;
 pub mod dev;
 pub(crate) mod emoji;
 pub mod event;
+pub(crate) mod images;
 pub mod input;
 pub mod onboarding;
 pub mod passphrase;

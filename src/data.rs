@@ -217,6 +217,28 @@ impl AttachmentDownloads {
     }
 }
 
+/// Link preview metadata (title, description, URL) from Signal messages
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct LinkPreview {
+    pub url: Option<String>,
+    pub title: Option<String>,
+    pub description: Option<String>,
+}
+
+impl LinkPreview {
+    pub fn from_proto(preview: &proto::Preview) -> Self {
+        Self {
+            url: preview.url.clone(),
+            title: preview.title.clone(),
+            description: preview.description.clone(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.url.is_none() && self.title.is_none() && self.description.is_none()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Message {
     pub from_id: Uuid,
@@ -253,6 +275,9 @@ pub struct Message {
     /// UTC millisecond timestamp when this message expires (set when first viewed)
     #[serde(default)]
     pub(crate) expires_at: Option<u64>,
+    /// Link previews attached to this message
+    #[serde(default)]
+    pub link_previews: Vec<LinkPreview>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -315,7 +340,7 @@ impl From<&BodyRange> for proto::BodyRange {
         };
         Self {
             start: Some(range.start.into()),
-            length: Some((range.end - range.start).into()),
+            length: Some(range.end.saturating_sub(range.start).into()),
             associated_value: Some(associated_value),
         }
     }
@@ -340,7 +365,7 @@ impl BodyRange {
         };
         Some(Self {
             start: proto.start?.try_into().ok()?,
-            end: (proto.start? + proto.length?).try_into().ok()?,
+            end: proto.start?.checked_add(proto.length?)?.try_into().ok()?,
             value,
         })
     }
@@ -370,6 +395,7 @@ impl Message {
             deleted: Default::default(),
             expire_timer: None,
             expires_at: None,
+            link_previews: Default::default(),
         }
     }
 
@@ -390,6 +416,7 @@ impl Message {
             deleted: Default::default(),
             expire_timer: None,
             expires_at: None,
+            link_previews: Default::default(),
         }
     }
 
@@ -417,6 +444,7 @@ impl Message {
             deleted: Default::default(),
             expire_timer: None,
             expires_at: None,
+            link_previews: Default::default(),
         })
     }
 
@@ -435,4 +463,46 @@ pub fn parse_uuid(str_field: Option<&str>, binary_field: Option<&[u8]>) -> Optio
         .and_then(ServiceId::parse_from_service_id_binary)
         .map(|sid| sid.raw_uuid())
         .or_else(|| str_field.and_then(|s| s.parse().ok()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn style_range(start: u32, length: u32) -> proto::BodyRange {
+        proto::BodyRange {
+            start: Some(start),
+            length: Some(length),
+            associated_value: Some(proto::body_range::AssociatedValue::Style(
+                proto::body_range::Style::Bold.into(),
+            )),
+        }
+    }
+
+    #[test]
+    fn test_body_range_from_proto() {
+        let range = BodyRange::from_proto(style_range(10, 5)).unwrap();
+        assert_eq!((range.start, range.end), (10, 15));
+        let proto: proto::BodyRange = (&range).into();
+        assert_eq!((proto.start, proto.length), (Some(10), Some(5)));
+    }
+
+    #[test]
+    fn test_body_range_from_proto_out_of_range() {
+        assert!(BodyRange::from_proto(style_range(10, u32::MAX - 4)).is_none());
+        assert!(BodyRange::from_proto(style_range(u32::MAX, 1)).is_none());
+        assert!(BodyRange::from_proto(style_range(0, u32::from(u16::MAX) + 1)).is_none());
+    }
+
+    #[test]
+    fn test_inverted_body_range_to_proto() {
+        // could have been stored before ranges were checked on receipt
+        let range = BodyRange {
+            start: 10,
+            end: 5,
+            value: AssociatedValue::Style(Style::Bold),
+        };
+        let proto: proto::BodyRange = (&range).into();
+        assert_eq!(proto.length, Some(0));
+    }
 }

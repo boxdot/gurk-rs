@@ -13,6 +13,7 @@ use uuid::Uuid;
 use crate::config::Config;
 use crate::data::{Channel, ChannelId, Message, TypingSet};
 use crate::event::Event;
+use crate::images::ImageCache;
 use crate::input::Input;
 use crate::receipt::ReceiptHandler;
 use crate::signal::SignalManager;
@@ -72,6 +73,7 @@ pub struct App {
     ///
     /// Written by the renderer, used to load enough messages to fill the view
     pub(crate) message_view_height: usize,
+    pub(crate) images: ImageCache,
 }
 
 impl App {
@@ -99,6 +101,7 @@ impl App {
             .expect("keybinding configuration failed");
 
         let next_expiring_at = storage.next_expiring_at();
+        let images = ImageCache::new(config.image_height, event_tx.clone());
 
         let mut app = Self {
             config,
@@ -129,6 +132,7 @@ impl App {
             timers_activated_for: None,
             next_expiring_at,
             message_view_height: 0,
+            images,
         };
 
         app.on_channel_changed();
@@ -304,6 +308,25 @@ impl App {
         self.show_channel_list
     }
 
+    pub fn is_images_enabled(&self) -> bool {
+        self.images.is_enabled()
+    }
+
+    /// Enables inline images with the terminal graphics protocol detected by `picker`
+    pub fn set_image_picker(&mut self, picker: ratatui_image::picker::Picker) {
+        self.images.set_picker(picker);
+    }
+
+    /// Re-encodes inline images on the next draw, e.g. after the terminal was cleared
+    pub fn reset_images(&mut self) {
+        self.images.clear_encoded();
+    }
+
+    /// Escape sequences deleting the images dropped from the cache from the terminal
+    pub fn take_image_commands(&mut self) -> String {
+        self.images.take_terminal_commands()
+    }
+
     pub fn toggle_channel_list(&mut self) {
         self.show_channel_list = !self.show_channel_list;
     }
@@ -329,6 +352,7 @@ impl App {
                     self.on_profile_name_resolved(user_id, name);
                 }
             }
+            Event::ImageLoaded => {} // redrawn after every event
         }
         Ok(())
     }
@@ -473,6 +497,7 @@ pub(crate) mod tests {
                 deleted: Default::default(),
                 expire_timer: None,
                 expires_at: None,
+                link_previews: Default::default(),
             },
         );
 
@@ -664,6 +689,49 @@ pub(crate) mod tests {
         assert!(reactions.is_empty());
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_handle_reaction_requires_emoji() {
+        let (mut app, _events, _sent_messages) = test_app().await;
+        let channel_id = app.channels().first().unwrap().id;
+        let arrived_at = app.storage.messages_tail(channel_id, 1)[0].arrived_at;
+        let sender = Uuid::new_v4();
+
+        for not_emoji in ["", "a", "] fake [", "\u{1F44D}\u{1F44D}"] {
+            let handled = app
+                .handle_reaction(
+                    channel_id,
+                    arrived_at,
+                    sender,
+                    not_emoji.to_string(),
+                    HandleReactionOptions::new(),
+                )
+                .await;
+            assert_eq!(handled, None, "{not_emoji:?}");
+        }
+        let message = app
+            .storage
+            .message(MessageId::new(channel_id, arrived_at))
+            .unwrap();
+        assert!(message.reactions.is_empty());
+
+        for emoji in ["\u{1F44D}", "\u{1F44D}\u{1F3FD}", "\u{2764}\u{FE0F}"] {
+            app.handle_reaction(
+                channel_id,
+                arrived_at,
+                sender,
+                emoji.to_string(),
+                HandleReactionOptions::new(),
+            )
+            .await
+            .unwrap();
+            let message = app
+                .storage
+                .message(MessageId::new(channel_id, arrived_at))
+                .unwrap();
+            assert_eq!(message.reactions, [(sender, emoji.to_string())]);
+        }
+    }
+
     #[test]
     fn test_to_emoji() {
         assert_eq!(to_emoji("\u{1F680}"), Some("\u{1F680}"));
@@ -712,6 +780,47 @@ pub(crate) mod tests {
             specs[2].0.file_name,
             Some(format!("screenshot-{at_str}.png"))
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_message_does_not_replace_other_authors_message() {
+        use presage::libsignal_service::content::{Content, ContentBody, Metadata};
+        use presage::libsignal_service::protocol::{DeviceId, ServiceId};
+        use presage::proto::DataMessage;
+
+        let (mut app, _events, _sent_messages) = test_app().await;
+        let channel_id = app.channels().first().unwrap().id;
+        let ChannelId::User(contact) = channel_id else {
+            panic!("test channel is a user channel");
+        };
+        // the fixture's message at 0 is from the user
+        let now = chrono::Utc::now();
+        let content = Content {
+            metadata: Metadata {
+                sender: ServiceId::Aci(contact.into()),
+                destination: ServiceId::Aci(app.user_id.into()),
+                sender_device: DeviceId::new(1).unwrap(),
+                pni_verified: None,
+                client_timestamp: now,
+                server_timestamp: now,
+                needs_receipt: false,
+                unidentified_sender: false,
+                was_plaintext: false,
+                server_guid: None,
+            },
+            body: ContentBody::DataMessage(DataMessage {
+                body: Some("replaced".to_string()),
+                timestamp: Some(0),
+                profile_key: Some(vec![0; 32]),
+                ..Default::default()
+            }),
+        };
+
+        app.on_message(Box::new(content)).await.unwrap();
+
+        let message = app.storage.message(MessageId::new(channel_id, 0)).unwrap();
+        assert_eq!(message.from_id, app.user_id);
+        assert_eq!(message.message.as_deref(), Some("First message"));
     }
 
     #[tokio::test(flavor = "multi_thread")]

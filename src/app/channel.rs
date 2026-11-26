@@ -135,6 +135,24 @@ impl App {
             });
     }
 
+    /// Returns an error if `sender` is not a member of the group channel `channel_id`
+    ///
+    /// Must be called after [`Self::ensure_group_channel_exists`], which refreshes the members when
+    /// the message is from a newer group revision.
+    pub(super) fn ensure_group_member(
+        &self,
+        channel_id: ChannelId,
+        sender: Uuid,
+    ) -> anyhow::Result<()> {
+        let is_member = sender == self.user_id
+            || self
+                .channel(channel_id)
+                .and_then(|channel| channel.group_data.as_ref())
+                .is_some_and(|group_data| group_data.members.contains(&sender));
+        anyhow::ensure!(is_member, "dropping group message from a non-member");
+        Ok(())
+    }
+
     pub(super) async fn ensure_group_channel_exists(
         &mut self,
         master_key: GroupMasterKeyBytes,
@@ -313,9 +331,14 @@ impl App {
         channel_id
     }
 
-    pub(super) fn add_message_to_channel(&mut self, channel_id: ChannelId, mut message: Message) {
+    /// Returns `false` if the message was not stored.
+    pub(super) fn add_message_to_channel(
+        &mut self,
+        channel_id: ChannelId,
+        mut message: Message,
+    ) -> bool {
         let Some(channel) = self.channel(channel_id) else {
-            return;
+            return false;
         };
 
         // Eagerly activate timer for messages arriving in the currently viewed channel
@@ -330,8 +353,11 @@ impl App {
         }
 
         let from_current_user = self.user_id == message.from_id;
-        self.store_message(channel_id, message);
+        if !self.store_message(channel_id, message) {
+            return false;
+        }
         self.touch_channel(channel_id, from_current_user);
+        true
     }
 
     pub(super) fn remove_message_from_view(&mut self, channel_id: ChannelId, arrived_at: u64) {

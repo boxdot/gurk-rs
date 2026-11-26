@@ -1,6 +1,6 @@
 use std::sync::LazyLock;
 
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Datelike, Local};
 use phonenumber::PhoneNumber;
 use ratatui::widgets::ListState;
 use regex::Regex;
@@ -147,11 +147,23 @@ impl StatefulList<Channel> {
     }
 }
 
+/// Converts a UTC timestamp in milliseconds to local time
+///
+/// Timestamps come from received messages and are not validated by the sender's client, so a
+/// timestamp that cannot be represented falls back to the Unix epoch instead of panicking.
 pub fn utc_timestamp_msec_to_local(timestamp: u64) -> DateTime<Local> {
-    DateTime::from_timestamp((timestamp / 1000) as i64, (timestamp % 1000) as u32)
-        .expect("invalid datetime")
+    i64::try_from(timestamp)
+        .ok()
+        .and_then(DateTime::from_timestamp_millis)
+        .filter(|datetime| datetime.year() <= MAX_TIMESTAMP_YEAR)
+        .unwrap_or(DateTime::UNIX_EPOCH)
         .with_timezone(&Local)
 }
+
+/// Latest year accepted by [`utc_timestamp_msec_to_local`]
+///
+/// Far below chrono's limit, so that converting to any local time zone cannot overflow.
+const MAX_TIMESTAMP_YEAR: i32 = 9999;
 
 pub fn utc_now_timestamp_msec() -> u64 {
     std::time::SystemTime::now()
@@ -189,5 +201,26 @@ mod tests {
     #[test]
     fn test_is_phone_number() {
         assert!(is_phone_number("+1 800-000-0000"));
+    }
+
+    #[test]
+    fn test_utc_timestamp_msec_to_local() {
+        let datetime = utc_timestamp_msec_to_local(1_700_000_000_123).to_utc();
+        assert_eq!(datetime.timestamp_millis(), 1_700_000_000_123);
+    }
+
+    #[test]
+    fn test_utc_timestamp_msec_to_local_out_of_range() {
+        let max_millis = DateTime::<chrono::Utc>::MAX_UTC.timestamp_millis() as u64;
+        for timestamp in [u64::MAX, i64::MAX as u64, max_millis, 253_402_300_800_000] {
+            let datetime = utc_timestamp_msec_to_local(timestamp);
+            assert_eq!(datetime.to_utc(), DateTime::UNIX_EPOCH, "{timestamp}");
+            // the date line and attachment directory use these
+            let _ = datetime.num_days_from_ce();
+            let _ = datetime.date_naive();
+        }
+        // last representable millisecond of year 9999 is kept
+        let datetime = utc_timestamp_msec_to_local(253_402_300_799_999);
+        assert_eq!(datetime.to_utc().year(), 9999);
     }
 }

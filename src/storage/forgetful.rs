@@ -57,7 +57,9 @@ impl Storage for ForgetfulStorage {
         None
     }
 
-    fn store_message(&mut self, _channel_id: ChannelId, _message: &Message) {}
+    fn store_message(&mut self, _channel_id: ChannelId, _message: &Message) -> bool {
+        true
+    }
 
     fn remove_message(&mut self, _message_id: MessageId) {}
 
