@@ -525,15 +525,15 @@ fn clipboard_text(text: &str) -> String {
         .join("\t")
         .chars()
         .filter(|&c| {
-            !(c.is_control() && c != '\n' && c != '\t')
-                && !matches!(
-                    c,
-                    '\u{061C}'
-                        | '\u{200E}'
-                        | '\u{200F}'
-                        | '\u{202A}'..='\u{202E}'
-                        | '\u{2066}'..='\u{2069}'
-                )
+            let is_bidi_control = matches!(
+                c,
+                '\u{061C}'
+                    | '\u{200E}'
+                    | '\u{200F}'
+                    | '\u{202A}'..='\u{202E}'
+                    | '\u{2066}'..='\u{2069}'
+            );
+            matches!(c, '\n' | '\t') || !(c.is_control() || is_bidi_control)
         })
         .collect()
 }
