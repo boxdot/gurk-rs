@@ -528,7 +528,11 @@ fn clipboard_text(text: &str) -> String {
             !(c.is_control() && c != '\n' && c != '\t')
                 && !matches!(
                     c,
-                    '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
+                    '\u{061C}'
+                        | '\u{200E}'
+                        | '\u{200F}'
+                        | '\u{202A}'..='\u{202E}'
+                        | '\u{2066}'..='\u{2069}'
                 )
         })
         .collect()
@@ -550,6 +554,9 @@ mod clipboard_tests {
         // other control characters
         assert_eq!(clipboard_text("a\rb\x07c\u{85}d"), "abcd");
         // bidirectional text controls
-        assert_eq!(clipboard_text("abc\u{202E}fed\u{2066}x\u{2069}"), "abcfedx");
+        assert_eq!(
+            clipboard_text("abc\u{202E}fed\u{2066}x\u{2069}\u{061C}y"),
+            "abcfedxy"
+        );
     }
 }
