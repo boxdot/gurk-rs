@@ -34,7 +34,7 @@ use ratatui::{
 };
 use tokio::{runtime, select};
 use tokio_stream::StreamExt;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 use url::Url;
 
 const TARGET_FPS: u64 = 144;
@@ -237,17 +237,38 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
     // times out.
     terminal.clear()?;
 
-    // Detect the terminal graphics protocol; this also reads the reply from stdin, so it must happen
-    // before spawning the event reader. The query blocks for up to 2s, so it runs off the runtime.
+    // Detect the terminal graphics protocol from environment variables.
     //
-    // A terminal that does not answer is not an error: the picker falls back to halfblocks, and
-    // only I/O errors disable images. On such a terminal, ratatui-image (11.1) leaves its query
-    // thread blocked reading stdin, which swallows the first key press.
+    // We avoid from_query_stdio() because it's unreliable: it can timeout, leak escape
+    // sequences to the shell, or return protocols that don't work (especially in tmux).
+    // See: https://github.com/ratatui/ratatui-image/issues/242
+    //
+    // Once tmux has native graphics support (in progress), this can be revisited.
     if app.is_images_enabled() {
-        match tokio::task::spawn_blocking(ratatui_image::picker::Picker::from_query_stdio).await? {
-            Ok(picker) => app.set_image_picker(picker),
-            Err(error) => warn!(%error, "inline images disabled: failed to query terminal"),
-        }
+        use ratatui_image::picker::{Picker, ProtocolType};
+
+        let in_tmux = std::env::var("TMUX").is_ok();
+        let term_program = std::env::var("TERM_PROGRAM").unwrap_or_default();
+
+        let picker = if in_tmux {
+            // tmux passthrough is unreliable and can hang the terminal
+            info!("tmux detected, using halfblocks for images");
+            Picker::halfblocks()
+        } else if term_program.contains("iTerm") {
+            info!("iTerm2 detected, using iTerm2 protocol for images");
+            let mut p = Picker::halfblocks();
+            p.set_protocol_type(ProtocolType::Iterm2);
+            p
+        } else if term_program.contains("kitty") || std::env::var("KITTY_WINDOW_ID").is_ok() {
+            info!("Kitty detected, using Kitty protocol for images");
+            let mut p = Picker::halfblocks();
+            p.set_protocol_type(ProtocolType::Kitty);
+            p
+        } else {
+            info!("unknown terminal, using halfblocks for images");
+            Picker::halfblocks()
+        };
+        app.set_image_picker(picker);
     }
 
     // Stored reader so it can be aborted before launching an external editor (otherwise both
