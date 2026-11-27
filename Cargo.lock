@@ -2043,7 +2043,7 @@ checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 
 [[package]]
 name = "gurk"
-version = "0.10.2"
+version = "0.11.0"
 dependencies = [
  "aho-corasick",
  "anyhow",

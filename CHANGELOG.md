@@ -2,6 +2,46 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.0] - 2026-11-26
+
+### 🚀 Features
+
+- Display link preview text from incoming messages (#582)
+- Add device_name config option (#586)
+- Inline image previews (#597)
+
+### 🐛 Bug Fixes
+
+- Download attachments and resolve profile names in the background (#594)
+- Fail the send when an attachment upload fails (#614)
+- Use grapheme clusters for emoji width calculation (#592)
+- Don't panic on out-of-range message timestamps (#598)
+- Don't panic storing a message with a timestamp above i64::MAX (#599)
+- Don't panic on a sync reaction with a read entry without timestamp (#600)
+- Reject body ranges whose end overflows (#601)
+- Only apply a remote delete from the message's author (#602)
+- Only apply an edit from the message's author (#603)
+- Drop group messages from senders who are not group members (#604)
+- Ignore reactions that are not an emoji (#606)
+- Escape markup in the body of desktop notifications (#607)
+- Don't let a message overwrite another author's message (#608)
+- Copy message text without escape and control characters (#609)
+- Upgrade presage -- in particular fixes attachment upload (#619)
+
+### 📚 Documentation
+
+- Add [T] typing indicator to help panel (#593)
+- Fix README example config (#590)
+
+### ⚙️ Miscellaneous Tasks
+
+- Agents are not authors (#620)
+
+
+* @jmserra made their first contribution in #597
+* @sean0407 made their first contribution in #590
+* @ng572 made their first contribution in #614
+
 ## [0.10.2] - 2026-10-12
 
 ### 🚀 Features
