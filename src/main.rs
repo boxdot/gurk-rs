@@ -244,9 +244,21 @@ async fn run(config: Config, passphrase: Passphrase, relink: bool) -> anyhow::Re
     // only I/O errors disable images. On such a terminal, ratatui-image (11.1) leaves its query
     // thread blocked reading stdin, which swallows the first key press.
     if app.is_images_enabled() {
-        match tokio::task::spawn_blocking(ratatui_image::picker::Picker::from_query_stdio).await? {
-            Ok(picker) => app.set_image_picker(picker),
-            Err(error) => warn!(%error, "inline images disabled: failed to query terminal"),
+        // In tmux, protocol detection either fails or returns protocols that don't render
+        // correctly through tmux's PTY. Use halfblocks directly for reliable image display.
+        if std::env::var("TMUX").is_ok() {
+            info!("tmux detected, using halfblocks for images");
+            app.set_image_picker(ratatui_image::picker::Picker::halfblocks());
+        } else {
+            match tokio::task::spawn_blocking(ratatui_image::picker::Picker::from_query_stdio).await?
+            {
+                Ok(picker) => app.set_image_picker(picker),
+                Err(error) => {
+                    // Fall back to halfblocks instead of disabling images entirely
+                    warn!(%error, "terminal detection failed, falling back to halfblocks");
+                    app.set_image_picker(ratatui_image::picker::Picker::halfblocks());
+                }
+            }
         }
     }
 
